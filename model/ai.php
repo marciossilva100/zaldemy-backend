@@ -12,7 +12,7 @@ class EnglishParagraphGenerator
 
     public function __construct(string $apiKey)
     {
-        
+
         $this->apiKey = $apiKey;
     }
 
@@ -57,7 +57,7 @@ class EnglishParagraphGenerator
         ];
 
         // Modelo padrão do Groq
-        $model = $model ?? 'llama3-70b-8192';
+        $model = $model ?? 'llama-3.1-70b-versatile';
 
         $paragraph = $this->callGroqAPI($model, $messages);
 
