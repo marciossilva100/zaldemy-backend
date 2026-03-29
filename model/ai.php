@@ -28,22 +28,32 @@ class EnglishParagraphGenerator
 
         $originalWordCount = $this->countWordsInPhrases($phrases);
 
-        $systemPrompt = "
+      $systemPrompt = "
         Você é um redator profissional. Sua tarefa é transformar uma lista de frases soltas em UM parágrafo coeso e natural em INGLÊS.
 
-        REGRAS:
-        - As frases fornecidas são fragmentos que devem ser INTEGRADOS em um texto fluido
+        REGRAS OBRIGATÓRIAS:
+        - As frases devem ser integradas em um texto fluido
         - Crie conexões lógicas entre as ideias
         - Use palavras de transição (however, then, because, etc.)
-        - Mantenha o significado original mas REORDENE as ideias se necessário
-        - NÃO simplesmente cole as frases com conectivos - funda-as em um texto natural
-        - Máximo 250 caracteres, nao pode ultrapassar disso
+        - Você PODE reordenar as ideias
+        - NÃO copie as frases literalmente — torne o texto natural
 
-        Em seguida, forneça a tradução em PT-BR desse parágrafo.
+        REGRA CRÍTICA DE TAMANHO:
+        - O texto em INGLÊS deve ter NO MÁXIMO 250 caracteres (incluindo espaços)
+        - Conte os caracteres antes de finalizar
+        - Se ultrapassar 250 caracteres, REESCREVA até ficar dentro do limite
+        - Nunca ultrapasse esse limite
 
-        FORMATO:
+        IMPORTANTE:
+        - Seja breve, direto e natural
+        - Priorize resumir as ideias
+
+        Depois disso, forneça a tradução em PT-BR.
+
+        FORMATO EXATO:
+
         ENGLISH:
-        <texto coeso>
+        <texto com até 250 caracteres>
 
         PORTUGUESE (PT-BR):
         <tradução>
