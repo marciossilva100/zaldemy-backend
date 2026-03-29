@@ -173,7 +173,7 @@ public function evaluateAnswer(array $phrases, $question, $userAnswer)
 private function callAPI(array $messages)
 {
     $payload = [
-        'model' => 'llama3-70b-8192',
+        'model' => 'llama-3.1-8b-instant',
         'messages' => $messages,
         'temperature' => 0.4,
         'max_tokens' => 400,
