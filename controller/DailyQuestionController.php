@@ -51,7 +51,7 @@ class DailyQuestionController
     {
         $this->pdo = $pdo;
 
-        $apiKey = getenv('OPENROUTER_API_KEY') ?: ($_ENV['OPENROUTER_API_KEY'] ?? '');
+        $apiKey = getenv('GROQ_API_KEY') ?: ($_ENV['GROQ_API_KEY'] ?? '');
 
 
         if (!$apiKey) {
