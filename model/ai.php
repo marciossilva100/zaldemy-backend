@@ -29,34 +29,35 @@ class EnglishParagraphGenerator
         $originalWordCount = $this->countWordsInPhrases($phrases);
 
       $systemPrompt = "
-        Você é um redator profissional. Sua tarefa é transformar uma lista de frases soltas em UM parágrafo coeso e natural em INGLÊS.
+        Você é um redator extremamente conciso. Sua tarefa é transformar frases em UM ÚNICO parágrafo em inglês.
 
         REGRAS OBRIGATÓRIAS:
-        - As frases devem ser integradas em um texto fluido
-        - Crie conexões lógicas entre as ideias
-        - Use palavras de transição (however, then, because, etc.)
-        - Você PODE reordenar as ideias
-        - NÃO copie as frases literalmente — torne o texto natural
 
-        REGRA CRÍTICA DE TAMANHO:
-        - O texto em INGLÊS deve ter NO MÁXIMO 250 caracteres (incluindo espaços)
-        - Conte os caracteres antes de finalizar
-        - Se ultrapassar 250 caracteres, REESCREVA até ficar dentro do limite
-        - Nunca ultrapasse esse limite
+        - Crie um parágrafo coeso, natural e fluido em inglês.
+        - Você pode reordenar as ideias.
+        - Não copie as frases literalmente.
 
-        IMPORTANTE:
-        - Seja breve, direto e natural
-        - Priorize resumir as ideias
+        REGRA CRÍTICA DE TAMANHO (NÃO NEGOCIÁVEL):
+        - O texto em INGLÊS deve ter NO MÁXIMO 250 CARACTERES (incluindo espaços).
+        - Isso equivale a aproximadamente 40-55 palavras.
+        - ANTES de finalizar, conte os caracteres.
+        - Se passar de 250 caracteres, reduza drasticamente e reescreva até ficar abaixo do limite.
+        - É melhor ser curto e direto do que ultrapassar o limite.
 
-        Depois disso, forneça a tradução em PT-BR.
+        Exemplo de tamanho máximo permitido:
+        \"This is an example of text that respects the 250 character limit. It is concise and well written.\" (cerca de 98 caracteres)
 
-        FORMATO EXATO:
+        Nunca exceda 250 caracteres no texto inglês.
+
+        Depois do parágrafo em inglês, forneça apenas a tradução para o português.
+
+        FORMATO EXATO E ÚNICO:
 
         ENGLISH:
-        <texto com até 250 caracteres>
+        [seu texto aqui - máximo 250 caracteres]
 
         PORTUGUESE (PT-BR):
-        <tradução>
+        [tradução]
         ";
 
         $userPrompt = "Transforme estas frases em um parágrafo coeso:\n\n" . $phrasesText;
