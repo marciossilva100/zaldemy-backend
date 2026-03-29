@@ -57,7 +57,7 @@ class EnglishParagraphGenerator
         ];
 
         // Modelo padrão do Groq
-        $model = $model ?? 'llama-3.1-70b-versatile';
+        $model = $model ?? 'llama-3.1-8b-instant';
 
         $paragraph = $this->callGroqAPI($model, $messages);
 
