@@ -86,7 +86,7 @@ class Auth {
             $stmt->execute();
 
             // já existente
-            $this->cadastrarCategoriaFrases($userId);
+           // $this->cadastrarCategoriaFrases($userId);
 
         } else {
 
