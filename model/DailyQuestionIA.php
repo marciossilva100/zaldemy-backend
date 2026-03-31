@@ -14,9 +14,6 @@ class DailyQuestionIA
         $this->pdo = $pdo;
     }
 
-    /* ======================================================
-       1) GERAR PERGUNTA
-    ====================================================== */
     public function generateQuestion(array $phrases, $userId, $level = 'beginner', $statusId = 0)
     {
         $phrases = array_filter($phrases, function ($p) {
@@ -35,10 +32,8 @@ class DailyQuestionIA
             throw new Exception("Adicione mais frases aos flashcards com conteúdo para gerar perguntas melhores. $totalWords");
         }
 
-        // ✅ OTIMIZAÇÃO: limitar quantidade de frases
         $phrases = array_slice($phrases, 0, 6);
 
-        // ✅ OTIMIZAÇÃO: cortar frases muito longas
         $phrases = array_map(function ($p) {
             return mb_substr($p, 0, 120);
         }, $phrases);
@@ -46,9 +41,11 @@ class DailyQuestionIA
         $inicioDia = strtotime("today");
         $fimDia = strtotime("tomorrow") - 1;
 
+        // ✅ CORREÇÃO AQUI
         $sqlCheck = "SELECT COUNT(*) as total 
                     FROM perguntas_ia 
                     WHERE user_id = :user_id 
+                    AND status_id = 1
                     AND data_criacao BETWEEN :inicio AND :fim";
 
         $stmtCheck = $this->pdo->prepare($sqlCheck);
@@ -127,9 +124,6 @@ class DailyQuestionIA
         ];
     }
 
-    /* ======================================================
-       2) AVALIAR RESPOSTA DO ALUNO
-    ====================================================== */
     public function evaluateAnswer(array $phrases, $question, $userAnswer)
     {
         $answerLower = strtolower(trim($userAnswer));
@@ -143,7 +137,6 @@ class DailyQuestionIA
             ];
         }
 
-        // ✅ OTIMIZAÇÃO: limitar frases também aqui
         $phrases = array_slice($phrases, 0, 6);
 
         $phrases = array_map(function ($p) {
@@ -200,71 +193,37 @@ class DailyQuestionIA
         return $decoded;
     }
 
-    /* ======================================================
-       API (GROQ)
-    ====================================================== */
     private function callAPI(array $messages)
     {
         $payload = [
             'model' => 'llama-3.1-8b-instant',
             'messages' => $messages,
             'temperature' => 0.4,
-            'max_tokens' => 120, // ✅ reduzido
+            'max_tokens' => 120,
         ];
 
-        $maxRetries = 3;
-        $attempt = 0;
+        $ch = curl_init($this->baseUrl . '/chat/completions');
 
-        while ($attempt < $maxRetries) {
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->apiKey,
+            ],
+        ]);
 
-            $ch = curl_init($this->baseUrl . '/chat/completions');
+        $response = curl_exec($ch);
 
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode($payload),
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json',
-                    'Authorization: Bearer ' . $this->apiKey,
-                ],
-            ]);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-            if ($response === false) {
-                throw new Exception('Curl error: ' . curl_error($ch));
-            }
-
-            curl_close($ch);
-
-            // ✅ tratamento de rate limit
-            if ($httpCode === 429) {
-                $attempt++;
-
-                if (preg_match('/try again in ([0-9.]+)s/', $response, $matches)) {
-                    $wait = (float)$matches[1];
-                } else {
-                    $wait = 2;
-                }
-
-                usleep((int)($wait * 1000000));
-                continue;
-            }
-
-            if ($httpCode !== 200) {
-                throw new Exception('HTTP ' . $httpCode . ' - ' . $response);
-            }
-
-            $result = json_decode($response, true);
-
-            if (!isset($result['choices'][0]['message']['content'])) {
-                throw new Exception('Formato inesperado: ' . $response);
-            }
-
-            return trim($result['choices'][0]['message']['content']);
+        if ($response === false) {
+            throw new Exception('Curl error: ' . curl_error($ch));
         }
 
-        throw new Exception('Rate limit excedido após várias tentativas.');
+        curl_close($ch);
+
+        $result = json_decode($response, true);
+
+        return trim($result['choices'][0]['message']['content']);
     }
 }

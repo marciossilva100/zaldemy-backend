@@ -57,25 +57,18 @@ class DailyQuestionController
     {
         try {
             $user_id = $this->getUserId();
-            $data = json_decode(file_get_contents('php://input'), true);
-
-            if (empty($data['question'])) {
-                throw new Exception('Pergunta é obrigatória.');
-            }
 
             $sql = "
                 UPDATE perguntas_ia 
                 SET status_id = 1 
                 WHERE user_id = :user_id 
-                AND question = :question
                 ORDER BY id DESC 
                 LIMIT 1
             ";
 
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([
-                ':user_id' => $user_id,
-                ':question' => $data['question']
+                ':user_id' => $user_id
             ]);
 
             $this->json([
@@ -87,7 +80,6 @@ class DailyQuestionController
             $this->error($e);
         }
     }
-
     /* ===============================
        GET → GERAR PERGUNTA
     =============================== */
