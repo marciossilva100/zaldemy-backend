@@ -78,12 +78,12 @@ class Auth {
             $userId = $this->pdo->lastInsertId();
 
             // 🔥 CRIAR REGISTRO DE IDIOMA (ESSENCIAL)
-            $stmt = $this->pdo->prepare("
-                INSERT INTO idioma_referencia (id_user, idioma_nativo, idioma_aprender)
-                VALUES (:user, NULL, NULL)
-            ");
-            $stmt->bindParam(":user", $userId);
-            $stmt->execute();
+            // $stmt = $this->pdo->prepare("
+            //     INSERT INTO idioma_referencia (id_user, idioma_nativo, idioma_aprender)
+            //     VALUES (:user, NULL, NULL)
+            // ");
+            // $stmt->bindParam(":user", $userId);
+            // $stmt->execute();
 
             // já existente
            // $this->cadastrarCategoriaFrases($userId);
