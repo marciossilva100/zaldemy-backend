@@ -149,24 +149,25 @@ class DailyQuestionController
        TOTAL DO DIA
     =============================== */
     private function getTotalToday($user_id)
-    {
-        $inicioDia = strtotime("today");
-        $fimDia = strtotime("tomorrow") - 1;
+{
+    $inicioDia = strtotime("today");
+    $fimDia = strtotime("tomorrow") - 1;
 
-        $sql = "SELECT COUNT(*) as total 
-                FROM perguntas_ia 
-                WHERE user_id = :user_id 
-                AND data_criacao BETWEEN :inicio AND :fim";
+    $sql = "SELECT COUNT(*) as total 
+            FROM perguntas_ia 
+            WHERE user_id = :user_id 
+            AND status_id = 1 -- 🔥 FALTAVA ISSO
+            AND data_criacao BETWEEN :inicio AND :fim";
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':user_id' => $user_id,
-            ':inicio' => $inicioDia,
-            ':fim' => $fimDia
-        ]);
+    $stmt = $this->pdo->prepare($sql);
+    $stmt->execute([
+        ':user_id' => $user_id,
+        ':inicio' => $inicioDia,
+        ':fim' => $fimDia
+    ]);
 
-        return (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
-    }
+    return (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+}
 
     private function getUserPhrases($user_id)
     {
