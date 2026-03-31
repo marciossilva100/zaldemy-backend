@@ -82,7 +82,21 @@ public function generateQuestion(array $phrases, $userId, $level = 'beginner', $
         ['role' => 'user', 'content' => "Frases:\n" . $phrasesText],
     ];
 
-    $question = $this->callAPI($messages);
+    $attempts = 0;
+    $maxAttempts = 3;
+    do {
+        $question = $this->callAPI($messages);
+        $sqlCheckQuestion = "SELECT COUNT(*) as total FROM perguntas_ia WHERE user_id = :user_id AND question = :question";
+        $stmtCheckQ = $this->pdo->prepare($sqlCheckQuestion);
+        $stmtCheckQ->execute([':user_id' => $userId, ':question' => $question]);
+        $resultQ = $stmtCheckQ->fetch(PDO::FETCH_ASSOC);
+        $exists = $resultQ['total'] > 0;
+        $attempts++;
+    } while ($exists && $attempts < $maxAttempts);
+
+    if ($exists) {
+        throw new Exception("Unable to generate a unique question after $maxAttempts attempts.");
+    }
 
     $sql = "INSERT INTO perguntas_ia (user_id, status_id, question) 
             VALUES (:user_id, :status_id, :question)";

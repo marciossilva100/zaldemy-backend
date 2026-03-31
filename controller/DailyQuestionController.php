@@ -170,11 +170,12 @@ class DailyQuestionController
     private function getUserPhrases($user_id)
     {
         $sql = "
-            SELECT texto_nativo
+            SELECT texto_traduzido
             FROM frases
-            WHERE texto_nativo IS NOT NULL
-              AND usuario_id = :user_id
-              AND TRIM(texto_nativo) <> ''
+            WHERE texto_traduzido IS NOT NULL
+            AND usuario_id = :user_id
+            AND TRIM(texto_nativo) <> ''
+            AND status_id > 0
         ";
 
         $stmt = $this->pdo->prepare($sql);
