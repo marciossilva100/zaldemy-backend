@@ -38,8 +38,8 @@ class DailyQuestionIA
             return mb_substr($p, 0, 120);
         }, $phrases);
 
-        $inicioDia = strtotime("today");
-        $fimDia = strtotime("tomorrow") - 1;
+           $inicioDia = date('Y-m-d 00:00:00');
+$fimDia = date('Y-m-d 23:59:59');
 
         // ✅ CORREÇÃO AQUI
         $sqlCheck = "SELECT COUNT(*) as total 
