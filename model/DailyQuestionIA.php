@@ -38,10 +38,10 @@ class DailyQuestionIA
             return mb_substr($p, 0, 120);
         }, $phrases);
 
-           $inicioDia = date('Y-m-d 00:00:00');
-$fimDia = date('Y-m-d 23:59:59');
+        // ✅ CORREÇÃO DEFINITIVA DO DIA
+        $inicioDia = date('Y-m-d 00:00:00');
+        $fimDia = date('Y-m-d 23:59:59');
 
-        // ✅ CORREÇÃO AQUI
         $sqlCheck = "SELECT COUNT(*) as total 
                     FROM perguntas_ia 
                     WHERE user_id = :user_id 
@@ -49,8 +49,11 @@ $fimDia = date('Y-m-d 23:59:59');
 
         $stmtCheck = $this->pdo->prepare($sqlCheck);
         $stmtCheck->bindValue(':user_id', $userId, PDO::PARAM_INT);
-        $stmtCheck->bindValue(':inicio', $inicioDia, PDO::PARAM_INT);
-        $stmtCheck->bindValue(':fim', $fimDia, PDO::PARAM_INT);
+
+        // ✅ FIX AQUI (ERA O BUG)
+        $stmtCheck->bindValue(':inicio', $inicioDia, PDO::PARAM_STR);
+        $stmtCheck->bindValue(':fim', $fimDia, PDO::PARAM_STR);
+
         $stmtCheck->execute();
 
         $result = $stmtCheck->fetch(PDO::FETCH_ASSOC);
@@ -92,9 +95,16 @@ $fimDia = date('Y-m-d 23:59:59');
         do {
             $question = $this->callAPI($messages);
 
-            $sqlCheckQuestion = "SELECT COUNT(*) as total FROM perguntas_ia WHERE user_id = :user_id AND question = :question";
+            $sqlCheckQuestion = "SELECT COUNT(*) as total 
+                                 FROM perguntas_ia 
+                                 WHERE user_id = :user_id 
+                                 AND question = :question";
+
             $stmtCheckQ = $this->pdo->prepare($sqlCheckQuestion);
-            $stmtCheckQ->execute([':user_id' => $userId, ':question' => $question]);
+            $stmtCheckQ->execute([
+                ':user_id' => $userId,
+                ':question' => $question
+            ]);
 
             $resultQ = $stmtCheckQ->fetch(PDO::FETCH_ASSOC);
             $exists = $resultQ['total'] > 0;
@@ -209,7 +219,7 @@ $fimDia = date('Y-m-d 23:59:59');
             CURLOPT_POSTFIELDS => json_encode($payload),
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
-                'Authorization: Bearer ' . $this->apiKey,
+                'Authorization': 'Bearer ' . $this->apiKey,
             ],
         ]);
 
