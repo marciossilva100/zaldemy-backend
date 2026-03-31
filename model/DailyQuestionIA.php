@@ -45,7 +45,6 @@ $fimDia = date('Y-m-d 23:59:59');
         $sqlCheck = "SELECT COUNT(*) as total 
                     FROM perguntas_ia 
                     WHERE user_id = :user_id 
-                    AND status_id = 1
                     AND data_criacao BETWEEN :inicio AND :fim";
 
         $stmtCheck = $this->pdo->prepare($sqlCheck);
