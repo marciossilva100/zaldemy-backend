@@ -58,27 +58,18 @@ class DailyQuestionController
         try {
             $user_id = $this->getUserId();
 
-            // pega a última pergunta de HOJE
-            $sqlLast = "
-                SELECT id 
-                FROM perguntas_ia 
-                WHERE user_id = :user_id
-                AND DATE(data_criacao) = CURDATE()
+            $sql = "
+                UPDATE perguntas_ia 
+                SET status_id = 1 
+                WHERE user_id = :user_id 
                 ORDER BY id DESC 
                 LIMIT 1
             ";
 
-            $stmtLast = $this->pdo->prepare($sqlLast);
-            $stmtLast->execute([':user_id' => $user_id]);
-
-            $row = $stmtLast->fetch(PDO::FETCH_ASSOC);
-
-            if ($row) {
-                // opcional: manter status se quiser histórico
-                $sqlUpdate = "UPDATE perguntas_ia SET status_id = 1 WHERE id = :id";
-                $stmtUpdate = $this->pdo->prepare($sqlUpdate);
-                $stmtUpdate->execute([':id' => $row['id']]);
-            }
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([
+                ':user_id' => $user_id
+            ]);
 
             $this->json([
                 'success' => true,
@@ -89,7 +80,6 @@ class DailyQuestionController
             $this->error($e);
         }
     }
-
     /* ===============================
        GET → GERAR PERGUNTA
     =============================== */
@@ -109,7 +99,7 @@ class DailyQuestionController
             $this->json([
                 'success' => true,
                 'question' => $result['question'] ?? null,
-                'total_today' => $this->getTotalToday($user_id), // 🔥 SEMPRE ATUALIZADO
+                'total_today' => $result['total_today'] ?? 0,
                 'limit_reached' => $result['limit_reached'] ?? false
             ]);
 
@@ -147,7 +137,7 @@ class DailyQuestionController
                 'success' => true,
                 'feedback' => $result['feedback'] ?? '',
                 'is_correct' => $result['is_correct'] ?? false,
-                'total_today' => $this->getTotalToday($user_id)
+                'total_today' => $this->getTotalToday($user_id) // ✅ FIX
             ]);
 
         } catch (Exception $e) {
@@ -156,26 +146,28 @@ class DailyQuestionController
     }
 
     /* ===============================
-       TOTAL DO DIA (VERSÃO CORRETA)
+       TOTAL DO DIA
     =============================== */
     private function getTotalToday($user_id)
-    {
-        $sql = "SELECT COUNT(*) as total 
-                FROM perguntas_ia 
-                WHERE user_id = :user_id 
-                AND DATE(data_criacao) = CURDATE()";
+{
+    $inicioDia = date('Y-m-d 00:00:00');
+    $fimDia = date('Y-m-d 23:59:59');
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':user_id' => $user_id
-        ]);
+    $sql = "SELECT COUNT(*) as total 
+            FROM perguntas_ia 
+            WHERE user_id = :user_id 
+            AND data_criacao BETWEEN :inicio AND :fim";
 
-        return (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
-    }
+    $stmt = $this->pdo->prepare($sql);
+    $stmt->execute([
+        ':user_id' => $user_id,
+        ':inicio' => $inicioDia,
+        ':fim' => $fimDia
+    ]);
 
-    /* ===============================
-       FRASES
-    =============================== */
+    return (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+}
+
     private function getUserPhrases($user_id)
     {
         $sql = "
@@ -193,9 +185,6 @@ class DailyQuestionController
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
-    /* ===============================
-       AUTH
-    =============================== */
     private function getUserId()
     {
         global $user_id;
@@ -207,9 +196,6 @@ class DailyQuestionController
         return (int)$user_id;
     }
 
-    /* ===============================
-       HELPERS
-    =============================== */
     private function json(array $data)
     {
         echo json_encode($data, JSON_UNESCAPED_UNICODE);
