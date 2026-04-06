@@ -70,6 +70,7 @@ try {
 
     if ($action === 'learn') {
         $frase->categoriaId = $input['category_id'] ?? null;
+        $frase->correctIds = $input['correctIds'] ?? null;
 
         if (!$frase->categoriaId) {
             http_response_code(400);

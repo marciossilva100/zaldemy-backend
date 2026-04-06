@@ -84,24 +84,45 @@ class Frases
 
         $sql = "
             SELECT 
-            f.id,
-            f.texto_nativo,
-            f.texto_traduzido,
-            f.categoria_id
-        FROM frases f
-        INNER JOIN categorias c ON c.id = f.categoria_id
-        WHERE f.categoria_id = :categoria_id
-        AND f.usuario_id = :id_user
-        AND f.status_id > 0
-        AND f.id_treino = 1
-        AND c.status_id > 0
-        ORDER BY f.id DESC LIMIT :quantidade_frases_aprender
+                f.id,
+                f.texto_nativo,
+                f.texto_traduzido,
+                f.categoria_id
+            FROM frases f
+            INNER JOIN categorias c ON c.id = f.categoria_id
+            WHERE f.categoria_id = :categoria_id
+            AND f.usuario_id = :id_user
+            AND f.status_id > 0
+            AND f.id_treino = 1
+            AND c.status_id > 0
         ";
 
+        $params = [
+            ':categoria_id' => $this->categoriaId,
+            ':id_user' => $user_id,
+            ':quantidade_frases_aprender' => $result['quantidade_frases_aprender']
+        ];
+
+        if (!empty($this->correctIds)) {
+            // cria placeholders :id0, :id1, :id2...
+            $placeholders = [];
+            foreach ($this->correctIds as $index => $id) {
+                $ph = ":id{$index}";
+                $placeholders[] = $ph;
+                $params[$ph] = $id;
+            }
+
+            $sql .= " AND f.id IN (" . implode(',', $placeholders) . ")";
+        }
+
+        $sql .= " ORDER BY f.id DESC LIMIT :quantidade_frases_aprender";
+
         $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':categoria_id', $this->categoriaId, PDO::PARAM_INT);
-        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
-        $stmt->bindValue(':quantidade_frases_aprender', $result['quantidade_frases_aprender'], PDO::PARAM_INT);
+
+        // bind dinâmico
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value, PDO::PARAM_INT);
+        }
 
         $stmt->execute();
 
