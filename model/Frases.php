@@ -10,6 +10,7 @@ class Frases
     public $texto_nativo;
     public $texto_traduzido;
     public $categoriaId;
+    public $correctIds;
     public $response = array();
 
     public function listarFrases($user_id): array
