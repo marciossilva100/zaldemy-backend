@@ -73,6 +73,15 @@ class Frases
 
         global $pdo; // 👈 precisa disso
 
+
+         $sql = "SELECT quantidade_frases_aprender FROM configuracoes WHERE user_id = :id_user LIMIT 1";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $result = $stmt->fetch();
+
         $sql = "
             SELECT 
             f.id,
@@ -86,12 +95,13 @@ class Frases
         AND f.status_id > 0
         AND f.id_treino = 1
         AND c.status_id > 0
-        ORDER BY f.id DESC
+        ORDER BY f.id DESC LIMIT :quantidade_frases_aprender
         ";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':categoria_id', $this->categoriaId, PDO::PARAM_INT);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->bindValue(':quantidade_frases_aprender', $result['quantidade_frases_aprender'], PDO::PARAM_INT);
 
         $stmt->execute();
 
