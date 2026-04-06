@@ -1,7 +1,6 @@
 <?php
 declare(strict_types=1);
 ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 $allowedOrigins = [
@@ -26,22 +25,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-/* ======================================================
-   DEPENDÊNCIAS
-====================================================== */
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/DailyQuestionIA.php';
-
-// echo __DIR__;exit;
-
-
 require_once __DIR__ . '/../dotenv.php';
+
 carregarEnv(__DIR__ . '/../.env');
 
-/* ======================================================
-   CONTROLLER
-====================================================== */
 class DailyQuestionController
 {
     private $ai;
@@ -53,7 +43,6 @@ class DailyQuestionController
 
         $apiKey = getenv('GROQ_API_KEY') ?: ($_ENV['GROQ_API_KEY'] ?? '');
 
-
         if (!$apiKey) {
             throw new Exception("API Key não configurada.");
         }
@@ -61,45 +50,39 @@ class DailyQuestionController
         $this->ai = new DailyQuestionIA($apiKey, $this->pdo);
     }
 
+    /* ===============================
+       SKIP
+    =============================== */
     public function skipDailyQuestion()
     {
         try {
             $user_id = $this->getUserId();
 
-            $data = json_decode(file_get_contents('php://input'), true);
-
-            if (empty($data['question'])) {
-                throw new Exception('Pergunta é obrigatória.');
-            }
-
-            // marca como "respondida" (mesma lógica de acerto)
             $sql = "
                 UPDATE perguntas_ia 
                 SET status_id = 1 
                 WHERE user_id = :user_id 
-                AND question = :question
                 ORDER BY id DESC 
                 LIMIT 1
             ";
 
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([
-                ':user_id' => $user_id,
-                ':question' => $data['question']
+                ':user_id' => $user_id
             ]);
 
             $this->json([
-                'success' => true
+                'success' => true,
+                'total_today' => $this->getTotalToday($user_id)
             ]);
 
         } catch (Exception $e) {
             $this->error($e);
         }
     }
-
-    /* ======================================================
-       GET → gerar pergunta
-    ====================================================== */
+    /* ===============================
+       GET → GERAR PERGUNTA
+    =============================== */
     public function getDailyQuestion()
     {
         try {
@@ -125,14 +108,13 @@ class DailyQuestionController
         }
     }
 
-    /* ======================================================
-       POST → avaliar resposta
-    ====================================================== */
+    /* ===============================
+       POST → RESPONDER
+    =============================== */
     public function answerDailyQuestion()
     {
         try {
             $user_id = $this->getUserId();
-
             $data = json_decode(file_get_contents('php://input'), true);
 
             if (!is_array($data)) {
@@ -145,18 +127,17 @@ class DailyQuestionController
 
             $phrases = $this->getUserPhrases($user_id);
 
-            // ✅ AJUSTE AQUI (PEGA ARRAY)
             $result = $this->ai->evaluateAnswer(
                 $phrases,
                 $data['question'],
                 $data['answer']
             );
 
-            // ✅ RETORNA feedback + is_correct
             $this->json([
                 'success' => true,
                 'feedback' => $result['feedback'] ?? '',
-                'is_correct' => $result['is_correct'] ?? false
+                'is_correct' => $result['is_correct'] ?? false,
+                'total_today' => $this->getTotalToday($user_id) // ✅ FIX
             ]);
 
         } catch (Exception $e) {
@@ -164,29 +145,46 @@ class DailyQuestionController
         }
     }
 
-    /* ======================================================
-       BUSCA FRASES DO USUÁRIO
-    ====================================================== */
+    /* ===============================
+       TOTAL DO DIA
+    =============================== */
+    private function getTotalToday($user_id)
+{
+    $inicioDia = date('Y-m-d 00:00:00');
+    $fimDia = date('Y-m-d 23:59:59');
+
+    $sql = "SELECT COUNT(*) as total 
+            FROM perguntas_ia 
+            WHERE user_id = :user_id 
+            AND data_criacao BETWEEN :inicio AND :fim";
+
+    $stmt = $this->pdo->prepare($sql);
+    $stmt->execute([
+        ':user_id' => $user_id,
+        ':inicio' => $inicioDia,
+        ':fim' => $fimDia
+    ]);
+
+    return (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+}
+
     private function getUserPhrases($user_id)
     {
         $sql = "
-            SELECT texto_nativo
+            SELECT texto_traduzido
             FROM frases
-            WHERE texto_nativo IS NOT NULL
-              AND usuario_id = :user_id
-              AND TRIM(texto_nativo) <> ''
+            WHERE texto_traduzido IS NOT NULL
+            AND usuario_id = :user_id
+            AND TRIM(texto_nativo) <> ''
+            AND status_id > 0
         ";
 
         $stmt = $this->pdo->prepare($sql);
-        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt->execute([':user_id' => $user_id]);
 
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
-    /* ======================================================
-       PEGAR USER ID (SEM MEXER NO MIDDLEWARE)
-    ====================================================== */
     private function getUserId()
     {
         global $user_id;
@@ -195,12 +193,9 @@ class DailyQuestionController
             throw new Exception('Usuário não autenticado.');
         }
 
-        return (int) $user_id;
+        return (int)$user_id;
     }
 
-    /* ======================================================
-       HELPERS
-    ====================================================== */
     private function json(array $data)
     {
         echo json_encode($data, JSON_UNESCAPED_UNICODE);
@@ -220,28 +215,26 @@ class DailyQuestionController
     }
 }
 
-/* ======================================================
-   EXECUÇÃO DA ROTA
-====================================================== */
+/* ===============================
+   ROTA
+=============================== */
 
 try {
     $controller = new DailyQuestionController($pdo);
 
-    $method = $_SERVER['REQUEST_METHOD'];
-
-    if ($method === 'GET') {
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $controller->getDailyQuestion();
     }
 
-   if ($method === 'POST') {
-    $data = json_decode(file_get_contents('php://input'), true);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
 
-    if (isset($data['action']) && $data['action'] === 'skip') {
-        $controller->skipDailyQuestion();
-    } else {
-        $controller->answerDailyQuestion();
+        if (isset($data['action']) && $data['action'] === 'skip') {
+            $controller->skipDailyQuestion();
+        } else {
+            $controller->answerDailyQuestion();
+        }
     }
-}
 
 } catch (Exception $e) {
     http_response_code(500);
@@ -249,5 +242,5 @@ try {
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage()
-    ], JSON_UNESCAPED_UNICODE);
+    ]);
 }
