@@ -83,11 +83,24 @@ class DailyQuestionController
     /* ===============================
        GET → GERAR PERGUNTA
     =============================== */
-    public function getDailyQuestion()
+   public function getDailyQuestion()
     {
         try {
             $user_id = $this->getUserId();
 
+            // 🔥 NOVO: verifica se já existe pergunta pendente
+            $pending = $this->getPendingQuestion($user_id);
+
+            if ($pending) {
+                $this->json([
+                    'success' => true,
+                    'question' => $pending['question'],
+                    'total_today' => $this->getTotalToday($user_id),
+                    'limit_reached' => false
+                ]);
+            }
+
+            // 🔥 se não tiver, gera nova
             $phrases = $this->getUserPhrases($user_id);
 
             if (empty($phrases)) {
@@ -108,10 +121,25 @@ class DailyQuestionController
         }
     }
 
+    private function getPendingQuestion($user_id)
+    {
+        $sql = "SELECT question 
+                FROM perguntas_ia 
+                WHERE user_id = :user_id 
+                AND status_id = 0
+                ORDER BY id DESC 
+                LIMIT 1";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
     /* ===============================
        POST → RESPONDER
     =============================== */
-    public function answerDailyQuestion()
+   public function answerDailyQuestion()
     {
         try {
             $user_id = $this->getUserId();
@@ -133,11 +161,30 @@ class DailyQuestionController
                 $data['answer']
             );
 
+            // ✅ SÓ MARCA COMO RESPONDIDA SE ACERTAR
+            if ($result['is_correct']) {
+
+                $sql = "
+                    UPDATE perguntas_ia 
+                    SET status_id = 1 
+                    WHERE user_id = :user_id 
+                    AND question = :question
+                    ORDER BY id DESC 
+                    LIMIT 1
+                ";
+
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute([
+                    ':user_id' => $user_id,
+                    ':question' => $data['question']
+                ]);
+            }
+
             $this->json([
                 'success' => true,
                 'feedback' => $result['feedback'] ?? '',
                 'is_correct' => $result['is_correct'] ?? false,
-                'total_today' => $this->getTotalToday($user_id) // ✅ FIX
+                'total_today' => $this->getTotalToday($user_id)
             ]);
 
         } catch (Exception $e) {
