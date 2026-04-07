@@ -170,43 +170,49 @@ try {
         exit;
     }
 
- if ($action === 'voice') {
-    // Limpa buffers
-    while (ob_get_level()) ob_end_clean();
-    
-    $texto = $input['text'] ?? $_GET['text'] ?? null;
-    $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
+   if ($action === 'voice') {
 
-    if (!$texto || !$lang) {
-        http_response_code(400);
+       $texto = $input['text'] ?? $_GET['text'] ?? null;
+        $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
+
+        if (!$texto) {
+            http_response_code(400);
+            echo json_encode(["error" => "text obrigatório"]);
+            exit;
+        }
+
+        if (!$lang) {
+            http_response_code(400);
+            echo json_encode(["error" => "lang obrigatório"]);
+            exit;
+        }
+
+        $translate = new LibreTranslate();
+        $translate->text = $texto;
+
+        $audio = $translate->getAudio($lang);
+
+        if (!$audio) {
+            http_response_code(500);
+            echo json_encode(["error" => "erro ao gerar áudio"]);
+            exit;
+        }
+
+        // limpa qualquer saída anterior (CRÍTICO)
+        if (ob_get_length()) ob_clean();
+
+        // headers corretos para mobile
+        header("Content-Type: audio/mpeg");
+        header("Content-Length: " . strlen($audio));
+        header("Accept-Ranges: bytes");
+        header("Cache-Control: public, max-age=86400");
+
+        // garante que nada mais seja enviado
+        echo $audio;
+        flush();
         exit;
     }
 
-    $translate = new LibreTranslate();
-    $translate->text = $texto;
-    $audio = $translate->getAudio($lang);
-
-    // 🔥 DEBUG: Ver o que está retornando
-    if (!$audio) {
-        http_response_code(500);
-        echo "Erro: getAudio retornou false";
-        exit;
-    }
-    
-    // 🔥 Verificar se é HTML (início comum de HTML)
-    if (substr($audio, 0, 15) === '<!DOCTYPE html>' || substr($audio, 0, 6) === '<html>') {
-        http_response_code(500);
-        echo "Erro: API retornou HTML ao invés de áudio. Primeiros 500 chars: " . htmlspecialchars(substr($audio, 0, 500));
-        exit;
-    }
-
-    header("Content-Type: audio/mpeg");
-    header("Content-Length: " . strlen($audio));
-    header("Cache-Control: no-cache");
-    
-    echo $audio;
-    exit;
-}
     if($action == 'training_stats'){
 
         $treino->category_id = $input['category_id'] ?? null;
