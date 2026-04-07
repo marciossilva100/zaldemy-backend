@@ -172,11 +172,22 @@ try {
 
     if ($action === 'voice') {
 
+      $file = __DIR__ . "/teste.mp3";
+
+    if (!file_exists($file)) {
+        echo "Arquivo não encontrado: " . $file;
+        exit;
+    }
+
+    if (filesize($file) === 0) {
+        echo "Arquivo vazio";
+        exit;
+    }
+
     header("Content-Type: audio/mpeg");
-    header("Accept-Ranges: bytes");
+    header("Content-Length: " . filesize($file));
 
-    readfile(__DIR__ . "/teste.mp3"); // coloca um mp3 REAL aqui
-
+    readfile($file);
     exit;
 
         $texto = $input['text'] ?? $_GET['text'] ?? null;
