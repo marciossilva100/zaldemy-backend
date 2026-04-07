@@ -198,10 +198,18 @@ try {
             exit;
         }
 
+        // limpa qualquer saída anterior (CRÍTICO)
+        if (ob_get_length()) ob_clean();
+
+        // headers corretos para mobile
         header("Content-Type: audio/mpeg");
+        header("Content-Length: " . strlen($audio));
+        header("Accept-Ranges: bytes");
         header("Cache-Control: public, max-age=86400");
 
+        // garante que nada mais seja enviado
         echo $audio;
+        flush();
         exit;
     }
 
