@@ -170,9 +170,9 @@ try {
         exit;
     }
 
-   if ($action === 'voice') {
-    // 🔥 LIMPA QUALQUER SAÍDA ANTERIOR
-    if (ob_get_level()) ob_end_clean();
+ if ($action === 'voice') {
+    // Limpa buffers
+    while (ob_get_level()) ob_end_clean();
     
     $texto = $input['text'] ?? $_GET['text'] ?? null;
     $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
@@ -186,14 +186,20 @@ try {
     $translate->text = $texto;
     $audio = $translate->getAudio($lang);
 
+    // 🔥 DEBUG: Ver o que está retornando
     if (!$audio) {
         http_response_code(500);
+        echo "Erro: getAudio retornou false";
+        exit;
+    }
+    
+    // 🔥 Verificar se é HTML (início comum de HTML)
+    if (substr($audio, 0, 15) === '<!DOCTYPE html>' || substr($audio, 0, 6) === '<html>') {
+        http_response_code(500);
+        echo "Erro: API retornou HTML ao invés de áudio. Primeiros 500 chars: " . htmlspecialchars(substr($audio, 0, 500));
         exit;
     }
 
-    // 🔥 LIMPA NOVAMENTE ANTES DOS HEADERS
-    while (ob_get_level()) ob_end_clean();
-    
     header("Content-Type: audio/mpeg");
     header("Content-Length: " . strlen($audio));
     header("Cache-Control: no-cache");
