@@ -172,6 +172,13 @@ try {
 
     if ($action === 'voice') {
 
+    header("Content-Type: audio/mpeg");
+    header("Accept-Ranges: bytes");
+
+    readfile(__DIR__ . "/teste.mp3"); // coloca um mp3 REAL aqui
+
+    exit;
+
         $texto = $input['text'] ?? $_GET['text'] ?? null;
         $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
 
