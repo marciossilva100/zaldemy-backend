@@ -68,7 +68,7 @@ class Auth {
             $stmt = $this->pdo->prepare(
                 "INSERT INTO usuarios 
                 (nome, email, email_verified, plano) 
-                VALUES (:nome, :email, 1, 2)"
+                VALUES (:nome, :email, 1, 1)"
             );
 
             $stmt->bindParam(":nome", $nome);

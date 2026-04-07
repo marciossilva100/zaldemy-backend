@@ -123,7 +123,7 @@ try {
 
         $stmt = $pdo->prepare("
             INSERT INTO usuarios (nome, email, password, email_token, plano)
-            VALUES (:nome, :email, :password, :token, 2)
+            VALUES (:nome, :email, :password, :token, 1)
         ");
 
         $stmt->bindParam(":nome", $nome, PDO::PARAM_STR);
