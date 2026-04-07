@@ -170,20 +170,13 @@ try {
         exit;
     }
 
-   if ($action === 'voice') {
+    if ($action === 'voice') {
 
-       $texto = $input['text'] ?? $_GET['text'] ?? null;
+        $texto = $input['text'] ?? $_GET['text'] ?? null;
         $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
 
-        if (!$texto) {
+        if (!$texto || !$lang) {
             http_response_code(400);
-            echo json_encode(["error" => "text obrigatório"]);
-            exit;
-        }
-
-        if (!$lang) {
-            http_response_code(400);
-            echo json_encode(["error" => "lang obrigatório"]);
             exit;
         }
 
@@ -194,25 +187,41 @@ try {
 
         if (!$audio) {
             http_response_code(500);
-            echo json_encode(["error" => "erro ao gerar áudio"]);
             exit;
         }
 
-        // limpa qualquer saída anterior (CRÍTICO)
-        if (ob_get_length()) ob_clean();
+        $size = strlen($audio);
+        $start = 0;
+        $end = $size - 1;
 
-        // headers corretos para mobile
         header("Content-Type: audio/mpeg");
-        header("Content-Length: " . strlen($audio));
         header("Accept-Ranges: bytes");
-        header("Cache-Control: public, max-age=86400");
 
-        // garante que nada mais seja enviado
+        // 🔥 SUPORTE A RANGE (ESSENCIAL PRA MOBILE)
+        if (isset($_SERVER['HTTP_RANGE'])) {
+
+            preg_match('/bytes=(\d+)-(\d+)?/', $_SERVER['HTTP_RANGE'], $matches);
+
+            $start = intval($matches[1]);
+            if (isset($matches[2]) && $matches[2] !== '') {
+                $end = intval($matches[2]);
+            }
+
+            $length = $end - $start + 1;
+
+            header("HTTP/1.1 206 Partial Content");
+            header("Content-Length: " . $length);
+            header("Content-Range: bytes $start-$end/$size");
+
+            echo substr($audio, $start, $length);
+            exit;
+        }
+
+        // 🔥 fallback normal
+        header("Content-Length: " . $size);
         echo $audio;
-        flush();
         exit;
     }
-
     if($action == 'training_stats'){
 
         $treino->category_id = $input['category_id'] ?? null;
