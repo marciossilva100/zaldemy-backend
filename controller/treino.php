@@ -170,7 +170,10 @@ try {
         exit;
     }
 
-    if ($action === 'voice') {
+   if ($action === 'voice') {
+    // 🔥 LIMPA QUALQUER SAÍDA ANTERIOR
+    if (ob_get_level()) ob_end_clean();
+    
     $texto = $input['text'] ?? $_GET['text'] ?? null;
     $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
 
@@ -188,15 +191,12 @@ try {
         exit;
     }
 
-    // Headers específicos para mobile
+    // 🔥 LIMPA NOVAMENTE ANTES DOS HEADERS
+    while (ob_get_level()) ob_end_clean();
+    
     header("Content-Type: audio/mpeg");
     header("Content-Length: " . strlen($audio));
-    header("Accept-Ranges: bytes");
-    header("Cache-Control: no-cache"); // 👈 Evitar cache problemático
-    header("X-Content-Type-Options: nosniff");
-    
-    // 👇 Para Safari no iOS
-    header("Content-Transfer-Encoding: binary");
+    header("Cache-Control: no-cache");
     
     echo $audio;
     exit;
