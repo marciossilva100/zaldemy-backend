@@ -171,7 +171,6 @@ try {
     }
 
     if ($action === 'voice') {
-
     $texto = $input['text'] ?? $_GET['text'] ?? null;
     $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
 
@@ -182,7 +181,6 @@ try {
 
     $translate = new LibreTranslate();
     $translate->text = $texto;
-
     $audio = $translate->getAudio($lang);
 
     if (!$audio) {
@@ -190,30 +188,17 @@ try {
         exit;
     }
 
-    // 🔥 cria arquivo temporário REAL
-    $file = __DIR__ . "/temp_audio_" . md5($texto . $lang) . ".mp3";
-
-    file_put_contents($file, $audio);
-
-    // 🔥 garante que existe
-    if (!file_exists($file)) {
-        http_response_code(500);
-        exit;
-    }
-
-    // 🔥 limpa qualquer lixo
-    if (ob_get_length()) ob_clean();
-
+    // Headers específicos para mobile
     header("Content-Type: audio/mpeg");
-    header("Content-Length: " . filesize($file));
+    header("Content-Length: " . strlen($audio));
     header("Accept-Ranges: bytes");
-    header("Cache-Control: public, max-age=86400");
-
-    readfile($file);
-
-    // 🔥 opcional: apagar depois
-    // unlink($file);
-
+    header("Cache-Control: no-cache"); // 👈 Evitar cache problemático
+    header("X-Content-Type-Options: nosniff");
+    
+    // 👇 Para Safari no iOS
+    header("Content-Transfer-Encoding: binary");
+    
+    echo $audio;
     exit;
 }
     if($action == 'training_stats'){
