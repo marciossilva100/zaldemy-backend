@@ -23,10 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
-
 
 require_once '../server.php';
 require_once 'authMiddleware.php';
@@ -34,6 +32,54 @@ require_once '../model/ai.php';
 
 require_once __DIR__ . '/../dotenv.php';
 carregarEnv(__DIR__ . '/../.env');
+
+/**
+ * =========================
+ * PEGAR USER
+ * =========================
+ */
+$userId = $user['id']; // vindo do authMiddleware
+
+/**
+ * =========================
+ * VERIFICAR SE JÁ EXISTE HOJE
+ * =========================
+ */
+$sql = "
+    SELECT frase
+    FROM frases_ia
+    WHERE user_id = :user_id
+      AND DATE(data_criacao) = CURDATE()
+    LIMIT 1
+";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute(['user_id' => $userId]);
+
+$fraseHoje = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if ($fraseHoje) {
+    $texto = $fraseHoje['frase'];
+
+    $english = '';
+    $portuguese = '';
+
+    if (preg_match('/ENGLISH:\s*(.*?)PORTUGUESE \(PT-BR\):\s*(.*)/s', $texto, $m)) {
+        $english    = trim($m[1]);
+        $portuguese = trim($m[2]);
+    } else {
+        $english = trim($texto);
+    }
+
+    echo json_encode([
+        'success' => true,
+        'cached'  => true,
+        'traduzido' => $english,
+        'nativo' => $portuguese
+    ], JSON_UNESCAPED_UNICODE);
+
+    exit;
+}
 
 /**
  * =========================
@@ -62,34 +108,47 @@ if (count($rows) < 2) {
 }
 
 /**
- * ARRAY FINAL DE FRASES (INGLÊS)
+ * ARRAY FINAL DE FRASES
  */
 $phrases = array_map(function ($row) {
     return trim($row['texto_nativo']);
 }, $rows);
-
 
 /**
  * =========================
  * API KEY
  * =========================
  */
-
 $apiKey = getenv('GROQ_API_KEY') ?: ($_ENV['GROQ_API_KEY'] ?? '');
-
 
 try {
     $generator = new EnglishParagraphGenerator($apiKey);
 
     $result = $generator->generateCohesiveParagraph($phrases);
 
-    /**
-     * =========================
-     * SEPARA EN / PT-BR
-     * =========================
-     */
     $text = $result['paragraph'];
 
+    /**
+     * =========================
+     * SALVAR NO BANCO
+     * =========================
+     */
+    $sql = "
+        INSERT INTO frases_ia (frase, user_id)
+        VALUES (:frase, :user_id)
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        'frase' => $text,
+        'user_id' => $userId
+    ]);
+
+    /**
+     * =========================
+     * SEPARAR TEXTO
+     * =========================
+     */
     $english = '';
     $portuguese = '';
 
@@ -97,19 +156,13 @@ try {
         $english    = trim($m[1]);
         $portuguese = trim($m[2]);
     } else {
-        // fallback
         $english = trim($text);
     }
 
-    /**
-     * =========================
-     * RETORNO FINAL (MESMO CONTRATO)
-     * =========================
-     */
     echo json_encode([
         'success'       => true,
-        'cached'        => false, // mantido por compatibilidade
-        'traduzido'       => $english,
+        'cached'        => false,
+        'traduzido'     => $english,
         'nativo'        => $portuguese,
         'stats'         => $result['word_stats'],
         'phrases_used'  => $result['phrases_used'],
