@@ -62,6 +62,7 @@ class DailyQuestionController
                 UPDATE perguntas_ia 
                 SET status_id = 1 
                 WHERE user_id = :user_id 
+                AND status_id = 0
                 ORDER BY id DESC 
                 LIMIT 1
             ";
@@ -98,6 +99,7 @@ class DailyQuestionController
                     'total_today' => $this->getTotalToday($user_id),
                     'limit_reached' => false
                 ]);
+                return;
             }
 
             // 🔥 se não tiver, gera nova
