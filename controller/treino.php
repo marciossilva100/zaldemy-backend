@@ -170,9 +170,9 @@ try {
         exit;
     }
 
-   if ($action === 'voice') {
+    if ($action === 'voice') {
 
-       $texto = $input['text'] ?? $_GET['text'] ?? null;
+        $texto = $input['text'] ?? $_GET['text'] ?? null;
         $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
 
         if (!$texto) {
@@ -187,29 +187,57 @@ try {
             exit;
         }
 
+        // função para dividir texto em partes menores
+        function dividirTexto($texto, $limite = 200) {
+            $frases = preg_split('/(?<=[.!?])\s+/', $texto);
+            $partes = [];
+            $buffer = '';
+
+            foreach ($frases as $frase) {
+                if (mb_strlen($buffer . ' ' . $frase) <= $limite) {
+                    $buffer .= ' ' . $frase;
+                } else {
+                    $partes[] = trim($buffer);
+                    $buffer = $frase;
+                }
+            }
+
+            if (!empty($buffer)) {
+                $partes[] = trim($buffer);
+            }
+
+            return $partes;
+        }
+
         $translate = new LibreTranslate();
-        $translate->text = $texto;
 
-        $audio = $translate->getAudio($lang);
+        $partes = dividirTexto($texto, 200);
+        $audios = [];
 
-        if (!$audio) {
+        foreach ($partes as $parte) {
+            $translate->text = $parte;
+
+            $audio = $translate->getAudio($lang);
+
+            if ($audio) {
+                $audios[] = base64_encode($audio);
+            }
+
+            // pequeno delay para evitar bloqueio do Google
+            usleep(200000); // 0.2s
+        }
+
+        if (empty($audios)) {
             http_response_code(500);
             echo json_encode(["error" => "erro ao gerar áudio"]);
             exit;
         }
 
-        // limpa qualquer saída anterior (CRÍTICO)
+        // limpa qualquer saída anterior
         if (ob_get_length()) ob_clean();
 
-        // headers corretos para mobile
-        header("Content-Type: audio/mpeg");
-        header("Content-Length: " . strlen($audio));
-        header("Accept-Ranges: bytes");
-        header("Cache-Control: public, max-age=86400");
-
-        // garante que nada mais seja enviado
-        echo $audio;
-        flush();
+        header("Content-Type: application/json");
+        echo json_encode($audios);
         exit;
     }
 

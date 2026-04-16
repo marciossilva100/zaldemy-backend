@@ -62,16 +62,37 @@ class LibreTranslate
 
     }
 
+    function dividirTexto($texto, $limite = 200) {
+        $frases = preg_split('/(?<=[.!?])\s+/', $texto);
+        $partes = [];
+        $buffer = '';
+
+        foreach ($frases as $frase) {
+            if (mb_strlen($buffer . ' ' . $frase) <= $limite) {
+                $buffer .= ' ' . $frase;
+            } else {
+                $partes[] = trim($buffer);
+                $buffer = $frase;
+            }
+        }
+
+        if (!empty($buffer)) {
+            $partes[] = trim($buffer);
+        }
+
+        return $partes;
+    }
+
    // MÉTODO PARA GERAR ÁUDIO
-  /*   public function getAudio($lang)
+    public function getAudio($lang)
     {
         if (!$this->text || !$lang) {
             return null;
         }
 
         // limite de segurança para evitar erro do Google TTS
-        $text = mb_substr($this->text, 0, 200);
-
+        /* $text = mb_substr($this->text, 0, 200); */
+$text = $this->text;
         $url = "https://translate.google.com/translate_tts?" . http_build_query([
             "ie" => "UTF-8",
             "q" => $text,
@@ -101,9 +122,9 @@ class LibreTranslate
         curl_close($ch);
 
         return $audio;
-    } */
+    } 
 
-    public function getAudio($lang = 'pt-BR')
+   /*  public function getAudio($lang = 'pt-BR')
     {
 
         if (!isset($_ENV['TTS'])) {
@@ -147,5 +168,5 @@ class LibreTranslate
         }
         
         return null;
-    }
+    } */
 }
