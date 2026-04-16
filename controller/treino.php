@@ -171,7 +171,7 @@ try {
     }
 
     if ($action === 'voice') {
-
+$texto = trim($texto, '"');
         $texto = $input['text'] ?? $_GET['text'] ?? null;
         $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
 

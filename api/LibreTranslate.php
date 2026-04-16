@@ -90,9 +90,8 @@ class LibreTranslate
             return null;
         }
 
-        // limite de segurança para evitar erro do Google TTS
-        /* $text = mb_substr($this->text, 0, 200); */
-$text = $this->text;
+        $text = $this->text;
+
         $url = "https://translate.google.com/translate_tts?" . http_build_query([
             "ie" => "UTF-8",
             "q" => $text,
@@ -109,20 +108,35 @@ $text = $this->text;
             CURLOPT_USERAGENT => "Mozilla/5.0",
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => false,
-            CURLOPT_TIMEOUT => 10
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_HEADER => true // 👈 IMPORTANTE
         ]);
 
-        $audio = curl_exec($ch);
+        $response = curl_exec($ch);
 
-        if ($audio === false) {
+        if ($response === false) {
             curl_close($ch);
             return null;
         }
 
+        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $header = substr($response, 0, $header_size);
+        $body = substr($response, $header_size);
+
         curl_close($ch);
 
-        return $audio;
-    } 
+        // 🔥 VALIDAÇÃO REAL
+        if (strpos($header, 'audio') === false) {
+            file_put_contents('erro_google_tts.log', $response);
+            return null;
+        }
+
+        if (empty($body)) {
+            return null;
+        }
+
+        return $body;
+    }
 
    /*  public function getAudio($lang = 'pt-BR')
     {
