@@ -1,4 +1,5 @@
 <?php
+carregarEnv(__DIR__ . '/../.env');
 
 class LibreTranslate
 {
@@ -62,7 +63,7 @@ class LibreTranslate
     }
 
    // MÉTODO PARA GERAR ÁUDIO
-    public function getAudio($lang)
+  /*   public function getAudio($lang)
     {
         if (!$this->text || !$lang) {
             return null;
@@ -100,5 +101,51 @@ class LibreTranslate
         curl_close($ch);
 
         return $audio;
+    } */
+
+    public function getAudio($lang = 'pt-BR')
+    {
+
+        if (!isset($_ENV['TTS'])) {
+            die(json_encode([
+                "erro" => true,
+                "mensagem" => "API KEY não configurada"
+            ]));
+        }
+
+        if (!$this->text) {
+            return null;
+        }
+
+        $url = 'https://ttsforfree.com/api/tts';
+        
+        $data = [
+            'text' => $this->text,
+            'voice' => 'pt-BR-AntonioNeural',
+            'api_key' => $_ENV['TTS']
+        ];
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($data),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => false
+        ]);
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        $result = json_decode($response, true);
+        
+        // A API retorna a URL do arquivo de áudio gerado
+        if (isset($result['audio_url'])) {
+            return file_get_contents($result['audio_url']);
+        }
+        
+        return null;
     }
 }
