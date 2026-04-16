@@ -170,24 +170,31 @@ try {
         exit;
     }
 
-    if ($action === 'voice') {
-$texto = trim($texto, '"');
+   if ($action === 'voice') {
+
+    try {
+
         $texto = $input['text'] ?? $_GET['text'] ?? null;
         $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
 
+        file_put_contents("debug_voice.log", "INICIO\n", FILE_APPEND);
+
+        file_put_contents("debug_voice.log", "Texto bruto: " . $texto . "\n", FILE_APPEND);
+        file_put_contents("debug_voice.log", "Lang: " . $lang . "\n", FILE_APPEND);
+
         if (!$texto) {
-            http_response_code(400);
-            echo json_encode(["error" => "text obrigatório"]);
-            exit;
+            throw new Exception("Texto vazio");
         }
 
         if (!$lang) {
-            http_response_code(400);
-            echo json_encode(["error" => "lang obrigatório"]);
-            exit;
+            throw new Exception("Lang vazia");
         }
 
-        // função para dividir texto em partes menores
+        // remove aspas
+        $texto = trim($texto, '"');
+
+        file_put_contents("debug_voice.log", "Texto tratado: " . $texto . "\n", FILE_APPEND);
+
         function dividirTexto($texto, $limite = 200) {
             $frases = preg_split('/(?<=[.!?])\s+/', $texto);
             $partes = [];
@@ -209,37 +216,58 @@ $texto = trim($texto, '"');
             return $partes;
         }
 
-        $translate = new LibreTranslate();
-
         $partes = dividirTexto($texto, 200);
+
+        file_put_contents("debug_voice.log", "Partes: " . json_encode($partes) . "\n", FILE_APPEND);
+
+        $translate = new LibreTranslate();
         $audios = [];
 
-        foreach ($partes as $parte) {
+        foreach ($partes as $i => $parte) {
+
+            file_put_contents("debug_voice.log", "Parte $i: " . $parte . "\n", FILE_APPEND);
+
             $translate->text = $parte;
 
             $audio = $translate->getAudio($lang);
 
-            if ($audio) {
-                $audios[] = base64_encode($audio);
+            if (!$audio) {
+                file_put_contents("debug_voice.log", "ERRO: audio null na parte $i\n", FILE_APPEND);
+                continue;
             }
 
-            // pequeno delay para evitar bloqueio do Google
-            usleep(200000); // 0.2s
+            file_put_contents("debug_voice.log", "Audio OK parte $i - tamanho: " . strlen($audio) . "\n", FILE_APPEND);
+
+            $audios[] = base64_encode($audio);
+
+            usleep(200000);
         }
 
         if (empty($audios)) {
-            http_response_code(500);
-            echo json_encode(["error" => "erro ao gerar áudio"]);
-            exit;
+            throw new Exception("Nenhum áudio gerado");
         }
 
-        // limpa qualquer saída anterior
+        file_put_contents("debug_voice.log", "TOTAL AUDIOS: " . count($audios) . "\n", FILE_APPEND);
+
         if (ob_get_length()) ob_clean();
 
         header("Content-Type: application/json");
         echo json_encode($audios);
         exit;
+
+    } catch (Throwable $e) {
+
+        file_put_contents("debug_voice.log", "ERRO FATAL: " . $e->getMessage() . "\n", FILE_APPEND);
+        file_put_contents("debug_voice.log", "LINHA: " . $e->getLine() . "\n\n", FILE_APPEND);
+
+        http_response_code(500);
+        echo json_encode([
+            "error" => "Erro no voice",
+            "message" => $e->getMessage()
+        ]);
+        exit;
     }
+}
 
     if($action == 'training_stats'){
 
