@@ -1,5 +1,5 @@
 <?php
-carregarEnv(__DIR__ . '/../.env');
+//carregarEnv(__DIR__ . '/../.env');
 
 class LibreTranslate
 {
