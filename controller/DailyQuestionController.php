@@ -202,10 +202,11 @@ class DailyQuestionController
     $inicioDia = date('Y-m-d 00:00:00');
     $fimDia = date('Y-m-d 23:59:59');
 
-    $sql = "SELECT COUNT(*) as total 
-            FROM perguntas_ia 
-            WHERE user_id = :user_id 
-            AND data_criacao BETWEEN :inicio AND :fim";
+   $sql = "SELECT COUNT(*) as total 
+        FROM perguntas_ia 
+        WHERE user_id = :user_id 
+        AND status_id = 1
+        AND data_criacao BETWEEN :inicio AND :fim";
 
     $stmt = $this->pdo->prepare($sql);
     $stmt->execute([
