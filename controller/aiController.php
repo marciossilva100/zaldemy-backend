@@ -152,12 +152,19 @@ try {
     $english = '';
     $portuguese = '';
 
-    if (preg_match('/ENGLISH:\s*(.*?)(?:PORTUGUESE|PORTUGUSE)\s*\(?PT-BR\)?:\s*(.*)/s', $texto, $m)) {
-        $english    = trim($m[1]);
-        $portuguese = trim($m[2]);
-    } else {
-        $english = trim($texto);
-    }
+ // Extrair inglês
+$english = '';
+if (preg_match('/ENGLISH:\s*(.*?)(?:PORTUGUESE|PORTUGUSE)/s', $texto, $m)) {
+    $english = trim($m[1]);
+} else {
+    $english = trim($texto);
+}
+
+// Extrair português
+$portuguese = '';
+if (preg_match('/(?:PORTUGUESE|PORTUGUSE)\s*(?:\(PT-BR\))?:\s*(.*)/s', $texto, $m)) {
+    $portuguese = trim($m[1]);
+}
 
     echo json_encode([
         'success'       => true,
