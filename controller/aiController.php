@@ -64,7 +64,7 @@ if ($fraseHoje) {
     $english = '';
     $portuguese = '';
 
-    if (preg_match('/ENGLISH:\s*(.*?)PORTUGUESE \(PT-BR\):\s*(.*)/s', $texto, $m)) {
+    if (preg_match('/ENGLISH:\s*(.*?)(?:PORTUGUESE|PORTUGUSE)\s*(?:\(PT-BR\))?:\s*(.*)/s', $texto, $m)) {
         $english    = trim($m[1]);
         $portuguese = trim($m[2]);
     } else {
@@ -152,13 +152,13 @@ try {
     $english = '';
     $portuguese = '';
 
- // Extrair inglês
-if (preg_match('/ENGLISH:\s*(.*?)(?:PORTUGUESE|PORTUGUSE)\s*(?:\(PT-BR\))?:\s*(.*)/s', $texto, $m)) {
-    $english    = trim($m[1]);
-    $portuguese = trim($m[2]);
-} else {
-    $english = trim($texto);
-}
+    if (preg_match('/ENGLISH:\s*(.*?)(?:PORTUGUESE|PORTUGUSE)\s*(?:\(PT-BR\))?:\s*(.*)/s', $text, $m)) {
+        $english    = trim($m[1]);
+        $portuguese = trim($m[2]);
+    } else {
+        $english = trim($text);
+    }
+
     echo json_encode([
         'success'       => true,
         'cached'        => false,
