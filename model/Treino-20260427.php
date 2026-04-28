@@ -93,134 +93,137 @@ class Treino {
     }
 
 
- public function retornarTreino($idTreino, $user_id)
-{
-    date_default_timezone_set('America/Sao_Paulo');
+  public function retornarTreino($idTreino, $user_id)
+    {
+        date_default_timezone_set('America/Sao_Paulo');
 
-    global $pdo;
+        global $pdo;
 
-    try {
+        try {
 
-        $pdo->beginTransaction();
+            $pdo->beginTransaction();
 
-        // =========================
-        // 1️⃣ SELECT com métricas
-        // =========================
-        $sqlSelect = "
-            SELECT 
-                tda.id_frase,
-                f.categoria_id,
-                COALESCE(AVG(m.acertou), 0) as media_acertos,
-                MAX(tda.data_atualizacao) as ultima_data
-            FROM treino_data_atualizacao tda
+            // =========================
+            // 1️⃣ SELECT
+            // =========================
+            $sqlSelect = "
+                SELECT 
+                    tda.id_frase,
+                    f.categoria_id
+                FROM treino_data_atualizacao tda
 
-            INNER JOIN frases f 
-                ON f.id = tda.id_frase
+                INNER JOIN (
+                    SELECT id_frase, MAX(data_atualizacao) AS ultima_data
+                    FROM treino_data_atualizacao
+                    WHERE id_treino = ?
+                    GROUP BY id_frase
+                ) ultimas 
+                    ON ultimas.id_frase = tda.id_frase 
+                    AND ultimas.ultima_data = tda.data_atualizacao
 
-            LEFT JOIN metricas m 
-                ON m.frase_id = tda.id_frase
-                AND m.user_id = ?
+                INNER JOIN frases f 
+                    ON f.id = tda.id_frase
 
-            WHERE tda.id_treino = ?
+                WHERE tda.data_atualizacao <= NOW() - INTERVAL 7 DAY
 
-            GROUP BY tda.id_frase, f.categoria_id
-
-            HAVING ultima_data <= NOW() - INTERVAL 
-                CASE 
-                    WHEN media_acertos >= 0.7 THEN 15
-                    ELSE 7
-                END DAY
-        ";
-
-        $stmtSelect = $pdo->prepare($sqlSelect);
-        $stmtSelect->execute([$user_id, $idTreino]);
-
-        $dados = $stmtSelect->fetchAll(PDO::FETCH_ASSOC);
-
-        if (empty($dados)) {
-            $pdo->rollBack();
-            return [
-                'success' => false,
-                'message' => 'Nenhuma frase encontrada'
-            ];
-        }
-
-        // =========================
-        // 2️⃣ Agrupar por categoria
-        // =========================
-        $agrupado = [];
-
-        foreach ($dados as $row) {
-            $agrupado[$row['categoria_id']][] = $row['id_frase'];
-        }
-
-        // =========================
-        // 3️⃣ UPDATE por categoria
-        // =========================
-        foreach ($agrupado as $categoria_id => $ids) {
-
-            $placeholders = implode(',', array_fill(0, count($ids), '?'));
-
-            $sqlUpdate = "
-                UPDATE frases 
-                SET id_treino = 2
-                WHERE id IN ($placeholders)
-                AND status_id > 0
-                AND categoria_id = ?
-                AND usuario_id = ?
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM treino_data_atualizacao tda2
+                    WHERE tda2.id_frase = tda.id_frase
+                    AND tda2.id_treino <> ?
+                    AND tda2.data_atualizacao > tda.data_atualizacao
+                )
             ";
 
-            $stmtUpdate = $pdo->prepare($sqlUpdate);
+            $stmtSelect = $pdo->prepare($sqlSelect);
+            $stmtSelect->execute([$idTreino, $idTreino]);
 
-            $params = array_merge(
-                $ids,
-                [
-                    $categoria_id,
-                    $user_id
-                ]
-            );
+            $dados = $stmtSelect->fetchAll(PDO::FETCH_ASSOC);
 
-            $stmtUpdate->execute($params);
+            if (empty($dados)) {
+                $pdo->rollBack();
+                return [
+                    'success' => false,
+                    'message' => 'Nenhuma frase encontrada'
+                ];
+            }
+
+            // =========================
+            // Agrupar por categoria
+            // =========================
+            $agrupado = [];
+
+            foreach ($dados as $row) {
+                $agrupado[$row['categoria_id']][] = $row['id_frase'];
+            }
+
+            // =========================
+            // 2️⃣ UPDATE por categoria
+            // =========================
+            foreach ($agrupado as $categoria_id => $ids) {
+
+                $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+                $sqlUpdate = "
+                    UPDATE frases 
+                    SET id_treino = 2
+                    WHERE id IN ($placeholders)
+                    AND status_id > 0
+                    AND categoria_id = ?
+                    AND usuario_id = ?
+                ";
+
+                $stmtUpdate = $pdo->prepare($sqlUpdate);
+
+                $params = array_merge(
+                    $ids,
+                    [
+                        $categoria_id,
+                        $user_id
+                    ]
+                );
+
+                $stmtUpdate->execute($params);
+            }
+
+            // =========================
+            // 3️⃣ INSERT (id_treino = 2)
+            // =========================
+            $placeholdersInsert = [];
+            $paramsInsert = [];
+
+            foreach ($dados as $row) {
+                $placeholdersInsert[] = "(?, ?, ?)";
+                $paramsInsert[] = $row['id_frase'];
+                $paramsInsert[] = 2; // 🔥 fixo
+                $paramsInsert[] = 1;
+            }
+
+            $sqlInsert = "
+                INSERT INTO treino_data_atualizacao 
+                (id_frase, id_treino, status_id) 
+                VALUES " . implode(',', $placeholdersInsert);
+
+            $stmtInsert = $pdo->prepare($sqlInsert);
+            $stmtInsert->execute($paramsInsert);
+
+            $pdo->commit();
+
+            return [
+                'success' => true,
+                'message' => 'Processo concluído com sucesso',
+                'total' => count($dados)
+            ];
+
+        } catch (Exception $e) {
+            $pdo->rollBack();
+
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+            ];
         }
-
-        // =========================
-        // 4️⃣ INSERT (id_treino = 2)
-        // =========================
-        $placeholdersInsert = [];
-        $paramsInsert = [];
-
-        foreach ($dados as $row) {
-            $placeholdersInsert[] = "(?, ?, ?)";
-            $paramsInsert[] = $row['id_frase'];
-            $paramsInsert[] = 2;
-            $paramsInsert[] = 1;
-        }
-
-        $sqlInsert = "
-            INSERT INTO treino_data_atualizacao 
-            (id_frase, id_treino, status_id) 
-            VALUES " . implode(',', $placeholdersInsert);
-
-        $stmtInsert = $pdo->prepare($sqlInsert);
-        $stmtInsert->execute($paramsInsert);
-
-        $pdo->commit();
-
-        return [
-            'success' => true,
-            'message' => 'Processo concluído com sucesso',
-            'total' => count($dados)
-        ];
-
-    } catch (Exception $e) {
-        $pdo->rollBack();
-
-        return [
-            'success' => false,
-            'message' => $e->getMessage(),
-        ];
     }
-}
 
 
     public function metricasFrase($user_id){
