@@ -49,15 +49,17 @@ class EnglishParagraphGenerator
 
         Nunca exceda 250 caracteres no texto inglês.
 
-        Depois do parágrafo em inglês, forneça apenas a tradução para o português.
+         Depois do parágrafo em inglês, forneça apenas a tradução para o português.
 
-        FORMATO EXATO E ÚNICO:
+        FORMATO EXATO E ÚNICO (COPIE EXATAMENTE AS PALAVRAS 'ENGLISH:' E 'PORTUGUESE (PT-BR):' SEM ERROS DE DIGITAÇÃO):
 
         ENGLISH:
         [seu texto aqui - máximo 250 caracteres]
 
         PORTUGUESE (PT-BR):
         [tradução]
+
+        ATENÇÃO: Escreva corretamente 'PORTUGUESE' e não 'PORTUGUSE'.
         ";
 
         $userPrompt = "Transforme estas frases em um parágrafo coeso:\n\n" . $phrasesText;
