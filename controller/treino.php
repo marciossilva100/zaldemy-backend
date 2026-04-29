@@ -171,7 +171,7 @@ try {
     }
 
     if ($action === 'voice') {
-$texto = trim($texto, '"');
+        $texto = trim($texto, '"');
         $texto = $input['text'] ?? $_GET['text'] ?? null;
         $lang  = $input['lang'] ?? $_GET['lang'] ?? null;
 
@@ -213,18 +213,23 @@ $texto = trim($texto, '"');
 
         $partes = dividirTexto($texto, 200);
         $audios = [];
+        $totalPartes = count($partes);
 
-        foreach ($partes as $parte) {
+        foreach ($partes as $i => $parte) {
             $translate->text = $parte;
-
             $audio = $translate->getAudio($lang);
 
-            if ($audio) {
+            if ($audio && strlen($audio) > 500) {
                 $audios[] = base64_encode($audio);
             }
 
-            // pequeno delay para evitar bloqueio do Google
-            usleep(200000); // 0.2s
+            // Delay progressivo: 0.5s + 0.1s por parte
+            usleep(500000 + ($i * 100000));
+
+            // A cada 3 requisições, pausa extra de 1 segundo
+            if (($i + 1) % 3 === 0 && $i < $totalPartes - 1) {
+                sleep(1);
+            }
         }
 
         if (empty($audios)) {

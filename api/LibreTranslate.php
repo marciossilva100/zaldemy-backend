@@ -125,14 +125,36 @@ class LibreTranslate
 
         curl_close($ch);
 
-        // 🔥 VALIDAÇÃO REAL
         if (strpos($header, 'audio') === false) {
-            file_put_contents('erro_google_tts.log', $response);
             return null;
         }
 
-        if (empty($body)) {
-            return null;
+        if (empty($body) || strlen($body) < 500) {
+            // Tenta novamente após 1 segundo (apenas uma tentativa extra)
+            sleep(1);
+            
+            $ch2 = curl_init();
+            curl_setopt_array($ch2, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => "",
+                CURLOPT_USERAGENT => "Mozilla/5.0",
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_TIMEOUT => 10,
+                CURLOPT_HEADER => true
+            ]);
+            
+            $response2 = curl_exec($ch2);
+            $header_size2 = curl_getinfo($ch2, CURLINFO_HEADER_SIZE);
+            $body2 = substr($response2, $header_size2);
+            curl_close($ch2);
+            
+            if (empty($body2) || strlen($body2) < 500) {
+                return null;
+            }
+            
+            return $body2;
         }
 
         return $body;
