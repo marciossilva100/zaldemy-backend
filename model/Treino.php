@@ -98,7 +98,6 @@ class Treino {
     date_default_timezone_set('America/Sao_Paulo');
 
     global $pdo;
-    return;
 
     try {
 
@@ -112,8 +111,17 @@ class Treino {
                 tda.id_frase,
                 f.categoria_id,
                 COALESCE(AVG(m.acertou), 0) as media_acertos,
-                MAX(tda.data_atualizacao) as ultima_data
+                tda.data_atualizacao as ultima_data
+
             FROM treino_data_atualizacao tda
+
+            INNER JOIN (
+                SELECT id_frase, MAX(data_atualizacao) as max_data
+                FROM treino_data_atualizacao
+                GROUP BY id_frase
+            ) ult 
+                ON ult.id_frase = tda.id_frase 
+                AND ult.max_data = tda.data_atualizacao
 
             INNER JOIN frases f 
                 ON f.id = tda.id_frase
@@ -122,9 +130,10 @@ class Treino {
                 ON m.frase_id = tda.id_frase
                 AND m.user_id = ?
 
-            WHERE tda.id_treino = ?
-
-            GROUP BY tda.id_frase, f.categoria_id
+            WHERE 
+                tda.id_treino = ?
+                
+            GROUP BY tda.id_frase, f.categoria_id, tda.data_atualizacao
 
             HAVING ultima_data <= NOW() - INTERVAL 
                 CASE 
@@ -338,7 +347,7 @@ class Treino {
             if (!empty($row['data_atualizacao'])) {
 
                 $date = new DateTime($row['data_atualizacao']);
-                $date->modify('+2 minutes');
+                $date->modify('+2 hours');
 
                 $agora = new DateTime();
 
@@ -410,7 +419,7 @@ class Treino {
                 AND f.id_treino = ?
                 AND f.usuario_id = ?
                 AND f.categoria_id = ?
-                AND tda.data_atualizacao <= NOW() - INTERVAL 2 MINUTE
+                AND tda.data_atualizacao <= NOW() - INTERVAL 2 hours
             ";
 
             $stmt = $pdo->prepare($sql);
