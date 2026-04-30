@@ -293,30 +293,6 @@ class Treino {
         date_default_timezone_set('America/Sao_Paulo');
         global $pdo;
 
-        // $sql = "
-        //     SELECT  
-        //         t.status,
-        //         t.id,
-        //         t.id AS id_treino,
-        //         COUNT(DISTINCT f.id) AS total,
-        //         MIN(tda.data_atualizacao) AS data_atualizacao
-        //     FROM treino t
-
-        //     LEFT JOIN frases f 
-        //         ON f.id_treino = t.id
-        //         AND f.categoria_id = ?
-        //         AND f.usuario_id = ?
-        //         AND f.status_id > ?
-
-        //     LEFT JOIN treino_data_atualizacao tda
-        //         ON tda.id_frase = f.id
-        //         AND tda.id_treino = t.id
-
-        //     WHERE t.id BETWEEN ? AND ?
-
-        //     GROUP BY t.id, t.status
-        //     ORDER BY t.id;
-        // ";
 
         $sql = "SELECT  
             t.status,
@@ -361,7 +337,7 @@ class Treino {
             if (!empty($row['data_atualizacao'])) {
 
                 $date = new DateTime($row['data_atualizacao']);
-                $date->modify('+4 hours');
+                $date->modify('+2 minutes');
 
                 $agora = new DateTime();
 
