@@ -433,7 +433,7 @@ class Treino {
                 AND f.id_treino = ?
                 AND f.usuario_id = ?
                 AND f.categoria_id = ?
-                AND tda.data_atualizacao <= NOW() - INTERVAL 4 HOUR
+                AND tda.data_atualizacao <= NOW() - INTERVAL 2 MINUTE
             ";
 
             $stmt = $pdo->prepare($sql);
