@@ -98,6 +98,7 @@ class Treino {
     date_default_timezone_set('America/Sao_Paulo');
 
     global $pdo;
+    return;
 
     try {
 
