@@ -32,10 +32,13 @@ class DailyQuestionIA
             throw new Exception("Adicione mais frases aos flashcards com conteúdo para gerar perguntas melhores. $totalWords");
         }
 
-        $phrases = array_slice($phrases, 0, 6);
+        // ✅ EMBARALHAR E PEGAR NO MÁXIMO 300 FRASES ALEATÓRIAS
+        shuffle($phrases);
+        $phrases = array_slice($phrases, 0, 300);
 
+        // ✅ TRUNCAR CADA FRASE PARA 200 CARACTERES (para não estourar o token limit)
         $phrases = array_map(function ($p) {
-            return mb_substr($p, 0, 120);
+            return mb_substr($p, 0, 200);
         }, $phrases);
 
            $inicioDia = date('Y-m-d 00:00:00');
