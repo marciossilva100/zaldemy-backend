@@ -27,57 +27,44 @@ class EnglishParagraphGenerator
 
         $originalWordCount = $this->countWordsInPhrases($phrases);
 
-       $systemPrompt = "
-        Você é um montador de parágrafos. Você NÃO é um escritor criativo. Sua única função é combinar frases prontas em um parágrafo coeso.
+      $systemPrompt = "
+        You are a paragraph assembler. You are NOT a creative writer. Your only job is to combine provided English phrases into one cohesive paragraph.
 
-        REGRAS OBRIGATÓRIAS — SIGA EXATAMENTE:
+        CRITICAL RULES — FOLLOW EXACTLY:
 
-        1. Você DEVE usar NO MÍNIMO 4 frases do conjunto fornecido. Sem exceções.
-        2. Você NÃO PODE inventar nenhum conteúdo novo. Não crie frases, ideias ou tópicos que não estejam nas frases fornecidas.
-        3. O ÚNICO que você pode adicionar são conectivos curtos: and, but, so, also, however, because, then, in addition, moreover.
-        4. Você pode MUDAR a ordem das frases para melhorar o fluxo.
-        5. Você pode fazer PEQUENOS ajustes gramaticais (pronomes, tempos verbais) para que as frases se conectem naturalmente.
-        6. Mantenha o significado original de cada frase. Não resuma nem expanda.
+        1. You MUST use AT LEAST 4 phrases from the provided list. No exceptions.
+        2. You MUST NOT invent any new content, ideas, or topics.
+        3. The ONLY thing you can add are short connectors: and, but, so, also, however, because, then.
+        4. You CAN reorder phrases and make small grammatical adjustments so they flow naturally.
+        5. The ENTIRE paragraph must be in ENGLISH. Not a single word in Portuguese or any other language. NEVER mix languages.
+        6. Do NOT translate anything to Portuguese in the English paragraph. The Portuguese translation comes later, in its own section.
+        7. Keep the original meaning of each phrase. Do not summarize or expand.
 
-        EXEMPLO DO QUE FAZER:
+        SIZE RULE:
+        - The English paragraph must be between 100 and 220 characters (including spaces).
+        - If under 100 characters, ADD more phrases from the provided list.
+        - If over 220 characters, REMOVE some phrases.
 
-        Frases fornecidas:
-        1. \"I like music\"
-        2. \"I study English every day\"
-        3. \"My favorite band is Imagine Dragons\"
-        4. \"I want to travel to London\"
-        5. \"I'm learning to buy plane tickets\"
+        After the English paragraph, provide ONLY the Portuguese translation.
 
-        Parágrafo correto (usa 5 frases + conectivos):
-        \"I study English every day and I like music. My favorite band is Imagine Dragons, also I want to travel to London, so I'm learning to buy plane tickets.\"
-
-        EXEMPLO DO QUE NÃO FAZER:
-
-        Frases fornecidas:
-        1. \"I like music\"
-        2. \"I study English every day\"
-
-        Parágrafo ERRADO (inventou conteúdo novo):
-        \"I'm passionate about learning new things and I enjoy discovering different cultures.\"
-
-        REGRA DE TAMANHO:
-        - O texto em INGLÊS deve ter entre 100 e 220 CARACTERES (incluindo espaços).
-        - Se estiver abaixo de 100 caracteres, ADICIONE mais frases do conjunto fornecido.
-        - Se passar de 220, REMOVA frases mantendo as mais variadas.
-
-        Depois do parágrafo em inglês, forneça APENAS a tradução para o português.
-
-        FORMATO EXATO (COPIE AS PALAVRAS CORRETAMENTE — 'PORTUGUESE' e não 'PORTUGUSE'):
+        EXACT FORMAT (spell correctly — 'PORTUGUESE', NOT 'PORTUGUSE'):
 
         ENGLISH:
-        [parágrafo usando frases fornecidas]
+        [paragraph using provided phrases — ENGLISH ONLY]
 
         PORTUGUESE (PT-BR):
-        [tradução]
+        [translation]
+
+        EXAMPLE OF CORRECT OUTPUT:
+
+        ENGLISH:
+        I study English every day because I want to travel to London. My favorite band is Imagine Dragons and I also enjoy listening to music while I work. I'm learning to buy plane tickets so I can visit new places.
+
+        PORTUGUESE (PT-BR):
+        Eu estudo inglês todos os dias porque quero viajar para Londres. Minha banda favorita é Imagine Dragons e também gosto de ouvir música enquanto trabalho. Estou aprendendo a comprar passagens de avião para poder visitar novos lugares.
         ";
 
-        $userPrompt = "Use NO MÍNIMO 4 destas frases para montar um parágrafo. Apenas adicione conectivos, não invente conteúdo:\n\n" . $phrasesText;
-            
+        $userPrompt = "Combine at least 4 of these phrases into one paragraph. Add ONLY connectors, do NOT invent content. The paragraph must be 100% in English — NO Portuguese words:\n\n" . $phrasesText; 
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => $userPrompt],
