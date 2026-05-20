@@ -35,6 +35,36 @@ carregarEnv(__DIR__ . '/../.env');
 
 /**
  * =========================
+ * FUNÇÃO PARA EXTRAIR INGLÊS E PORTUGUÊS
+ * =========================
+ */
+function extrairTextos(string $texto): array
+{
+    $english = '';
+    $portuguese = '';
+
+    // Padrão 1: Formato ideal com ambos os idiomas
+    if (preg_match('/ENGLISH:\s*(.*?)(?:PORTUGUESE|PORTUGUSE)\s*(?:\(PT-BR\))?:\s*(.*)/s', $texto, $m)) {
+        $english    = trim($m[1]);
+        $portuguese = trim($m[2]);
+    }
+    // Padrão 2: Fallback - só encontrou ENGLISH
+    elseif (preg_match('/ENGLISH:\s*(.+)/s', $texto, $m)) {
+        $english = trim($m[1]);
+        if (preg_match('/(?:PORTUGUESE|PORTUGUSE)\s*(?:\(PT-BR\))?:\s*(.+)/s', $texto, $m2)) {
+            $portuguese = trim($m2[1]);
+        }
+    }
+    // Padrão 3: Nenhum marcador encontrado - assume tudo como inglês
+    else {
+        $english = trim($texto);
+    }
+
+    return [$english, $portuguese];
+}
+
+/**
+ * =========================
  * PEGAR USER
  * =========================
  */
@@ -60,22 +90,13 @@ $fraseHoje = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($fraseHoje) {
     $texto = $fraseHoje['frase'];
-
-    $english = '';
-    $portuguese = '';
-
-    if (preg_match('/ENGLISH:\s*(.*?)(?:PORTUGUESE|PORTUGUSE)\s*(?:\(PT-BR\))?:\s*(.*)/s', $texto, $m)) {
-        $english    = trim($m[1]);
-        $portuguese = trim($m[2]);
-    } else {
-        $english = trim($texto);
-    }
+    [$english, $portuguese] = extrairTextos($texto);
 
     echo json_encode([
-        'success' => true,
-        'cached'  => true,
-        'traduzido' => $english,
-        'nativo' => $portuguese
+        'success'    => true,
+        'cached'     => true,
+        'traduzido'  => $english,
+        'nativo'     => $portuguese
     ], JSON_UNESCAPED_UNICODE);
 
     exit;
@@ -150,8 +171,8 @@ try {
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute([
-        'frase' => $text,
-        'user_id' => $userId
+        'frase'    => $text,
+        'user_id'  => $userId
     ]);
 
     /**
@@ -159,15 +180,7 @@ try {
      * SEPARAR TEXTO
      * =========================
      */
-    $english = '';
-    $portuguese = '';
-
-    if (preg_match('/ENGLISH:\s*(.*?)(?:PORTUGUESE|PORTUGUSE)\s*(?:\(PT-BR\))?:\s*(.*)/s', $text, $m)) {
-        $english    = trim($m[1]);
-        $portuguese = trim($m[2]);
-    } else {
-        $english = trim($text);
-    }
+    [$english, $portuguese] = extrairTextos($text);
 
     echo json_encode([
         'success'       => true,
