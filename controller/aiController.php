@@ -108,14 +108,14 @@ if ($fraseHoje) {
  * =========================
  */
 
-// Define quantas frases sortear (entre 4 e 8)
-$quantidadeFrases = rand(4, 8);
+// Define quantas frases sortear (entre 5 e 10)
+$quantidadeFrases = rand(5, 10);
 
 $sql = "
-    SELECT texto_nativo
+    SELECT texto_traduzido
     FROM frases
-    WHERE texto_nativo IS NOT NULL
-      AND TRIM(texto_nativo) <> ''
+    WHERE texto_traduzido IS NOT NULL
+      AND TRIM(texto_traduzido) <> ''
     ORDER BY RAND()
     LIMIT :limite
 ";
@@ -139,7 +139,7 @@ if (count($rows) < 2) {
  * ARRAY FINAL DE FRASES (EMBARALHADO)
  */
 $phrases = array_map(function ($row) {
-    return trim($row['texto_nativo']);
+    return trim($row['texto_traduzido']);
 }, $rows);
 
 // Embaralha novamente para garantir ordem aleatória
@@ -161,6 +161,30 @@ try {
 
     /**
      * =========================
+     * VALIDAR SE O TEXTO EM INGLÊS NÃO CONTÉM PORTUGUÊS
+     * =========================
+     */
+    [$english, $portuguese] = extrairTextos($text);
+
+    $palavrasPortuguesas = [
+        'você', 'para', 'como', 'mas', 'porque', 'tudo bem', 'isso',
+        'mais', 'tempo', 'leva', 'não', 'uma', 'os', 'as', 'eles',
+        'elas', 'está', 'são', 'com', 'que', 'dos', 'das', 'é', 'eu',
+        'muito', 'bom', 'ótimo', 'filme', 'personagem', 'incrível',
+        'principal', 'também', 'gosto', 'semana', 'todo', 'toda',
+        'todos', 'todas', 'fazer', 'coisa', 'coisas', 'algo', 'nada',
+        'aqui', 'ali', 'lá', 'cá', 'bem', 'mal', 'vez', 'vezes'
+    ];
+
+    $englishLower = strtolower($english);
+    foreach ($palavrasPortuguesas as $palavra) {
+        if (preg_match('/\b' . preg_quote($palavra, '/') . '\b/', $englishLower)) {
+            throw new Exception("Texto em inglês contém palavras em português. Geração inválida.");
+        }
+    }
+
+    /**
+     * =========================
      * SALVAR NO BANCO
      * =========================
      */
@@ -174,13 +198,6 @@ try {
         'frase'    => $text,
         'user_id'  => $userId
     ]);
-
-    /**
-     * =========================
-     * SEPARAR TEXTO
-     * =========================
-     */
-    [$english, $portuguese] = extrairTextos($text);
 
     echo json_encode([
         'success'       => true,

@@ -27,44 +27,45 @@ class EnglishParagraphGenerator
 
         $originalWordCount = $this->countWordsInPhrases($phrases);
 
-      $systemPrompt = "
-        You are a paragraph assembler. You are NOT a creative writer. Your only job is to combine provided English phrases into one cohesive paragraph.
+        $systemPrompt = "
+You are a paragraph assembler. You are NOT a creative writer. Your only job is to combine provided English phrases into one cohesive paragraph.
 
-        CRITICAL RULES — FOLLOW EXACTLY:
+CRITICAL RULES — FOLLOW EXACTLY:
 
-        1. You MUST use AT LEAST 4 phrases from the provided list. No exceptions.
-        2. You MUST NOT invent any new content, ideas, or topics.
-        3. The ONLY thing you can add are short connectors: and, but, so, also, however, because, then.
-        4. You CAN reorder phrases and make small grammatical adjustments so they flow naturally.
-        5. The ENTIRE paragraph must be in ENGLISH. Not a single word in Portuguese or any other language. NEVER mix languages.
-        6. Do NOT translate anything to Portuguese in the English paragraph. The Portuguese translation comes later, in its own section.
-        7. Keep the original meaning of each phrase. Do not summarize or expand.
+1. You MUST use AT LEAST 4 phrases from the provided list. No exceptions.
+2. You MUST NOT invent any new content, ideas, or topics.
+3. The ONLY thing you can add are short connectors: and, but, so, also, however, because, then.
+4. You CAN reorder phrases and make small grammatical adjustments so they flow naturally.
+5. The ENTIRE paragraph must be in ENGLISH. Not a single word in Portuguese or any other language. NEVER mix languages.
+6. Do NOT translate anything to Portuguese in the English paragraph. The Portuguese translation comes later, in its own section.
+7. Keep the original meaning of each phrase. Do not summarize or expand.
 
-        SIZE RULE:
-        - The English paragraph must be between 100 and 220 characters (including spaces).
-        - If under 100 characters, ADD more phrases from the provided list.
-        - If over 220 characters, REMOVE some phrases.
+SIZE RULE:
+- The English paragraph must be between 100 and 220 characters (including spaces).
+- If under 100 characters, ADD more phrases from the provided list.
+- If over 220 characters, REMOVE some phrases.
 
-        After the English paragraph, provide ONLY the Portuguese translation.
+After the English paragraph, provide ONLY the Portuguese translation.
 
-        EXACT FORMAT (spell correctly — 'PORTUGUESE', NOT 'PORTUGUSE'):
+EXACT FORMAT (spell correctly — 'PORTUGUESE', NOT 'PORTUGUSE'):
 
-        ENGLISH:
-        [paragraph using provided phrases — ENGLISH ONLY]
+ENGLISH:
+[paragraph using provided phrases — ENGLISH ONLY]
 
-        PORTUGUESE (PT-BR):
-        [translation]
+PORTUGUESE (PT-BR):
+[translation]
 
-        EXAMPLE OF CORRECT OUTPUT:
+EXAMPLE OF CORRECT OUTPUT:
 
-        ENGLISH:
-        I study English every day because I want to travel to London. My favorite band is Imagine Dragons and I also enjoy listening to music while I work. I'm learning to buy plane tickets so I can visit new places.
+ENGLISH:
+I study English every day because I want to travel to London. My favorite band is Imagine Dragons and I also enjoy listening to music while I work. I'm learning to buy plane tickets so I can visit new places.
 
-        PORTUGUESE (PT-BR):
-        Eu estudo inglês todos os dias porque quero viajar para Londres. Minha banda favorita é Imagine Dragons e também gosto de ouvir música enquanto trabalho. Estou aprendendo a comprar passagens de avião para poder visitar novos lugares.
+PORTUGUESE (PT-BR):
+Eu estudo inglês todos os dias porque quero viajar para Londres. Minha banda favorita é Imagine Dragons e também gosto de ouvir música enquanto trabalho. Estou aprendendo a comprar passagens de avião para poder visitar novos lugares.
         ";
 
-        $userPrompt = "Combine at least 4 of these phrases into one paragraph. Add ONLY connectors, do NOT invent content. The paragraph must be 100% in English — NO Portuguese words:\n\n" . $phrasesText; 
+        $userPrompt = "Combine at least 4 of these phrases into one paragraph. Add ONLY connectors, do NOT invent content. The paragraph must be 100% in English — NO Portuguese words:\n\n" . $phrasesText;
+
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => $userPrompt],
