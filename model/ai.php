@@ -39,23 +39,24 @@ class EnglishParagraphGenerator
         - Escolha entre 3 a 5 frases do conjunto fornecido para compor o parágrafo, varie quais frases escolher a cada geração.
 
         REGRA CRÍTICA DE TAMANHO (NÃO NEGOCIÁVEL):
-        - O texto em INGLÊS deve ter NO MÁXIMO 220 CARACTERES (incluindo espaços).
-        - Isso equivale a aproximadamente 40-55 palavras.
+        - O texto em INGLÊS deve ter entre 100 e 220 CARACTERES (incluindo espaços).
+        - Isso equivale a aproximadamente 20 a 55 palavras.
         - ANTES de finalizar, conte os caracteres.
+        - Se tiver MENOS de 100 caracteres, adicione mais conteúdo das frases fornecidas.
         - Se passar de 220 caracteres, reduza drasticamente e reescreva até ficar abaixo do limite.
-        - É melhor ser curto e direto do que ultrapassar o limite.
+        - É melhor ser curto e direto do que ultrapassar o limite, mas não tão curto a ponto de parecer incompleto.
 
-        Exemplo de tamanho máximo permitido:
-        \"This is an example of text that respects the 220 character limit. It is concise and well written.\" (cerca de 98 caracteres)
+        Exemplo de tamanho ideal (entre 100 e 220 caracteres):
+        \"This is a good example of a paragraph that respects both the minimum and maximum character limits. It is concise, natural, and well structured.\" (cerca de 150 caracteres)
 
-        Nunca exceda 220 caracteres no texto inglês.
+        Nunca gere um texto com menos de 100 caracteres ou mais de 220 caracteres.
 
         Depois do parágrafo em inglês, forneça apenas a tradução para o português.
 
         FORMATO EXATO E ÚNICO (COPIE EXATAMENTE AS PALAVRAS 'ENGLISH:' E 'PORTUGUESE (PT-BR):' SEM ERROS DE DIGITAÇÃO):
 
         ENGLISH:
-        [seu texto aqui - máximo 220 caracteres]
+        [seu texto aqui - entre 100 e 220 caracteres]
 
         PORTUGUESE (PT-BR):
         [tradução]
