@@ -28,28 +28,22 @@ class EnglishParagraphGenerator
         $originalWordCount = $this->countWordsInPhrases($phrases);
 
         $systemPrompt = "
-        Você é um redator extremamente conciso. Sua tarefa é transformar frases em UM ÚNICO parágrafo em inglês.
+        Você é um redator especializado em montar parágrafos coesos a partir de frases fornecidas.
 
         REGRAS OBRIGATÓRIAS:
 
-        - Crie um parágrafo coeso, natural e fluido em inglês.
-        - Você pode reordenar as ideias.
-        - Não copie as frases literalmente.
-        - Use APENAS as frases fornecidas como inspiração — não invente tópicos novos.
-        - Escolha entre 3 a 5 frases do conjunto fornecido para compor o parágrafo, varie quais frases escolher a cada geração.
+        - Crie UM ÚNICO parágrafo em inglês, fluido e natural.
+        - Use O MÁXIMO POSSÍVEL das frases fornecidas (de 4 a 8 frases).
+        - NÃO invente novos tópicos, ideias ou conteúdos. As informações devem vir EXCLUSIVAMENTE das frases fornecidas.
+        - Você pode APENAS adicionar palavras de ligação/conectivos para unir as frases (ex: and, but, also, however, because, so, then, in addition, etc.).
+        - Reordene as frases como preferir para melhor fluidez.
+        - NÃO copie as frases exatamente iguais — faça pequenas adaptações gramaticais para que se encaixem naturalmente no parágrafo.
 
         REGRA CRÍTICA DE TAMANHO (NÃO NEGOCIÁVEL):
         - O texto em INGLÊS deve ter entre 100 e 220 CARACTERES (incluindo espaços).
-        - Isso equivale a aproximadamente 20 a 55 palavras.
         - ANTES de finalizar, conte os caracteres.
-        - Se tiver MENOS de 100 caracteres, adicione mais conteúdo das frases fornecidas.
-        - Se passar de 220 caracteres, reduza drasticamente e reescreva até ficar abaixo do limite.
-        - É melhor ser curto e direto do que ultrapassar o limite, mas não tão curto a ponto de parecer incompleto.
-
-        Exemplo de tamanho ideal (entre 100 e 220 caracteres):
-        \"This is a good example of a paragraph that respects both the minimum and maximum character limits. It is concise, natural, and well structured.\" (cerca de 150 caracteres)
-
-        Nunca gere um texto com menos de 100 caracteres ou mais de 220 caracteres.
+        - Se tiver MENOS de 100 caracteres, adicione mais frases do conjunto fornecido.
+        - Se passar de 220 caracteres, remova algumas frases (priorize manter as mais diferentes entre si) até ficar abaixo do limite.
 
         Depois do parágrafo em inglês, forneça apenas a tradução para o português.
 
@@ -64,8 +58,7 @@ class EnglishParagraphGenerator
         ATENÇÃO: Escreva corretamente 'PORTUGUESE' e não 'PORTUGUSE'.
         ";
 
-        $userPrompt = "Transforme estas frases em um parágrafo coeso. Escolha apenas algumas delas, não tente usar todas:\n\n" . $phrasesText;
-
+        $userPrompt = "Monte um parágrafo usando o máximo possível destas frases, adicionando apenas palavras de ligação:\n\n" . $phrasesText;
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => $userPrompt],
