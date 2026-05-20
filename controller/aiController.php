@@ -83,17 +83,24 @@ if ($fraseHoje) {
 
 /**
  * =========================
- * BUSCA FRASES DO BANCO
+ * BUSCA FRASES DO BANCO (SORTEIO ALEATÓRIO)
  * =========================
  */
+
+// Define quantas frases sortear (entre 4 e 8)
+$quantidadeFrases = rand(4, 8);
+
 $sql = "
     SELECT texto_nativo
     FROM frases
     WHERE texto_nativo IS NOT NULL
       AND TRIM(texto_nativo) <> ''
+    ORDER BY RAND()
+    LIMIT :limite
 ";
 
 $stmt = $pdo->prepare($sql);
+$stmt->bindValue(':limite', $quantidadeFrases, PDO::PARAM_INT);
 $stmt->execute();
 
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -108,11 +115,14 @@ if (count($rows) < 2) {
 }
 
 /**
- * ARRAY FINAL DE FRASES
+ * ARRAY FINAL DE FRASES (EMBARALHADO)
  */
 $phrases = array_map(function ($row) {
     return trim($row['texto_nativo']);
 }, $rows);
+
+// Embaralha novamente para garantir ordem aleatória
+shuffle($phrases);
 
 /**
  * =========================

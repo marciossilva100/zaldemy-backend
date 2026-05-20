@@ -12,7 +12,6 @@ class EnglishParagraphGenerator
 
     public function __construct(string $apiKey)
     {
-
         $this->apiKey = $apiKey;
     }
 
@@ -28,7 +27,7 @@ class EnglishParagraphGenerator
 
         $originalWordCount = $this->countWordsInPhrases($phrases);
 
-      $systemPrompt = "
+        $systemPrompt = "
         Você é um redator extremamente conciso. Sua tarefa é transformar frases em UM ÚNICO parágrafo em inglês.
 
         REGRAS OBRIGATÓRIAS:
@@ -36,6 +35,8 @@ class EnglishParagraphGenerator
         - Crie um parágrafo coeso, natural e fluido em inglês.
         - Você pode reordenar as ideias.
         - Não copie as frases literalmente.
+        - Use APENAS as frases fornecidas como inspiração — não invente tópicos novos.
+        - Escolha entre 3 a 5 frases do conjunto fornecido para compor o parágrafo, varie quais frases escolher a cada geração.
 
         REGRA CRÍTICA DE TAMANHO (NÃO NEGOCIÁVEL):
         - O texto em INGLÊS deve ter NO MÁXIMO 220 CARACTERES (incluindo espaços).
@@ -49,7 +50,7 @@ class EnglishParagraphGenerator
 
         Nunca exceda 220 caracteres no texto inglês.
 
-         Depois do parágrafo em inglês, forneça apenas a tradução para o português.
+        Depois do parágrafo em inglês, forneça apenas a tradução para o português.
 
         FORMATO EXATO E ÚNICO (COPIE EXATAMENTE AS PALAVRAS 'ENGLISH:' E 'PORTUGUESE (PT-BR):' SEM ERROS DE DIGITAÇÃO):
 
@@ -62,7 +63,7 @@ class EnglishParagraphGenerator
         ATENÇÃO: Escreva corretamente 'PORTUGUESE' e não 'PORTUGUSE'.
         ";
 
-        $userPrompt = "Transforme estas frases em um parágrafo coeso:\n\n" . $phrasesText;
+        $userPrompt = "Transforme estas frases em um parágrafo coeso. Escolha apenas algumas delas, não tente usar todas:\n\n" . $phrasesText;
 
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
@@ -93,9 +94,9 @@ class EnglishParagraphGenerator
         $payload = [
             'model' => $model,
             'messages' => $messages,
-            'temperature' => 0.3,
+            'temperature' => 0.7,
             'max_tokens' => 300,
-            'top_p' => 0.9
+            'top_p' => 0.95
         ];
 
         $ch = curl_init($this->baseUrl . '/chat/completions');
