@@ -27,38 +27,57 @@ class EnglishParagraphGenerator
 
         $originalWordCount = $this->countWordsInPhrases($phrases);
 
-        $systemPrompt = "
-        Você é um redator especializado em montar parágrafos coesos a partir de frases fornecidas.
+       $systemPrompt = "
+        Você é um montador de parágrafos. Você NÃO é um escritor criativo. Sua única função é combinar frases prontas em um parágrafo coeso.
 
-        REGRAS OBRIGATÓRIAS:
+        REGRAS OBRIGATÓRIAS — SIGA EXATAMENTE:
 
-        - Crie UM ÚNICO parágrafo em inglês, fluido e natural.
-        - Use O MÁXIMO POSSÍVEL das frases fornecidas (de 4 a 8 frases).
-        - NÃO invente novos tópicos, ideias ou conteúdos. As informações devem vir EXCLUSIVAMENTE das frases fornecidas.
-        - Você pode APENAS adicionar palavras de ligação/conectivos para unir as frases (ex: and, but, also, however, because, so, then, in addition, etc.).
-        - Reordene as frases como preferir para melhor fluidez.
-        - NÃO copie as frases exatamente iguais — faça pequenas adaptações gramaticais para que se encaixem naturalmente no parágrafo.
+        1. Você DEVE usar NO MÍNIMO 4 frases do conjunto fornecido. Sem exceções.
+        2. Você NÃO PODE inventar nenhum conteúdo novo. Não crie frases, ideias ou tópicos que não estejam nas frases fornecidas.
+        3. O ÚNICO que você pode adicionar são conectivos curtos: and, but, so, also, however, because, then, in addition, moreover.
+        4. Você pode MUDAR a ordem das frases para melhorar o fluxo.
+        5. Você pode fazer PEQUENOS ajustes gramaticais (pronomes, tempos verbais) para que as frases se conectem naturalmente.
+        6. Mantenha o significado original de cada frase. Não resuma nem expanda.
 
-        REGRA CRÍTICA DE TAMANHO (NÃO NEGOCIÁVEL):
+        EXEMPLO DO QUE FAZER:
+
+        Frases fornecidas:
+        1. \"I like music\"
+        2. \"I study English every day\"
+        3. \"My favorite band is Imagine Dragons\"
+        4. \"I want to travel to London\"
+        5. \"I'm learning to buy plane tickets\"
+
+        Parágrafo correto (usa 5 frases + conectivos):
+        \"I study English every day and I like music. My favorite band is Imagine Dragons, also I want to travel to London, so I'm learning to buy plane tickets.\"
+
+        EXEMPLO DO QUE NÃO FAZER:
+
+        Frases fornecidas:
+        1. \"I like music\"
+        2. \"I study English every day\"
+
+        Parágrafo ERRADO (inventou conteúdo novo):
+        \"I'm passionate about learning new things and I enjoy discovering different cultures.\"
+
+        REGRA DE TAMANHO:
         - O texto em INGLÊS deve ter entre 100 e 220 CARACTERES (incluindo espaços).
-        - ANTES de finalizar, conte os caracteres.
-        - Se tiver MENOS de 100 caracteres, adicione mais frases do conjunto fornecido.
-        - Se passar de 220 caracteres, remova algumas frases (priorize manter as mais diferentes entre si) até ficar abaixo do limite.
+        - Se estiver abaixo de 100 caracteres, ADICIONE mais frases do conjunto fornecido.
+        - Se passar de 220, REMOVA frases mantendo as mais variadas.
 
-        Depois do parágrafo em inglês, forneça apenas a tradução para o português.
+        Depois do parágrafo em inglês, forneça APENAS a tradução para o português.
 
-        FORMATO EXATO E ÚNICO (COPIE EXATAMENTE AS PALAVRAS 'ENGLISH:' E 'PORTUGUESE (PT-BR):' SEM ERROS DE DIGITAÇÃO):
+        FORMATO EXATO (COPIE AS PALAVRAS CORRETAMENTE — 'PORTUGUESE' e não 'PORTUGUSE'):
 
         ENGLISH:
-        [seu texto aqui - entre 100 e 220 caracteres]
+        [parágrafo usando frases fornecidas]
 
         PORTUGUESE (PT-BR):
         [tradução]
-
-        ATENÇÃO: Escreva corretamente 'PORTUGUESE' e não 'PORTUGUSE'.
         ";
 
-        $userPrompt = "Monte um parágrafo usando o máximo possível destas frases, adicionando apenas palavras de ligação:\n\n" . $phrasesText;
+        $userPrompt = "Use NO MÍNIMO 4 destas frases para montar um parágrafo. Apenas adicione conectivos, não invente conteúdo:\n\n" . $phrasesText;
+            
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => $userPrompt],
