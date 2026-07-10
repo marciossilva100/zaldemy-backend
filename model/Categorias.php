@@ -9,7 +9,9 @@ class Categorias
             SELECT 
                 c.id,
                 c.categoria,
-                COUNT(f.id) AS total_frases
+                COUNT(f.id) AS total_frases,
+                COALESCE(MAX(CASE WHEN f.idioma_nativo IS NOT NULL AND f.idioma_nativo > 0 THEN f.idioma_nativo END), 0) AS idioma_nativo,
+                COALESCE(MAX(CASE WHEN f.idioma_aprendendo IS NOT NULL AND f.idioma_aprendendo > 0 THEN f.idioma_aprendendo END), 0) AS idioma_aprendendo
             FROM categorias c
             LEFT JOIN frases f 
                 ON f.categoria_id = c.id
