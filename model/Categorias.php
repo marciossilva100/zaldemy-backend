@@ -10,19 +10,19 @@ class Categorias
                 c.id,
                 c.categoria,
                 COUNT(f.id) AS total_frases,
-                COALESCE(MAX(idioma_nativo_ref.sigla), '') AS idioma_nativo,
-                COALESCE(MAX(idioma_aprendendo_ref.sigla), '') AS idioma_aprendendo
+                COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
+                COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo
             FROM categorias c
             LEFT JOIN frases f 
                 ON f.categoria_id = c.id
                 AND f.status_id > 0
             LEFT JOIN idiomas AS idioma_nativo_ref
-                ON idioma_nativo_ref.id = f.idioma_nativo
+                ON idioma_nativo_ref.id = c.idioma_nativo
             LEFT JOIN idiomas AS idioma_aprendendo_ref
-                ON idioma_aprendendo_ref.id = f.idioma_aprendendo
+                ON idioma_aprendendo_ref.id = c.idioma_aprendendo
             WHERE c.id_user = :id_user
             AND c.status_id > 0
-            GROUP BY c.id, c.categoria
+            GROUP BY c.id, c.categoria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
             ORDER BY c.id ASC;
         ";
 
