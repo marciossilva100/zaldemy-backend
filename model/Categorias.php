@@ -427,13 +427,31 @@ class Categorias
             ];
         }
 
+        // busca idioma nativo e idioma aprendendo do usuário
+        $sql = "
+            SELECT idioma_nativo, idioma_aprender
+            FROM idioma_referencia
+            WHERE id_user = :id_user
+            AND idioma_nativo > 0
+            AND idioma_aprender > 0 LIMIT 1
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $idiomaReferencia = $stmt->fetch(PDO::FETCH_ASSOC);
+
         // se não existe, insere
-        $sql = "INSERT INTO categorias (categoria,id_user,public,id_categoria_publica) VALUES (:categoria,:id_user,:categoria_publica,:categoria_id)";
+        $sql = "INSERT INTO categorias (categoria,id_user,public,id_categoria_publica,idioma_nativo,idioma_aprendendo) VALUES (:categoria,:id_user,:categoria_publica,:categoria_id,:idioma_nativo,:idioma_aprendendo)";
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':categoria', $categoria, PDO::PARAM_STR);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
         $stmt->bindValue(':categoria_publica', $categoria_publica, PDO::PARAM_INT);
         $stmt->bindValue(':categoria_id', $categoria_id, PDO::PARAM_INT);
+        $idiomaNativo = $idiomaReferencia['idioma_nativo'] ?? null;
+        $idiomaAprendendo = $idiomaReferencia['idioma_aprender'] ?? null;
+        $stmt->bindValue(':idioma_nativo', $idiomaNativo, $idiomaNativo === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->bindValue(':idioma_aprendendo', $idiomaAprendendo, $idiomaAprendendo === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
 
         $stmt->execute();
 
