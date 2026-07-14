@@ -65,6 +65,13 @@ try {
         exit;
     }
 
+    if ($action === 'update_learning_reference') {
+        $idioma->idioma_aprender = $input['learning_language'] ?? null;
+        $idioma->idioma_nativo = $input['learning_native'] ?? $input['native_language'] ?? null;
+        $dados = $idioma->setIdiomaReferencia($user_id);
+        echo json_encode($dados);
+        exit;
+    }
 
     http_response_code(400);
     echo json_encode(["error" => "Action inválida"]);

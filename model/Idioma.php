@@ -184,4 +184,50 @@ class Idioma
 
     }
 
+    public function setIdiomaReferencia($user_id): array
+    {
+        return $this->atualizarReferenciaAprendizado($user_id);
+    }
+
+    public function atualizarReferenciaAprendizado($user_id): array
+    {
+        global $pdo;
+
+        $sql = "UPDATE idioma_referencia
+                SET idioma_aprender = :idioma_aprender";
+
+        if ($this->idioma_nativo !== null) {
+            $sql .= ", idioma_nativo = :idioma_nativo";
+        }
+
+        $sql .= " WHERE id_user = :id_user LIMIT 1";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':idioma_aprender', $this->idioma_aprender, PDO::PARAM_INT);
+
+        if ($this->idioma_nativo !== null) {
+            $stmt->bindValue(':idioma_nativo', $this->idioma_nativo, PDO::PARAM_INT);
+        }
+
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $sql = "SELECT sigla FROM idiomas WHERE id = :idioma_id LIMIT 1";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':idioma_id', $this->idioma_aprender, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $resultado = $stmt->fetch();
+
+        if (!empty($resultado['sigla'])) {
+            $_SESSION['learning_language'] = $resultado['sigla'];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Idioma atualizado com sucesso'
+        ];
+    }
+
 }
