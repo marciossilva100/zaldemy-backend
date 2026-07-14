@@ -1,22 +1,108 @@
-[
-  {
-    "es": "Quiero viajar a España el próximo verano.",
-    "pt": "Eu quero viajar para a Espanha no próximo verão."
-  },
-  {
-    "es": "Siempre llevo mi pasaporte y mi equipaje de mano.",
-    "pt": "Eu sempre levo meu passaporte e minha bagagem de mão."
-  },
-  {
-    "es": "¿A qué hora sale el vuelo hacia Nueva York?",
-    "pt": "A que horas sai o voo para Nova York?"
-  },
-  {
-    "es": "Reservamos un hotel cerca de la playa para las vacaciones.",
-    "pt": "Nós reservamos um hotel perto da praia para as férias."
-  },
-  {
-    "es": "Me encanta conocer nuevos países y descubrir diferentes culturas.",
-    "pt": "Eu adoro conhecer novos países e descobrir diferentes culturas."
+{
+  "travel": {
+    "title": {
+      "pt": "Viagens",
+      "en": "Travel",
+      "es": "Viajes",
+      "fr": "Voyages",
+      "de": "Reisen",
+      "it": "Viaggi",
+      "zh": "旅行",
+      "ja": "旅行",
+      "ru": "Путешествия",
+      "ar": "السفر",
+      "hi": "यात्राएँ",
+      "ko": "여행",
+      "nl": "Reizen",
+      "tr": "Seyahat",
+      "pl": "Podróże"
+    },
+    "translations": [
+      {
+        "pt": "Eu quero viajar para a Espanha no próximo verão.",
+        "en": "I want to travel to Spain next summer.",
+        "es": "Quiero viajar a España el próximo verano.",
+        "fr": "Je veux voyager en Espagne l'été prochain.",
+        "de": "Ich möchte nächsten Sommer nach Spanien reisen.",
+        "it": "Voglio viaggiare in Spagna la prossima estate.",
+        "zh": "我想明年夏天去西班牙旅行。",
+        "ja": "来年の夏にスペインへ旅行したいです。",
+        "ru": "Я хочу поехать в Испанию следующим летом.",
+        "ar": "أريد السفر إلى إسبانيا الصيف القادم.",
+        "hi": "मैं अगले गर्मियों में स्पेन की यात्रा करना चाहता हूँ।",
+        "ko": "저는 내년 여름에 스페인으로 여행 가고 싶습니다.",
+        "nl": "Ik wil volgende zomer naar Spanje reizen.",
+        "tr": "Gelecek yaz İspanya'ya seyahat etmek istiyorum.",
+        "pl": "Chcę pojechać do Hiszpanii przyszłego lata."
+      },
+      {
+        "pt": "Nós reservamos um hotel perto da praia para as férias.",
+        "en": "We booked a hotel near the beach for our vacation.",
+        "es": "Reservamos un hotel cerca de la playa para las vacaciones.",
+        "fr": "Nous avons réservé un hôtel près de la plage pour les vacances.",
+        "de": "Wir haben ein Hotel in der Nähe des Strandes für unseren Urlaub gebucht.",
+        "it": "Abbiamo prenotato un hotel vicino alla spiaggia per le vacanze.",
+        "zh": "我们预订了一家靠近海滩的酒店度假。",
+        "ja": "休暇のためにビーチの近くのホテルを予約しました。",
+        "ru": "Мы забронировали отель рядом с пляжем на время отпуска.",
+        "ar": "حجزنا فندقًا بالقرب من الشاطئ لقضاء العطلة.",
+        "hi": "हमने छुट्टियों के लिए समुद्र तट के पास एक होटल बुक किया।",
+        "ko": "우리는 휴가를 위해 해변 근처 호텔을 예약했습니다.",
+        "nl": "We hebben een hotel vlak bij het strand geboekt voor onze vakantie.",
+        "tr": "Tatilimiz için plaja yakın bir otel ayırttık.",
+        "pl": "Zarezerwowaliśmy hotel blisko plaży na wakacje."
+      },
+      {
+        "pt": "A que horas sai o voo para Nova York?",
+        "en": "What time does the flight to New York depart?",
+        "es": "¿A qué hora sale el vuelo hacia Nueva York?",
+        "fr": "À quelle heure part le vol pour New York ?",
+        "de": "Wann startet der Flug nach New York?",
+        "it": "A che ora parte il volo per New York?",
+        "zh": "飞往纽约的航班几点起飞？",
+        "ja": "ニューヨーク行きの飛行機は何時に出発しますか？",
+        "ru": "Во сколько вылетает рейс в Нью-Йорк?",
+        "ar": "في أي ساعة تقلع الرحلة إلى نيويورك؟",
+        "hi": "न्यूयॉर्क की उड़ान कितने बजे रवाना होती है?",
+        "ko": "뉴욕행 비행기는 몇 시에 출발하나요?",
+        "nl": "Hoe laat vertrekt de vlucht naar New York?",
+        "tr": "New York uçuşu saat kaçta kalkıyor?",
+        "pl": "O której godzinie odlatuje samolot do Nowego Jorku?"
+      },
+      {
+        "pt": "Eu sempre levo meu passaporte e minha bagagem de mão.",
+        "en": "I always carry my passport and my carry-on luggage.",
+        "es": "Siempre llevo mi pasaporte y mi equipaje de mano.",
+        "fr": "J'emporte toujours mon passeport et mon bagage à main.",
+        "de": "Ich habe immer meinen Reisepass und mein Handgepäck dabei.",
+        "it": "Porto sempre con me il passaporto e il bagaglio a mano.",
+        "zh": "我总是随身携带护照和随身行李。",
+        "ja": "私はいつもパスポートと機内持ち込み手荷物を持っています。",
+        "ru": "Я всегда беру с собой паспорт и ручную кладь.",
+        "ar": "أحمل دائمًا جواز سفري وأمتعتي اليدوية.",
+        "hi": "मैं हमेशा अपना पासपोर्ट और हैंड बैग साथ रखता हूँ।",
+        "ko": "저는 항상 여권과 기내 반입 수하물을 가지고 다닙니다.",
+        "nl": "Ik neem altijd mijn paspoort en handbagage mee.",
+        "tr": "Her zaman pasaportumu ve el bagajımı yanıma alırım.",
+        "pl": "Zawsze zabieram ze sobą paszport i bagaż podręczny."
+      },
+      {
+        "pt": "Eu adoro conhecer novos países e descobrir diferentes culturas.",
+        "en": "I love visiting new countries and discovering different cultures.",
+        "es": "Me encanta conocer nuevos países y descubrir diferentes culturas.",
+        "fr": "J'adore découvrir de nouveaux pays et différentes cultures.",
+        "de": "Ich liebe es, neue Länder zu besuchen und verschiedene Kulturen kennenzulernen.",
+        "it": "Adoro visitare nuovi paesi e scoprire culture diverse.",
+        "zh": "我喜欢游览新的国家并了解不同的文化。",
+        "ja": "私は新しい国を訪れ、さまざまな文化を知るのが大好きです。",
+        "ru": "Мне нравится посещать новые страны и знакомиться с разными культурами.",
+        "ar": "أحب زيارة بلدان جديدة واكتشاف ثقافات مختلفة.",
+        "hi": "मुझे नए देशों की यात्रा करना और विभिन्न संस्कृतियों को जानना पसंद है।",
+        "ko": "저는 새로운 나라를 방문하고 다양한 문화를 배우는 것을 좋아합니다.",
+        "nl": "Ik houd ervan nieuwe landen te bezoeken en verschillende culturen te ontdekken.",
+        "tr": "Yeni ülkeler ziyaret etmeyi ve farklı kültürleri keşfetmeyi seviyorum.",
+        "pl": "Uwielbiam odwiedzać nowe kraje i poznawać różne kultury."
+      }
+    ]
   }
-]
+}

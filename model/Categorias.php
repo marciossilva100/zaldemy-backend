@@ -141,14 +141,13 @@ class Categorias
     }
 
 
-    public static function addFrasesFromJson(PDO $pdo, $user_id, string $jsonPath, $categoria_id): array
+    public static function addFrasesFromJson(PDO $pdo, $user_id, string $jsonPath): array
     {
         date_default_timezone_set('America/Sao_Paulo');
 
         $inseridas = 0;
         $ignoradas = 0;
-
-     //   print_r($jsonPath);exit;
+        $categoriasCriadas = 0;
 
         // Lê o JSON
         if (!file_exists($jsonPath)) {
@@ -158,124 +157,156 @@ class Categorias
             ];
         }
 
-
-
         $json = file_get_contents($jsonPath);
-        $frases = json_decode($json, true);
+        $categorias = json_decode($json, true);
 
-        if (!is_array($frases)) {
+        if (!is_array($categorias)) {
             return [
                 'success' => false,
                 'message' => 'JSON inválido.'
             ];
         }
 
-        // descobre o par de idiomas da categoria (via siglas em vez de pt/en fixos)
+        // idioma nativo/aprendendo do usuário
         $sql = "
-            SELECT
-                c.idioma_nativo,
-                c.idioma_aprendendo,
-                idioma_nativo_ref.sigla AS sigla_nativo,
-                idioma_aprendendo_ref.sigla AS sigla_aprendendo
-            FROM categorias c
-            LEFT JOIN idiomas idioma_nativo_ref ON idioma_nativo_ref.id = c.idioma_nativo
-            LEFT JOIN idiomas idioma_aprendendo_ref ON idioma_aprendendo_ref.id = c.idioma_aprendendo
-            WHERE c.id = :categoria_id
-            LIMIT 1
+            SELECT idioma_nativo, idioma_aprender
+            FROM idioma_referencia
+            WHERE id_user = :id_user
+            AND idioma_nativo > 0
+            AND idioma_aprender > 0 LIMIT 1
         ";
         $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':categoria_id', $categoria_id, PDO::PARAM_INT);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
         $stmt->execute();
 
-        $categoriaIdiomas = $stmt->fetch(PDO::FETCH_ASSOC);
+        $idiomaReferencia = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (empty($categoriaIdiomas['sigla_nativo']) || empty($categoriaIdiomas['sigla_aprendendo'])) {
+        if (empty($idiomaReferencia['idioma_nativo']) || empty($idiomaReferencia['idioma_aprender'])) {
             return [
                 'success' => false,
-                'message' => 'Categoria sem idioma nativo/aprendendo definido.'
+                'message' => 'Usuário sem idioma nativo/aprendendo definido.'
             ];
         }
 
-        $siglaNativo = $categoriaIdiomas['sigla_nativo'];
-        $siglaAprendendo = $categoriaIdiomas['sigla_aprendendo'];
-        $idiomaNativoId = (int) $categoriaIdiomas['idioma_nativo'];
-        $idiomaAprendendoId = (int) $categoriaIdiomas['idioma_aprendendo'];
+        $idiomaNativoId = (int) $idiomaReferencia['idioma_nativo'];
+        $idiomaAprendendoId = (int) $idiomaReferencia['idioma_aprender'];
 
-        foreach ($frases as $frase) {
+        // siglas correspondentes aos idiomas do usuário
+        $sql = "SELECT id, sigla FROM idiomas WHERE id IN (:idioma_nativo, :idioma_aprendendo)";
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':idioma_nativo', $idiomaNativoId, PDO::PARAM_INT);
+        $stmt->bindValue(':idioma_aprendendo', $idiomaAprendendoId, PDO::PARAM_INT);
+        $stmt->execute();
 
-            $texto_nativo = trim($frase[$siglaNativo] ?? '');
-            $texto_traduzido = trim($frase[$siglaAprendendo] ?? '');
+        $siglasPorId = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $idioma) {
+            $siglasPorId[(int) $idioma['id']] = $idioma['sigla'];
+        }
 
-            // validação
-            if ($texto_nativo === '' || $texto_traduzido === '') {
-                $ignoradas++;
+        $siglaNativo = $siglasPorId[$idiomaNativoId] ?? null;
+        $siglaAprendendo = $siglasPorId[$idiomaAprendendoId] ?? null;
+
+        if (empty($siglaNativo) || empty($siglaAprendendo)) {
+            return [
+                'success' => false,
+                'message' => 'Sigla de idioma não encontrada.'
+            ];
+        }
+
+        foreach ($categorias as $categoriaData) {
+
+            $titulo = trim($categoriaData['title'][$siglaNativo] ?? '');
+            $translations = $categoriaData['translations'] ?? [];
+
+            if ($titulo === '' || !is_array($translations)) {
                 continue;
             }
 
-            if (mb_strlen($texto_nativo) > 100 || mb_strlen($texto_traduzido) > 100) {
-                $ignoradas++;
+            // cria a categoria (tipo 2 = importada via JSON)
+            $resultadoCategoria = self::cadastrarCategoria($pdo, $titulo, $user_id, null, 0, 2);
+            $categoria_id = $resultadoCategoria['id'] ?? null;
+
+            if (empty($categoria_id)) {
                 continue;
             }
 
-            // verifica duplicado
-            $sql = "SELECT f.id 
-            FROM frases f
-            INNER JOIN categorias c ON c.id = f.categoria_id
-            WHERE f.usuario_id = :id_user 
-            AND f.texto_nativo = :texto_nativo 
-            AND f.texto_traduzido = :texto_traduzido 
-            AND f.status_id > 0
-            AND c.status_id > 0";
-
-            $stmt = $pdo->prepare($sql);
-            $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
-            $stmt->bindValue(':texto_nativo', $texto_nativo, PDO::PARAM_STR);
-            $stmt->bindValue(':texto_traduzido', $texto_traduzido, PDO::PARAM_STR);
-            $stmt->execute();
-
-            if ($stmt->fetch()) {
-                $ignoradas++;
-                continue;
+            if ($resultadoCategoria['success']) {
+                $categoriasCriadas++;
             }
 
-            // insert frase
-            $sql = "INSERT INTO frases 
-            (usuario_id, texto_nativo, texto_traduzido, idioma_nativo, idioma_aprendendo, categoria_id, id_treino, status_id)
-            VALUES (:user_id, :texto_nativo, :texto_traduzido, :idioma_nativo, :idioma_aprendendo, :categoria_id, 3, 1)";
+            foreach ($translations as $frase) {
 
-            $stmt = $pdo->prepare($sql);
-            $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->bindValue(':texto_nativo', $texto_nativo, PDO::PARAM_STR);
-            $stmt->bindValue(':texto_traduzido', $texto_traduzido, PDO::PARAM_STR);
+                $texto_nativo = trim($frase[$siglaNativo] ?? '');
+                $texto_traduzido = trim($frase[$siglaAprendendo] ?? '');
 
-            $stmt->bindValue(':idioma_nativo', $idiomaNativoId, PDO::PARAM_INT);
-            $stmt->bindValue(':idioma_aprendendo', $idiomaAprendendoId, PDO::PARAM_INT);
+                // validação
+                if ($texto_nativo === '' || $texto_traduzido === '') {
+                    $ignoradas++;
+                    continue;
+                }
 
-            $stmt->bindValue(':categoria_id', $categoria_id, PDO::PARAM_INT);
-            $stmt->execute();
+                if (mb_strlen($texto_nativo) > 100 || mb_strlen($texto_traduzido) > 100) {
+                    $ignoradas++;
+                    continue;
+                }
 
-            $id_frase = (int) $pdo->lastInsertId();
+                // verifica duplicado
+                $sql = "SELECT f.id
+                FROM frases f
+                INNER JOIN categorias c ON c.id = f.categoria_id
+                WHERE f.usuario_id = :id_user
+                AND f.texto_nativo = :texto_nativo
+                AND f.texto_traduzido = :texto_traduzido
+                AND f.status_id > 0
+                AND c.status_id > 0";
 
-            // insert treino
-            $sql = "INSERT INTO treino_data_atualizacao 
-                    (id_frase, id_treino, status_id) 
-                    VALUES (:id_frase, 3, 1)";
+                $stmt = $pdo->prepare($sql);
+                $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+                $stmt->bindValue(':texto_nativo', $texto_nativo, PDO::PARAM_STR);
+                $stmt->bindValue(':texto_traduzido', $texto_traduzido, PDO::PARAM_STR);
+                $stmt->execute();
 
-            $stmt = $pdo->prepare($sql);
-            $stmt->bindValue(':id_frase', $id_frase, PDO::PARAM_INT);
-            $stmt->execute();
+                if ($stmt->fetch()) {
+                    $ignoradas++;
+                    continue;
+                }
 
-            $inseridas++;
+                // insert frase
+                $sql = "INSERT INTO frases
+                (usuario_id, texto_nativo, texto_traduzido, idioma_nativo, idioma_aprendendo, categoria_id, id_treino, status_id)
+                VALUES (:user_id, :texto_nativo, :texto_traduzido, :idioma_nativo, :idioma_aprendendo, :categoria_id, 3, 1)";
+
+                $stmt = $pdo->prepare($sql);
+                $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+                $stmt->bindValue(':texto_nativo', $texto_nativo, PDO::PARAM_STR);
+                $stmt->bindValue(':texto_traduzido', $texto_traduzido, PDO::PARAM_STR);
+                $stmt->bindValue(':idioma_nativo', $idiomaNativoId, PDO::PARAM_INT);
+                $stmt->bindValue(':idioma_aprendendo', $idiomaAprendendoId, PDO::PARAM_INT);
+                $stmt->bindValue(':categoria_id', $categoria_id, PDO::PARAM_INT);
+                $stmt->execute();
+
+                $id_frase = (int) $pdo->lastInsertId();
+
+                // insert treino
+                $sql = "INSERT INTO treino_data_atualizacao
+                        (id_frase, id_treino, status_id)
+                        VALUES (:id_frase, 3, 1)";
+
+                $stmt = $pdo->prepare($sql);
+                $stmt->bindValue(':id_frase', $id_frase, PDO::PARAM_INT);
+                $stmt->execute();
+
+                $inseridas++;
+            }
         }
 
         return [
             'success' => true,
             'message' => 'Processamento concluído.',
+            'categorias_criadas' => $categoriasCriadas,
             'inseridas' => $inseridas,
             'ignoradas' => $ignoradas
         ];
-
-       // print_r($jsonPath);exit;
     }
 
     public static function getAll(PDO $pdo, $user_id, int $page = 1, int $perPage = 20): array
@@ -423,7 +454,7 @@ class Categorias
     }
 
 
-    public static function cadastrarCategoria(PDO $pdo, string $categoria,$user_id,$categoria_id = null,$categoria_publica = 0): array
+    public static function cadastrarCategoria(PDO $pdo, string $categoria,$user_id,$categoria_id = null,$categoria_publica = 0,$tipo = null): array
     {
         // busca idioma nativo e idioma aprendendo do usuário
         $sql = "
@@ -478,7 +509,7 @@ class Categorias
         }
 
         // se não existe, insere
-        $sql = "INSERT INTO categorias (categoria,id_user,public,id_categoria_publica,idioma_nativo,idioma_aprendendo) VALUES (:categoria,:id_user,:categoria_publica,:categoria_id,:idioma_nativo,:idioma_aprendendo)";
+        $sql = "INSERT INTO categorias (categoria,id_user,public,id_categoria_publica,idioma_nativo,idioma_aprendendo,tipo) VALUES (:categoria,:id_user,:categoria_publica,:categoria_id,:idioma_nativo,:idioma_aprendendo,:tipo)";
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':categoria', $categoria, PDO::PARAM_STR);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
@@ -486,6 +517,7 @@ class Categorias
         $stmt->bindValue(':categoria_id', $categoria_id, PDO::PARAM_INT);
         $stmt->bindValue(':idioma_nativo', $idiomaNativo, $idiomaNativo === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
         $stmt->bindValue(':idioma_aprendendo', $idiomaAprendendo, $idiomaAprendendo === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->bindValue(':tipo', $tipo, $tipo === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
 
         $stmt->execute();
 

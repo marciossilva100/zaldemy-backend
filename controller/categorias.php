@@ -41,7 +41,7 @@ try {
         $dados = Categorias::listarComQuantidade($pdo,$user_id);
 
         //função para adicionar frases manualmente
-       //$result = Categorias::addFrasesFromJson($pdo,47,__DIR__ . '/frases_convertidas.json',79);
+       $result = Categorias::addFrasesFromJson($pdo,47,__DIR__ . '/frases_convertidas.json');
 
         echo json_encode($dados);
         exit;
