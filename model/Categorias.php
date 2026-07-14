@@ -170,11 +170,41 @@ class Categorias
             ];
         }
 
+        // descobre o par de idiomas da categoria (via siglas em vez de pt/en fixos)
+        $sql = "
+            SELECT
+                c.idioma_nativo,
+                c.idioma_aprendendo,
+                idioma_nativo_ref.sigla AS sigla_nativo,
+                idioma_aprendendo_ref.sigla AS sigla_aprendendo
+            FROM categorias c
+            LEFT JOIN idiomas idioma_nativo_ref ON idioma_nativo_ref.id = c.idioma_nativo
+            LEFT JOIN idiomas idioma_aprendendo_ref ON idioma_aprendendo_ref.id = c.idioma_aprendendo
+            WHERE c.id = :categoria_id
+            LIMIT 1
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':categoria_id', $categoria_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $categoriaIdiomas = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (empty($categoriaIdiomas['sigla_nativo']) || empty($categoriaIdiomas['sigla_aprendendo'])) {
+            return [
+                'success' => false,
+                'message' => 'Categoria sem idioma nativo/aprendendo definido.'
+            ];
+        }
+
+        $siglaNativo = $categoriaIdiomas['sigla_nativo'];
+        $siglaAprendendo = $categoriaIdiomas['sigla_aprendendo'];
+        $idiomaNativoId = (int) $categoriaIdiomas['idioma_nativo'];
+        $idiomaAprendendoId = (int) $categoriaIdiomas['idioma_aprendendo'];
+
         foreach ($frases as $frase) {
 
-            // 🔥 MAPEAMENTO CORRIGIDO
-            $texto_nativo = trim($frase['pt'] ?? '');
-            $texto_traduzido = trim($frase['en'] ?? '');
+            $texto_nativo = trim($frase[$siglaNativo] ?? '');
+            $texto_traduzido = trim($frase[$siglaAprendendo] ?? '');
 
             // validação
             if ($texto_nativo === '' || $texto_traduzido === '') {
@@ -218,9 +248,8 @@ class Categorias
             $stmt->bindValue(':texto_nativo', $texto_nativo, PDO::PARAM_STR);
             $stmt->bindValue(':texto_traduzido', $texto_traduzido, PDO::PARAM_STR);
 
-            // 🔥 IDIOMAS AJUSTADOS
-            $stmt->bindValue(':idioma_nativo', 1, PDO::PARAM_INT);       // português
-            $stmt->bindValue(':idioma_aprendendo', 2, PDO::PARAM_INT);   // inglês
+            $stmt->bindValue(':idioma_nativo', $idiomaNativoId, PDO::PARAM_INT);
+            $stmt->bindValue(':idioma_aprendendo', $idiomaAprendendoId, PDO::PARAM_INT);
 
             $stmt->bindValue(':categoria_id', $categoria_id, PDO::PARAM_INT);
             $stmt->execute();
