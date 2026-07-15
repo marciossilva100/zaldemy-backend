@@ -82,6 +82,8 @@ try {
         LEFT JOIN idiomas I1 ON I1.id = IR.idioma_aprender
         LEFT JOIN idiomas I2 ON I2.id = IR.idioma_nativo
         WHERE IR.id_user = :id_user
+        AND IR.idioma_nativo > 0
+        AND IR.idioma_aprender > 0
         LIMIT 1
     ");
 

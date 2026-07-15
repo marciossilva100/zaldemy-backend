@@ -117,8 +117,8 @@ class Auth {
         ];
     }
 
-    public function cadastrarCategoriaFrases($user_id){
-
+    public function cadastrarCategoriaFrasesss($user_id){
+return;
         $pdo = $this->pdo;
 
         // busca idioma_nativo e idioma_aprender do usuário
