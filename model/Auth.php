@@ -126,6 +126,8 @@ class Auth {
             SELECT idioma_nativo, idioma_aprender
             FROM idioma_referencia
             WHERE id_user = :id_user
+            AND idioma_nativo > 0
+            AND idioma_aprender > 0
             LIMIT 1
         ");
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
