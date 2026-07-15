@@ -172,7 +172,7 @@ class Idioma
 
     public function cadastrarCategoriaFrases($user_id){
 
-        $pdo = $this->pdo;
+        global $pdo;
 
         // busca idioma_nativo e idioma_aprender do usuário
         $stmt = $pdo->prepare("
