@@ -119,20 +119,51 @@ class Auth {
 
     public function cadastrarCategoriaFrases($user_id){
 
-        $categoria_id = 43;
         $pdo = $this->pdo;
 
+        // busca idioma_nativo e idioma_aprender do usuário
+        $stmt = $pdo->prepare("
+            SELECT idioma_nativo, idioma_aprender
+            FROM idioma_referencia
+            WHERE id_user = :id_user
+            LIMIT 1
+        ");
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
 
-            // Agora retorna frases já com a URL do áudio
-            $categoria = Categorias::getById($pdo,$categoria_id);
-    
-            $categoria_id_usuario = Categorias::cadastrarCategoria($pdo,$categoria,$user_id,$categoria_id);
+        $idiomaReferencia = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            $frases = Categorias::getAllFrases($pdo,$categoria_id);
-            $response = Categorias::addFrases($pdo,$user_id, $frases,$categoria_id_usuario['id']);
+        $idiomaNativo = $idiomaReferencia['idioma_nativo'] ?? null;
+        $idiomaAprender = $idiomaReferencia['idioma_aprender'] ?? null;
+
+        // busca a categoria padrão (tipo = 2) correspondente ao par de idiomas
+        $stmt = $pdo->prepare("
+            SELECT id, categoria
+            FROM categorias
+            WHERE idioma_nativo = :idioma_nativo
+            AND idioma_aprendendo = :idioma_aprendendo
+            AND tipo = 2
+            LIMIT 1
+        ");
+        $stmt->bindValue(':idioma_nativo', $idiomaNativo, $idiomaNativo === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->bindValue(':idioma_aprendendo', $idiomaAprender, $idiomaAprender === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->execute();
+
+        $categoriaEncontrada = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$categoriaEncontrada) {
             return;
-            
-    }
+        }
 
+        $categoria_id = (int) $categoriaEncontrada['id'];
+        $categoria = $categoriaEncontrada['categoria'];
+
+        $categoria_id_usuario = Categorias::cadastrarCategoria($pdo,$categoria,$user_id,$categoria_id);
+
+        $frases = Categorias::getAllFrases($pdo,$categoria_id);
+        $response = Categorias::addFrases($pdo,$user_id, $frases,$categoria_id_usuario['id']);
+        return;
+
+    }
 
 }
