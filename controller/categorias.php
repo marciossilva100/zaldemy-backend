@@ -27,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/Categorias.php';
+require_once '../model/Configuracoes.php';
 
 
 // lê JSON do body
@@ -39,6 +40,8 @@ try {
     if ($action === 'listar-com-quantidade') {
        
         $dados = Categorias::listarComQuantidade($pdo,$user_id);
+
+        Configuracoes::setConfiguracoes($pdo,$user_id);
 
         //função para adicionar frases manualmente
        //$result = Categorias::addFrasesFromJson($pdo,47,__DIR__ . '/frases_convertidas.json');
