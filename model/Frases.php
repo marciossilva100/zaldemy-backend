@@ -299,4 +299,81 @@ class Frases
         
     }
 
+    public function editarFrase($user_id): array
+    {
+        if (empty(trim($this->texto_nativo)) || empty(trim($this->texto_traduzido))) {
+            return [
+                'success' => false,
+                'message' => 'Os textos não podem estar vazios.'
+            ];
+        }
+
+        if (mb_strlen($this->texto_nativo) > 100) {
+            return [
+                'success' => false,
+                'message' => 'O texto nativo precisa ter no máximo 100 caracteres'
+            ];
+        }
+
+        if (mb_strlen($this->texto_traduzido) > 100) {
+            return [
+                'success' => false,
+                'message' => 'O texto traduzido precisa ter no máximo 100 caracteres'
+            ];
+        }
+
+        global $pdo;
+
+        $sql = "SELECT id FROM frases WHERE id = :id AND usuario_id = :usuario_id AND status_id > 0";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id', $this->id, PDO::PARAM_INT);
+        $stmt->bindValue(':usuario_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        if (!$stmt->fetch()) {
+            return [
+                'success' => false,
+                'message' => 'Frase não encontrada'
+            ];
+        }
+
+        $sql = "SELECT id FROM frases WHERE usuario_id = :id_user
+            AND texto_nativo = :texto_nativo
+            AND texto_traduzido = :texto_traduzido
+            AND status_id > 0
+            AND id <> :id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->bindValue(':texto_nativo', $this->texto_nativo, PDO::PARAM_STR);
+        $stmt->bindValue(':texto_traduzido', $this->texto_traduzido, PDO::PARAM_STR);
+        $stmt->bindValue(':id', $this->id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        if ($stmt->fetch()) {
+            return [
+                'success' => false,
+                'message' => 'O mesmo texto e tradução já estão cadastrados no sistema.'
+            ];
+        }
+
+        $sql = "UPDATE frases
+                SET texto_nativo = :texto_nativo, texto_traduzido = :texto_traduzido
+                WHERE id = :id
+                AND usuario_id = :usuario_id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id', $this->id, PDO::PARAM_INT);
+        $stmt->bindValue(':usuario_id', $user_id, PDO::PARAM_INT);
+        $stmt->bindValue(':texto_nativo', $this->texto_nativo, PDO::PARAM_STR);
+        $stmt->bindValue(':texto_traduzido', $this->texto_traduzido, PDO::PARAM_STR);
+        $stmt->execute();
+
+        return [
+            'success' => true,
+            'message' => 'Frase editada com sucesso'
+        ];
+    }
+
 }

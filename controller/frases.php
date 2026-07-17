@@ -144,6 +144,35 @@ try {
         exit;
     }
 
+    if ($action === 'edit_phrase') {
+        $frase->id = $input['id_phrase'] ?? null;
+        $frase->texto_nativo = $input['phrase'] ?? null;
+        $frase->texto_traduzido = $input['translatedPhrase'] ?? null;
+
+        if (!$frase->id) {
+            http_response_code(400);
+            echo json_encode(["error" => "id obrigatório"]);
+            exit;
+        }
+
+        if (!$frase->texto_nativo) {
+            http_response_code(400);
+            echo json_encode(["error" => "Frase obrigatório"]);
+            exit;
+        }
+
+        if (!$frase->texto_traduzido) {
+            http_response_code(400);
+            echo json_encode(["error" => "Frase obrigatório"]);
+            exit;
+        }
+
+        $response = $frase->editarFrase($user_id);
+
+        echo json_encode($response);
+        exit;
+    }
+
 
     http_response_code(400);
     echo json_encode(["error" => "Action inválida"]);
