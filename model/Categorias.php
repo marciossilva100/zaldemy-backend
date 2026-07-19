@@ -20,6 +20,12 @@ class Categorias
                 ON idioma_nativo_ref.id = c.idioma_nativo
             LEFT JOIN idiomas AS idioma_aprendendo_ref
                 ON idioma_aprendendo_ref.id = c.idioma_aprendendo
+            INNER JOIN idioma_referencia ir
+                ON ir.idioma_nativo = c.idioma_nativo
+                AND ir.idioma_aprender = c.idioma_aprendendo
+                AND ir.id_user = :id_user
+                AND ir.idioma_nativo > 0
+                AND ir.idioma_aprender > 0
             WHERE c.id_user = :id_user
             AND c.status_id > 0
             GROUP BY c.id, c.categoria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
@@ -326,6 +332,13 @@ class Categorias
                 ON idioma_nativo_ref.id = c.idioma_nativo
             LEFT JOIN idiomas AS idioma_aprendendo_ref
                 ON idioma_aprendendo_ref.id = c.idioma_aprendendo
+
+            INNER JOIN idioma_referencia ir
+                ON ir.idioma_nativo = c.idioma_nativo
+                AND ir.idioma_aprender = c.idioma_aprendendo
+                AND ir.id_user = :id_user
+                AND ir.idioma_nativo > 0
+                AND ir.idioma_aprender > 0
 
             WHERE c.public > 0
             AND c.status_id > 0
