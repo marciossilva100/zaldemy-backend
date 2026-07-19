@@ -38,32 +38,38 @@ $action = $input['action'] ?? null;
 // Instancia a Model
 $metricasModel = new Metricas();
 
+// Idioma atualmente selecionado pelo usuário (definido no Header).
+// As métricas ficam restritas a esse par nativo/aprendendo.
+$idiomaAtual = $metricasModel->getIdiomaAtual($user_id);
+$idioma_nativo = $idiomaAtual['idioma_nativo'] ?? null;
+$idioma_aprendendo = $idiomaAtual['idioma_aprendendo'] ?? null;
+
 try {
     $response = [];
 
     // ========== DASHBOARD COMPLETO ==========
     if ($action === 'dashboard') {
         $periodo = $input['periodo'] ?? '30d';
-        
+
         $response = [
-            'grafico' => $metricasModel->getDesempenho($user_id, $periodo),
-            'comparativos' => $metricasModel->getComparativoSemanal($user_id),
-            'categorias' => $metricasModel->getCategorias($user_id),
+            'grafico' => $metricasModel->getDesempenho($user_id, $periodo, $idioma_nativo, $idioma_aprendendo),
+            'comparativos' => $metricasModel->getComparativoSemanal($user_id, $idioma_nativo, $idioma_aprendendo),
+            'categorias' => $metricasModel->getCategorias($user_id, $idioma_nativo, $idioma_aprendendo),
             'tempo_medio' => $metricasModel->getTempoMedio($user_id),
-            'streak' => $metricasModel->getStreak($user_id),
-            'resumo' => $metricasModel->getResumo($user_id)
+            'streak' => $metricasModel->getStreak($user_id, $idioma_nativo, $idioma_aprendendo),
+            'resumo' => $metricasModel->getResumo($user_id, $idioma_nativo, $idioma_aprendendo)
         ];
     }
 
     // ========== GRÁFICO DE DESEMPENHO ==========
     elseif ($action === 'metricas_desempenho') {
         $periodo = $input['periodo'] ?? '30d';
-        $response = $metricasModel->getDesempenho($user_id, $periodo);
+        $response = $metricasModel->getDesempenho($user_id, $periodo, $idioma_nativo, $idioma_aprendendo);
     }
 
     // ========== RESUMO (KPI) ==========
     elseif ($action === 'metricas_resumo') {
-        $response = $metricasModel->getResumo($user_id);
+        $response = $metricasModel->getResumo($user_id, $idioma_nativo, $idioma_aprendendo);
     }
 
     // ========== REGISTRAR RESPOSTA ==========
@@ -89,24 +95,24 @@ try {
     // ========== LISTAR FRASES COM MÉTRICAS ==========
     elseif ($action === 'listar_frases_metricas') {
         $response = [
-            'frases' => $metricasModel->listarFrasesComMetricas($user_id)
+            'frases' => $metricasModel->listarFrasesComMetricas($user_id, $idioma_nativo, $idioma_aprendendo)
         ];
     }
 
     // ========== COMPARATIVO SEMANAL ==========
     elseif ($action === 'comparativo_semanal') {
-        $response = $metricasModel->getComparativoSemanal($user_id);
+        $response = $metricasModel->getComparativoSemanal($user_id, $idioma_nativo, $idioma_aprendendo);
     }
 
     // ========== CATEGORIAS ==========
     elseif ($action === 'categorias') {
-        $response = $metricasModel->getCategorias($user_id);
+        $response = $metricasModel->getCategorias($user_id, $idioma_nativo, $idioma_aprendendo);
     }
 
     // ========== STREAK ==========
     elseif ($action === 'streak') {
         $response = [
-            'streak' => $metricasModel->getStreak($user_id)
+            'streak' => $metricasModel->getStreak($user_id, $idioma_nativo, $idioma_aprendendo)
         ];
     }
 
