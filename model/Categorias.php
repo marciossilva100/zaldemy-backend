@@ -304,15 +304,17 @@ class Categorias
         $offset = ($page - 1) * $perPage;
 
         $sql = "
-           SELECT 
+           SELECT
                 c.id,
                 c.categoria,
-                COUNT(CASE 
-                    WHEN f.id IS NOT NULL THEN 1 
-                END) AS total_frases
+                COUNT(CASE
+                    WHEN f.id IS NOT NULL THEN 1
+                END) AS total_frases,
+                COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
+                COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo
             FROM categorias c
 
-            LEFT JOIN frases f 
+            LEFT JOIN frases f
                 ON f.categoria_id = c.id
                 AND f.status_id > 0
 
@@ -320,12 +322,17 @@ class Categorias
                 ON uc.id_categoria_publica = c.id
                 AND uc.id_user = :id_user
 
+            LEFT JOIN idiomas AS idioma_nativo_ref
+                ON idioma_nativo_ref.id = c.idioma_nativo
+            LEFT JOIN idiomas AS idioma_aprendendo_ref
+                ON idioma_aprendendo_ref.id = c.idioma_aprendendo
+
             WHERE c.public > 0
             AND c.status_id > 0
             AND c.id_user <> :id_user
             AND uc.id IS NULL
 
-            GROUP BY c.id, c.categoria
+            GROUP BY c.id, c.categoria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
             ORDER BY c.id ASC
             LIMIT :limit OFFSET :offset
         ";
