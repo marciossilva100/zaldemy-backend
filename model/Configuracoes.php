@@ -66,10 +66,10 @@ class Configuracoes
     {
         $quantidade = (int) $quantidade;
 
-        if ($quantidade < 1 || $quantidade > 10) {
+        if ($quantidade < 1 || $quantidade > 8) {
             return [
                 'success' => false,
-                'message' => 'A quantidade deve ser um número entre 1 e 10.'
+                'message' => 'A quantidade deve ser um número entre 1 e 8.'
             ];
         }
 
