@@ -85,6 +85,7 @@ try {
     if ($action === 'editar_categoria') {
         $categoria_id = $input['categoria_id'] ?? null;
         $categoria = $input['categoria'] ?? null;
+        $categoria_publica = $input['categoria_publica'] ?? null;
 
         if (!$categoria) {
             http_response_code(400);
@@ -93,7 +94,7 @@ try {
         }
 
         // Agora retorna frases já com a URL do áudio
-        $frases = Categorias::editarCategoria($pdo,$categoria_id,$categoria,$user_id);
+        $frases = Categorias::editarCategoria($pdo,$categoria_id,$categoria,$user_id,$categoria_publica);
 
         echo json_encode($frases);
         exit;

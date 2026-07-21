@@ -6,14 +6,15 @@ class Categorias
     public static function listarComQuantidade(PDO $pdo,$user_id): array
     {
         $sql = "
-            SELECT 
+            SELECT
                 c.id,
                 c.categoria,
+                c.public,
                 COUNT(f.id) AS total_frases,
                 COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
                 COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo
             FROM categorias c
-            LEFT JOIN frases f 
+            LEFT JOIN frases f
                 ON f.categoria_id = c.id
                 AND f.status_id > 0
             LEFT JOIN idiomas AS idioma_nativo_ref
@@ -28,7 +29,7 @@ class Categorias
                 AND ir.idioma_aprender > 0
             WHERE c.id_user = :id_user
             AND c.status_id > 0
-            GROUP BY c.id, c.categoria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
+            GROUP BY c.id, c.categoria, c.public, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
             ORDER BY c.id ASC;
         ";
 
@@ -424,7 +425,7 @@ class Categorias
         ];
     }
 
-    public static function editarCategoria(PDO $pdo, int $id, string $categoria, int $user_id ): array
+    public static function editarCategoria(PDO $pdo, int $id, string $categoria, int $user_id, $categoria_publica = null ): array
     {
 
         // limite de caracteres
@@ -436,13 +437,15 @@ class Categorias
         }
 
         // atualiza direto
-        $sql = "UPDATE categorias 
-                SET categoria = :categoria 
-                WHERE id = :id 
+        $sql = "UPDATE categorias
+                SET categoria = :categoria,
+                    public = :categoria_publica
+                WHERE id = :id
                 AND id_user = :id_user";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':categoria', $categoria, PDO::PARAM_STR);
+        $stmt->bindValue(':categoria_publica', (int) ($categoria_publica ?? 0), PDO::PARAM_INT);
         $stmt->bindValue(':id', $id, PDO::PARAM_INT);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
 
