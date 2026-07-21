@@ -211,7 +211,7 @@ class Categorias
 
                     // cria a categoria para esse par de idiomas (tipo 2 = importada via JSON, public = 1)
                     $resultadoCategoria = self::cadastrarCategoria(
-                        $pdo, $titulo, $user_id, null, 1, 2, $idiomaNativoId, $idiomaAprendendoId
+                        $pdo, $titulo, $user_id, null, 1, 1, $idiomaNativoId, $idiomaAprendendoId
                     );
                     $categoria_id = $resultadoCategoria['id'] ?? null;
 
@@ -267,7 +267,7 @@ class Categorias
                         // insert frase
                         $sql = "INSERT INTO frases
                         (usuario_id, texto_nativo, texto_traduzido, idioma_nativo, idioma_aprendendo, categoria_id, id_treino, status_id)
-                        VALUES (:user_id, :texto_nativo, :texto_traduzido, :idioma_nativo, :idioma_aprendendo, :categoria_id, 3, 1)";
+                        VALUES (:user_id, :texto_nativo, :texto_traduzido, :idioma_nativo, :idioma_aprendendo, :categoria_id, 1, 1)";
 
                         $stmt = $pdo->prepare($sql);
                         $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
