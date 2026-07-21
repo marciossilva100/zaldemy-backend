@@ -6,7 +6,9 @@ $allowedOrigins = [
     "https://www.zaldemy.com",
     "https://www.hml.zaldemy.com",
     "https://hml.zaldemy.com",
-    "https://memly-jijk.vercel.app"
+    "https://memly-jijk.vercel.app",
+    "https://localhost", // app nativo Android/iOS via Capacitor
+    "capacitor://localhost" // WKWebView do Capacitor no iOS
 ];
 
 if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowedOrigins)) {
