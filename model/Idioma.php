@@ -78,6 +78,8 @@ class Idioma
         $stmt->execute();
 
 
+        $this->cadastrarCategoriaFrasesTodosIdiomas($user_id, $this->idioma_nativo);
+
         $sql = 'UPDATE usuarios SET step = 1 WHERE id = :id LIMIT 1';
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
@@ -139,11 +141,6 @@ class Idioma
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
         $stmt->execute();
 
-      //  print_r($this->idioma_aprender);
-
-      $this->cadastrarCategoriaFrases($user_id);
-
-
         $sql = 'UPDATE usuarios SET step = 2 WHERE id = :id LIMIT 1';
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
@@ -170,26 +167,35 @@ class Idioma
     }
 
 
-    public function cadastrarCategoriaFrases($user_id){
+    // Cria a categoria+frases padrão (tipo = 2) para o par de idiomas informado.
+    // Se o par não for informado, usa o par atual do usuário em idioma_referencia
+    // (comportamento antigo, mantido para quem já chama sem os parâmetros).
+    public function cadastrarCategoriaFrases($user_id, $idioma_nativo = null, $idioma_aprender = null){
 
         global $pdo;
 
-        // busca idioma_nativo e idioma_aprender do usuário
-        $stmt = $pdo->prepare("
-            SELECT idioma_nativo, idioma_aprender
-            FROM idioma_referencia
-            WHERE id_user = :id_user
-            AND idioma_nativo > 0
-            AND idioma_aprender > 0
-            LIMIT 1
-        ");
-        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
-        $stmt->execute();
+        if ($idioma_nativo === null || $idioma_aprender === null) {
 
-        $idiomaReferencia = $stmt->fetch(PDO::FETCH_ASSOC);
+            // busca idioma_nativo e idioma_aprender do usuário
+            $stmt = $pdo->prepare("
+                SELECT idioma_nativo, idioma_aprender
+                FROM idioma_referencia
+                WHERE id_user = :id_user
+                AND idioma_nativo > 0
+                AND idioma_aprender > 0
+                LIMIT 1
+            ");
+            $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+            $stmt->execute();
 
-        $idiomaNativo = $idiomaReferencia['idioma_nativo'] ?? null;
-        $idiomaAprender = $idiomaReferencia['idioma_aprender'] ?? null;
+            $idiomaReferencia = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $idioma_nativo = $idioma_nativo ?? ($idiomaReferencia['idioma_nativo'] ?? null);
+            $idioma_aprender = $idioma_aprender ?? ($idiomaReferencia['idioma_aprender'] ?? null);
+        }
+
+        $idiomaNativo = $idioma_nativo;
+        $idiomaAprender = $idioma_aprender;
 
         // busca a categoria padrão (tipo = 2) correspondente ao par de idiomas
         $stmt = $pdo->prepare("
@@ -214,12 +220,30 @@ class Idioma
         $categoria_id = (int) $categoriaEncontrada['id'];
         $categoria = $categoriaEncontrada['categoria'];
 
-        $categoria_id_usuario = Categorias::cadastrarCategoria($pdo,$categoria,$user_id,$categoria_id);
+        $categoria_id_usuario = Categorias::cadastrarCategoria($pdo,$categoria,$user_id,$categoria_id,0,null,$idiomaNativo,$idiomaAprender);
 
         $frases = Categorias::getAllFrases($pdo,$categoria_id);
         $response = Categorias::addFrases($pdo,$user_id, $frases,$categoria_id_usuario['id']);
         return;
 
+    }
+
+    // Para cada idioma cadastrado na tabela idiomas (exceto o nativo), cria a
+    // categoria+frases padrão do par (idioma_nativo, idioma) para o usuário.
+    public function cadastrarCategoriaFrasesTodosIdiomas($user_id, $idioma_nativo){
+
+        $idiomas = self::listarIdiomas(null, $user_id);
+
+        foreach ($idiomas as $idioma) {
+
+            $idioma_aprender = (int) $idioma['id'];
+
+            if ($idioma_aprender === (int) $idioma_nativo) {
+                continue;
+            }
+
+            $this->cadastrarCategoriaFrases($user_id, $idioma_nativo, $idioma_aprender);
+        }
     }
 
     public static function buscarPorId(int $id): ?array
