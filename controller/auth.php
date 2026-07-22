@@ -95,8 +95,8 @@ try {
             $erros[] = "Email inválido";
         }
 
-        if (strlen($password) < 6) {
-            $erros[] = "Senha deve ter no mínimo 6 caracteres";
+        if (strlen($password) < 8) {
+            $erros[] = "Senha deve ter no mínimo 8 caracteres";
         }
 
         if ($password !== $confirm_password) {
@@ -281,9 +281,9 @@ try {
             exit;
         }
 
-        if (strlen($password) < 6) {
+        if (strlen($password) < 8) {
             http_response_code(422);
-            echo json_encode(["erro" => "Senha deve ter no mínimo 6 caracteres"]);
+            echo json_encode(["erro" => "Senha deve ter no mínimo 8 caracteres"]);
             exit;
         }
 
