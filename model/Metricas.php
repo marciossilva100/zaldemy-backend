@@ -246,6 +246,66 @@ class Metricas {
         return $result['streak'] ?? 0;
     }
 
+    // Maior sequência de dias seguidos estudando já alcançada (não só a atual).
+    public function getMelhorStreak($user_id, $idioma_nativo = null, $idioma_aprendendo = null) {
+        $filtroIdioma = $this->filtroIdiomaSql('f', $idioma_nativo, $idioma_aprendendo);
+
+        $sql = "
+            WITH RECURSIVE dias_estudo AS (
+                SELECT DISTINCT DATE(m.created_at) as data_estudo
+                FROM metricas m
+                INNER JOIN frases f ON m.frase_id = f.id
+                WHERE m.user_id = :user_id
+                    $filtroIdioma
+            ),
+            streaks AS (
+                SELECT
+                    data_estudo,
+                    @streak := IF(@prev_data = data_estudo - INTERVAL 1 DAY, @streak + 1, 1) as streak,
+                    @prev_data := data_estudo
+                FROM dias_estudo
+                CROSS JOIN (SELECT @prev_data := NULL, @streak := 0) r
+                ORDER BY data_estudo ASC
+            )
+            SELECT COALESCE(MAX(streak), 0) as melhor_streak FROM streaks
+        ";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $this->bindFiltroIdioma($stmt, $idioma_nativo, $idioma_aprendendo);
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int) ($result['melhor_streak'] ?? 0);
+    }
+
+    // Maior sequência de respostas corretas seguidas (em qualquer frase/dia).
+    public function getMelhorSequenciaAcertos($user_id, $idioma_nativo = null, $idioma_aprendendo = null) {
+        $filtroIdioma = $this->filtroIdiomaSql('f', $idioma_nativo, $idioma_aprendendo);
+
+        $sql = "
+            SELECT COALESCE(MAX(sequencia), 0) as melhor_sequencia
+            FROM (
+                SELECT
+                    @sequencia := IF(m.acertou = 1, @sequencia + 1, 0) as sequencia
+                FROM metricas m
+                INNER JOIN frases f ON m.frase_id = f.id
+                CROSS JOIN (SELECT @sequencia := 0) r
+                WHERE m.user_id = :user_id
+                    $filtroIdioma
+                ORDER BY m.created_at ASC
+            ) t
+        ";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $this->bindFiltroIdioma($stmt, $idioma_nativo, $idioma_aprendendo);
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int) ($result['melhor_sequencia'] ?? 0);
+    }
+
     public function getTempoMedio($user_id) {
         // Como não tem campo de tempo, retorna null
         return null;

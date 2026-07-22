@@ -59,6 +59,8 @@ try {
             'categorias' => $metricasModel->getCategorias($user_id, $idioma_nativo, $idioma_aprendendo),
             'tempo_medio' => $metricasModel->getTempoMedio($user_id),
             'streak' => $metricasModel->getStreak($user_id, $idioma_nativo, $idioma_aprendendo),
+            'melhor_streak' => $metricasModel->getMelhorStreak($user_id, $idioma_nativo, $idioma_aprendendo),
+            'melhor_sequencia_acertos' => $metricasModel->getMelhorSequenciaAcertos($user_id, $idioma_nativo, $idioma_aprendendo),
             'resumo' => $metricasModel->getResumo($user_id, $idioma_nativo, $idioma_aprendendo)
         ];
     }
