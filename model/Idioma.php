@@ -198,6 +198,7 @@ class Idioma
             WHERE idioma_nativo = :idioma_nativo
             AND idioma_aprendendo = :idioma_aprendendo
             AND tipo = 2
+            AND status_id > 0
             LIMIT 1
         ");
         $stmt->bindValue(':idioma_nativo', $idiomaNativo, $idiomaNativo === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
@@ -247,6 +248,11 @@ class Idioma
     {
         global $pdo;
 
+        $stmt = $pdo->prepare("SELECT idioma_nativo, idioma_aprender FROM idioma_referencia WHERE id_user = :id_user LIMIT 1");
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+        $referenciaAtual = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
         $sql = "UPDATE idioma_referencia
                 SET idioma_aprender = :idioma_aprender";
 
@@ -266,8 +272,14 @@ class Idioma
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
         $stmt->execute();
 
+        // só recadastra a categoria/frases padrão se o par de idiomas realmente mudou
+        $idiomaNativoNovo = $this->idioma_nativo ?? ($referenciaAtual['idioma_nativo'] ?? null);
+        $parIdiomasMudou = (int) ($referenciaAtual['idioma_aprender'] ?? 0) !== (int) $this->idioma_aprender
+            || (int) ($referenciaAtual['idioma_nativo'] ?? 0) !== (int) $idiomaNativoNovo;
 
-      $this->cadastrarCategoriaFrases($user_id);
+        if ($parIdiomasMudou) {
+            $this->cadastrarCategoriaFrases($user_id);
+        }
 
 
         $sql = "SELECT sigla FROM idiomas WHERE id = :idioma_id LIMIT 1";
