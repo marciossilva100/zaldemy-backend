@@ -138,9 +138,7 @@ try {
 
         enviarEmailVerificacao($email, $token);
 
-        $auth = new Auth($pdo);
 
-        $auth->cadastrarCategoriaFrases($user_id);
 
         echo json_encode([
             "sucesso" => true,
