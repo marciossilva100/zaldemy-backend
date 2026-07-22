@@ -30,6 +30,7 @@ require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/Categorias.php';
 require_once '../model/Configuracoes.php';
+require_once 'moderation.php';
 
 
 // lê JSON do body
@@ -75,6 +76,11 @@ try {
             exit;
         }
 
+        if (verificarConteudoImproprio($categoria)) {
+            echo json_encode(["success" => false, "message" => "Este texto contém conteúdo impróprio."]);
+            exit;
+        }
+
         // Agora retorna frases já com a URL do áudio
         $frases = Categorias::cadastrarCategoria($pdo,$categoria,$user_id,null,$categoria_publica);
 
@@ -90,6 +96,11 @@ try {
         if (!$categoria) {
             http_response_code(400);
             echo json_encode(["error" => "categoria obrigatória"]);
+            exit;
+        }
+
+        if (verificarConteudoImproprio($categoria)) {
+            echo json_encode(["success" => false, "message" => "Este texto contém conteúdo impróprio."]);
             exit;
         }
 

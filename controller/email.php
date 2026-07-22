@@ -46,3 +46,44 @@ function enviarEmailVerificacao($email, $token) {
         return false;
     }
 }
+
+function enviarEmailRedefinicaoSenha($email, $token) {
+
+    $mail = new PHPMailer(true);
+
+    try {
+
+        $mail->isSMTP();
+        $mail->Host       = $_ENV['MAIL_HOST'] ?? 'smtp.hostinger.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $_ENV['MAIL_USERNAME'] ?? 'adm@zaldemy.com';
+        $mail->Password   = $_ENV['MAIL_PASSWORD'] ?? '';
+        $mail->SMTPSecure = $_ENV['MAIL_ENCRYPTION'] ?? 'ssl';
+        $mail->Port       = $_ENV['MAIL_PORT'] ?? 465;
+
+        $fromEmail = $_ENV['MAIL_FROM_ADDRESS'] ?? 'adm@zaldemy.com';
+        $fromName  = $_ENV['MAIL_FROM_NAME'] ?? 'Zaldemy';
+        $appUrl    = rtrim($_ENV['APP_URL'] ?? 'https://zaldemy.com', '/');
+
+        $mail->setFrom($fromEmail, $fromName);
+        $mail->addAddress($email);
+
+        $link = "$appUrl/redefinirsenha?token=$token";
+
+        $mail->isHTML(true);
+        $mail->Subject = 'Redefinição de senha - Zaldemy';
+        $mail->Body    = "
+            <h2>Redefinir sua senha do Zaldemy</h2>
+            <p>Clique no link abaixo para escolher uma nova senha. Esse link expira em 1 hora:</p>
+            <a href='$link'>$link</a>
+            <p>Se você não pediu essa redefinição, ignore este email.</p>
+        ";
+
+        $mail->send();
+
+        return true;
+
+    } catch (Exception $e) {
+        return false;
+    }
+}

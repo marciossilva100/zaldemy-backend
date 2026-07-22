@@ -318,7 +318,8 @@ class Categorias
                     WHEN f.id IS NOT NULL THEN 1
                 END) AS total_frases,
                 COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
-                COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo
+                COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo,
+                dono.nome AS usuario
             FROM categorias c
 
             LEFT JOIN frases f
@@ -334,6 +335,9 @@ class Categorias
             LEFT JOIN idiomas AS idioma_aprendendo_ref
                 ON idioma_aprendendo_ref.id = c.idioma_aprendendo
 
+            LEFT JOIN usuarios dono
+                ON dono.id = c.id_user
+
             INNER JOIN idioma_referencia ir
                 ON ir.idioma_nativo = c.idioma_nativo
                 AND ir.idioma_aprender = c.idioma_aprendendo
@@ -346,7 +350,7 @@ class Categorias
             AND c.id_user <> :id_user
             AND uc.id IS NULL
 
-            GROUP BY c.id, c.categoria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
+            GROUP BY c.id, c.categoria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla, dono.nome
             ORDER BY c.id ASC
             LIMIT :limit OFFSET :offset
         ";

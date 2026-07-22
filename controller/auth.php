@@ -221,6 +221,117 @@ try {
     }
 
 
+    // =====================================================
+    // FORGOT PASSWORD (solicitar link de redefinição)
+    // =====================================================
+    if ($action === 'forgot_password') {
+
+        $email = isset($data['email']) ? trim($data['email']) : '';
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            http_response_code(422);
+            echo json_encode(["erro" => "Email inválido"]);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE email = :email LIMIT 1");
+        $stmt->bindParam(":email", $email, PDO::PARAM_STR);
+        $stmt->execute();
+
+        $usuario = $stmt->fetch();
+
+        // Sempre responde sucesso, exista ou não o email, pra não expor quais
+        // emails estão cadastrados (evita enumeração de usuários).
+        if ($usuario) {
+            $token = bin2hex(random_bytes(32));
+
+            $stmt = $pdo->prepare("
+                UPDATE usuarios
+                SET reset_token = :token,
+                    reset_token_expira = DATE_ADD(NOW(), INTERVAL 1 HOUR)
+                WHERE id = :id
+            ");
+
+            $stmt->bindParam(":token", $token, PDO::PARAM_STR);
+            $stmt->bindParam(":id", $usuario['id'], PDO::PARAM_INT);
+            $stmt->execute();
+
+            enviarEmailRedefinicaoSenha($email, $token);
+        }
+
+        echo json_encode([
+            "sucesso" => true,
+            "mensagem" => "Se o email existir, enviamos um link de redefinição."
+        ]);
+        exit;
+    }
+
+    // =====================================================
+    // RESET PASSWORD (definir nova senha a partir do token)
+    // =====================================================
+    if ($action === 'reset_password') {
+
+        $token    = isset($data['token']) ? trim($data['token']) : '';
+        $password = isset($data['password']) ? $data['password'] : '';
+        $confirm_password = isset($data['confirm_password']) ? $data['confirm_password'] : '';
+
+        if (!$token) {
+            http_response_code(422);
+            echo json_encode(["erro" => "Token não informado"]);
+            exit;
+        }
+
+        if (strlen($password) < 6) {
+            http_response_code(422);
+            echo json_encode(["erro" => "Senha deve ter no mínimo 6 caracteres"]);
+            exit;
+        }
+
+        if ($password !== $confirm_password) {
+            http_response_code(422);
+            echo json_encode(["erro" => "As senhas não coincidem"]);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT id FROM usuarios
+            WHERE reset_token = :token
+            AND reset_token_expira > NOW()
+            LIMIT 1
+        ");
+
+        $stmt->bindParam(":token", $token, PDO::PARAM_STR);
+        $stmt->execute();
+
+        $usuario = $stmt->fetch();
+
+        if (!$usuario) {
+            http_response_code(400);
+            echo json_encode(["erro" => "Link inválido ou expirado"]);
+            exit;
+        }
+
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+
+        $stmt = $pdo->prepare("
+            UPDATE usuarios
+            SET password = :password,
+                reset_token = NULL,
+                reset_token_expira = NULL
+            WHERE id = :id
+        ");
+
+        $stmt->bindParam(":password", $hash, PDO::PARAM_STR);
+        $stmt->bindParam(":id", $usuario['id'], PDO::PARAM_INT);
+        $stmt->execute();
+
+        echo json_encode([
+            "sucesso" => true,
+            "mensagem" => "Senha redefinida com sucesso."
+        ]);
+        exit;
+    }
+
     if ($action === "login_google") {
 
         if (!isset($data['token'])) {
