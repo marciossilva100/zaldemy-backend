@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/Frases.php';
+require_once 'moderation.php';
 
 // lê JSON do body
 $input = json_decode(file_get_contents('php://input'), true);
@@ -140,6 +141,12 @@ try {
             echo json_encode(["error" => "categoria_id obrigatório"]);
             exit;
         }
+
+        if (verificarConteudoImproprio($frase->texto_nativo) || verificarConteudoImproprio($frase->texto_traduzido)) {
+            echo json_encode(["success" => false, "message" => "Este texto contém conteúdo impróprio."]);
+            exit;
+        }
+
         $response = $frase->addFrases($user_id);
 
         echo json_encode($response);
@@ -166,6 +173,11 @@ try {
         if (!$frase->texto_traduzido) {
             http_response_code(400);
             echo json_encode(["error" => "Frase obrigatório"]);
+            exit;
+        }
+
+        if (verificarConteudoImproprio($frase->texto_nativo) || verificarConteudoImproprio($frase->texto_traduzido)) {
+            echo json_encode(["success" => false, "message" => "Este texto contém conteúdo impróprio."]);
             exit;
         }
 
