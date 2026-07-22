@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/Configuracoes.php';
+require_once '../model/Auth.php';
 
 
 // lê JSON do body
@@ -56,6 +57,18 @@ try {
         }
 
         $dados = Configuracoes::atualizarQuantidadeFrasesAprender($pdo, $user_id, $quantidade);
+
+        if (!$dados['success']) {
+            http_response_code(400);
+        }
+
+        echo json_encode($dados);
+        exit;
+    }
+
+    if ($action === 'excluir_conta') {
+        $auth = new Auth($pdo);
+        $dados = $auth->excluirConta($user_id);
 
         if (!$dados['success']) {
             http_response_code(400);

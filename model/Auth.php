@@ -168,4 +168,39 @@ return;
 
     }
 
+    // Exclui (soft-delete) a conta do usuário: anonimiza dados pessoais,
+    // invalida o token de sessão e marca o registro como inativo.
+    public function excluirConta($user_id) {
+
+        $emailAnonimizado = 'excluido_' . $user_id . '_' . time() . '@zaldemy.local';
+        $senhaInvalida = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+
+        $stmt = $this->pdo->prepare(
+            "UPDATE usuarios
+             SET status_id = 0,
+                 auth_token = NULL,
+                 email = :email,
+                 nome = 'Usuário excluído',
+                 password = :senha
+             WHERE id = :id"
+        );
+
+        $stmt->bindValue(':email', $emailAnonimizado, PDO::PARAM_STR);
+        $stmt->bindValue(':senha', $senhaInvalida, PDO::PARAM_STR);
+        $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        if ($stmt->rowCount() === 0) {
+            return [
+                'success' => false,
+                'message' => 'Usuário não encontrado'
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Conta excluída com sucesso'
+        ];
+    }
+
 }
