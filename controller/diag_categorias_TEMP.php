@@ -66,7 +66,28 @@ try {
         GROUP BY id_user
         HAVING COUNT(*) > 1
     ");
-    $resultado['usuarios_com_idioma_referencia_duplicada'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $usuariosDuplicados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $resultado['usuarios_com_idioma_referencia_duplicada'] = $usuariosDuplicados;
+
+    // 4) Conteúdo detalhado de cada linha duplicada, pra decidir qual manter
+    if (!empty($usuariosDuplicados)) {
+        $ids = array_column($usuariosDuplicados, 'id_user');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+        $stmt = $pdo->prepare("
+            SELECT ir.id, ir.id_user, ir.idioma_nativo, ir.idioma_aprender,
+                   n.sigla AS nativo_sigla, a.sigla AS aprender_sigla,
+                   u.email, u.update_date
+            FROM idioma_referencia ir
+            LEFT JOIN idiomas n ON n.id = ir.idioma_nativo
+            LEFT JOIN idiomas a ON a.id = ir.idioma_aprender
+            LEFT JOIN usuarios u ON u.id = ir.id_user
+            WHERE ir.id_user IN ($placeholders)
+            ORDER BY ir.id_user, ir.id
+        ");
+        $stmt->execute($ids);
+        $resultado['detalhe_linhas_duplicadas'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
     echo json_encode(['success' => true, 'resultado' => $resultado], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
