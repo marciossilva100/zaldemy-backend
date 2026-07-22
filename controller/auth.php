@@ -138,8 +138,6 @@ try {
 
         enviarEmailVerificacao($email, $token);
 
-
-
         echo json_encode([
             "sucesso" => true,
             "mensagem" => "Usuário cadastrado. Verifique seu email."
