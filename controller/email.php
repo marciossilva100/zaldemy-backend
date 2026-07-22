@@ -14,6 +14,7 @@ function enviarEmailVerificacao($email, $token) {
     try {
 
         $mail->isSMTP();
+        $mail->CharSet    = 'UTF-8';
         $mail->Host       = $_ENV['MAIL_HOST'] ?? 'smtp.hostinger.com';
         $mail->SMTPAuth   = true;
         $mail->Username   = $_ENV['MAIL_USERNAME'] ?? 'adm@zaldemy.com';
@@ -54,6 +55,7 @@ function enviarEmailRedefinicaoSenha($email, $token) {
     try {
 
         $mail->isSMTP();
+        $mail->CharSet    = 'UTF-8';
         $mail->Host       = $_ENV['MAIL_HOST'] ?? 'smtp.hostinger.com';
         $mail->SMTPAuth   = true;
         $mail->Username   = $_ENV['MAIL_USERNAME'] ?? 'adm@zaldemy.com';
