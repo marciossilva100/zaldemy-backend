@@ -66,9 +66,9 @@ class Auth {
 
             // cria usuário automaticamente
             $stmt = $this->pdo->prepare(
-                "INSERT INTO usuarios 
-                (nome, email, email_verified, plano) 
-                VALUES (:nome, :email, 1, 1)"
+                "INSERT INTO usuarios
+                (nome, email, email_verified, plano)
+                VALUES (:nome, :email, 1, 2)"
             );
 
             $stmt->bindParam(":nome", $nome);
