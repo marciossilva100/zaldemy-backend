@@ -25,7 +25,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once '../server.php';
-require_once 'authMiddleware.php';
 
 $token = $_GET['token'] ?? null;
 
