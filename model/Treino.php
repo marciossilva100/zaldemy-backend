@@ -137,8 +137,8 @@ class Treino {
 
             HAVING ultima_data <= NOW() - INTERVAL 
                 CASE 
-                    WHEN media_acertos >= 0.7 THEN 5
-                    ELSE 2
+                    WHEN media_acertos >= 0.7 THEN 15
+                    ELSE 7
                 END DAY
         ";
 
