@@ -70,7 +70,20 @@ class Idioma
             return [];
         }
 
-        $sql = "INSERT INTO idioma_referencia (idioma_nativo,id_user) VALUES (:idioma_nativo,:id_user)";
+        // alguns fluxos (ex: login com Google) já criam a linha em idioma_referencia
+        // (com idioma_nativo/idioma_aprender NULL) antes desse passo. Faz upsert pra
+        // não deixar duas linhas pro mesmo usuário, o que tornaria os "LIMIT 1" sem
+        // ORDER BY usados pelo resto do código ambíguos.
+        $stmt = $pdo->prepare("SELECT id FROM idioma_referencia WHERE id_user = :id_user LIMIT 1");
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+        $referenciaExistente = $stmt->fetch();
+
+        if ($referenciaExistente) {
+            $sql = "UPDATE idioma_referencia SET idioma_nativo = :idioma_nativo WHERE id_user = :id_user LIMIT 1";
+        } else {
+            $sql = "INSERT INTO idioma_referencia (idioma_nativo,id_user) VALUES (:idioma_nativo,:id_user)";
+        }
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':idioma_nativo', $this->idioma_nativo, PDO::PARAM_INT);
