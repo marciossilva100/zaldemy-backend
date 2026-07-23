@@ -85,8 +85,7 @@ class Auth {
             $stmt->bindParam(":user", $userId);
             $stmt->execute();
 
-            // já existente
-           
+            enviarEmailNotificacaoNovoCadastro($nome, $email);
 
         } else {
 

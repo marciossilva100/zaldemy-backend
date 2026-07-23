@@ -137,6 +137,7 @@ try {
         $user_id = $pdo->lastInsertId();
 
         enviarEmailVerificacao($email, $token);
+        enviarEmailNotificacaoNovoCadastro($nome, $email);
 
         echo json_encode([
             "sucesso" => true,
