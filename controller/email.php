@@ -89,3 +89,42 @@ function enviarEmailRedefinicaoSenha($email, $token) {
         return false;
     }
 }
+
+function enviarEmailNotificacaoNovoCadastro($nome, $email) {
+
+    $mail = new PHPMailer(true);
+
+    try {
+
+        $mail->isSMTP();
+        $mail->CharSet    = 'UTF-8';
+        $mail->Host       = $_ENV['MAIL_HOST'] ?? 'smtp.hostinger.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $_ENV['MAIL_USERNAME'] ?? 'adm@zaldemy.com';
+        $mail->Password   = $_ENV['MAIL_PASSWORD'] ?? '';
+        $mail->SMTPSecure = $_ENV['MAIL_ENCRYPTION'] ?? 'ssl';
+        $mail->Port       = $_ENV['MAIL_PORT'] ?? 465;
+
+        $fromEmail  = $_ENV['MAIL_FROM_ADDRESS'] ?? 'adm@zaldemy.com';
+        $fromName   = $_ENV['MAIL_FROM_NAME'] ?? 'Zaldemy';
+        $adminEmail = $_ENV['ADMIN_NOTIFICATION_EMAIL'] ?? 'marciosunico37@gmail.com';
+
+        $mail->setFrom($fromEmail, $fromName);
+        $mail->addAddress($adminEmail);
+
+        $mail->isHTML(true);
+        $mail->Subject = 'Novo usuário cadastrado - Zaldemy';
+        $mail->Body    = "
+            <h2>Novo cadastro no Zaldemy</h2>
+            <p><strong>Nome:</strong> $nome</p>
+            <p><strong>Email:</strong> $email</p>
+        ";
+
+        $mail->send();
+
+        return true;
+
+    } catch (Exception $e) {
+        return false;
+    }
+}
