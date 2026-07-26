@@ -329,6 +329,7 @@ class Categorias
             LEFT JOIN categorias uc
                 ON uc.id_categoria_publica = c.id
                 AND uc.id_user = :id_user
+                AND uc.status_id > 0
 
             LEFT JOIN idiomas AS idioma_nativo_ref
                 ON idioma_nativo_ref.id = c.idioma_nativo
