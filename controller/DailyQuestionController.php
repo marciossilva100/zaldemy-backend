@@ -91,6 +91,15 @@ class DailyQuestionController
         try {
             $user_id = $this->getUserId();
 
+            if ($this->getPlano() !== 1) {
+                $this->json([
+                    'success' => false,
+                    'error' => 'Perguntas diárias por IA são um recurso exclusivo do plano Premium.',
+                    'premium_necessario' => true
+                ]);
+                return;
+            }
+
             // 🔥 NOVO: verifica se já existe pergunta pendente
             $pending = $this->getPendingQuestion($user_id);
 
@@ -111,7 +120,8 @@ class DailyQuestionController
                 throw new Exception("Usuário não possui frases cadastradas.");
             }
 
-            $result = $this->ai->generateQuestion($phrases, $user_id);
+            // Chegou até aqui só quem é premium (ver checagem acima)
+            $result = $this->ai->generateQuestion($phrases, $user_id, 'beginner', 0, 5);
 
             $this->json([
                 'success' => true,
@@ -147,6 +157,16 @@ class DailyQuestionController
     {
         try {
             $user_id = $this->getUserId();
+
+            if ($this->getPlano() !== 1) {
+                $this->json([
+                    'success' => false,
+                    'error' => 'Perguntas diárias por IA são um recurso exclusivo do plano Premium.',
+                    'premium_necessario' => true
+                ]);
+                return;
+            }
+
             $data = json_decode(file_get_contents('php://input'), true);
 
             if (!is_array($data)) {
@@ -246,6 +266,13 @@ class DailyQuestionController
         }
 
         return (int)$user_id;
+    }
+
+    private function getPlano()
+    {
+        global $user;
+
+        return (int)($user['plano'] ?? 0);
     }
 
     private function json(array $data)

@@ -44,6 +44,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // =========================
+// 🔐 AUTENTICAÇÃO (necessária pra saber o plano e controlar o limite diário)
+// =========================
+require_once '../server.php';
+require_once 'authMiddleware.php';
+
+// Voz natural (ElevenLabs) é exclusiva do plano premium, com limite diário
+// pra manter o custo por chamada da API sob controle.
+const AUDIO_IA_LIMITE_DIARIO = 50;
+
+function usoAudioIaHoje(PDO $pdo, int $userId): int
+{
+    $sql = "SELECT COUNT(*) as total
+            FROM audio_ia_uso
+            WHERE user_id = :user_id
+              AND DATE(data_criacao) = CURDATE()";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':user_id' => $userId]);
+
+    return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+}
+
+function registrarUsoAudioIa(PDO $pdo, int $userId): void
+{
+    $stmt = $pdo->prepare("INSERT INTO audio_ia_uso (user_id) VALUES (:user_id)");
+    $stmt->execute([':user_id' => $userId]);
+}
+
+// =========================
 // 📥 INPUT
 // =========================
 $rawInput = file_get_contents('php://input');
@@ -72,11 +101,30 @@ try {
             throw new Exception("Texto não informado");
         }
 
+        if ((int) ($user['plano'] ?? 0) !== 1) {
+            header('Content-Type: application/json');
+            echo json_encode(["erro" => false, "premium_necessario" => true]);
+            exit;
+        }
+
+        $usoHoje = usoAudioIaHoje($pdo, $user_id);
+
+        if ($usoHoje >= AUDIO_IA_LIMITE_DIARIO) {
+            header('Content-Type: application/json');
+            echo json_encode(["erro" => false, "limite_atingido" => true]);
+            exit;
+        }
+
         // 🔥 agora com cache ativado
         $result = $eleven->gerarAudio($texto, $idioma, true);
 
         if ($result["erro"]) {
             throw new Exception($result["mensagem"]);
+        }
+
+        // Só conta contra o limite diário quando de fato chama a API (cache não tem custo)
+        if (empty($result["cache"])) {
+            registrarUsoAudioIa($pdo, $user_id);
         }
 
         if (empty($result["audio"])) {
@@ -125,7 +173,23 @@ try {
             throw new Exception("Texto não informado");
         }
 
+        if ((int) ($user['plano'] ?? 0) !== 1) {
+            echo json_encode(["erro" => false, "premium_necessario" => true]);
+            exit;
+        }
+
+        $usoHoje = usoAudioIaHoje($pdo, $user_id);
+
+        if ($usoHoje >= AUDIO_IA_LIMITE_DIARIO) {
+            echo json_encode(["erro" => false, "limite_atingido" => true]);
+            exit;
+        }
+
         $result = $eleven->gerarAudio($texto, $idioma, true);
+
+        if (empty($result["cache"])) {
+            registrarUsoAudioIa($pdo, $user_id);
+        }
 
         echo json_encode([
             "erro" => $result["erro"],
