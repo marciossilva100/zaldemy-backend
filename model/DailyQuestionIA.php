@@ -14,7 +14,7 @@ class DailyQuestionIA
         $this->pdo = $pdo;
     }
 
-    public function generateQuestion(array $phrases, $userId, $level = 'beginner', $statusId = 0)
+    public function generateQuestion(array $phrases, $userId, $level = 'beginner', $statusId = 0, $limiteDiario = 4)
     {
         $phrases = array_filter($phrases, function ($p) {
             return str_word_count($p) >= 3;
@@ -59,7 +59,7 @@ $fimDia = date('Y-m-d 23:59:59');
         $result = $stmtCheck->fetch(PDO::FETCH_ASSOC);
         $total_today = (int)$result['total'];
 
-        if ($total_today >= 4) {
+        if ($total_today >= $limiteDiario) {
             return [
                 'question' => null,
                 'total_today' => $total_today,

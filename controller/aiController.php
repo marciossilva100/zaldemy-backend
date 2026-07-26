@@ -74,6 +74,20 @@ $userId = $user['id']; // vindo do authMiddleware
 
 /**
  * =========================
+ * RECURSO EXCLUSIVO DO PLANO PREMIUM
+ * =========================
+ */
+if ((int) ($user['plano'] ?? 0) !== 1) {
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Texto personalizado é um recurso exclusivo do plano Premium.',
+        'premium_necessario' => true
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/**
+ * =========================
  * VERIFICAR SE JÁ EXISTE HOJE
  * =========================
  */

@@ -13,9 +13,9 @@ class Auth {
     public function getUserByToken($token) {
 
         $stmt = $this->pdo->prepare(
-            "SELECT id, nome, email 
-             FROM usuarios 
-             WHERE auth_token = :token 
+            "SELECT id, nome, email, plano
+             FROM usuarios
+             WHERE auth_token = :token
              LIMIT 1"
         );
 
