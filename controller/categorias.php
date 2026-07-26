@@ -40,14 +40,21 @@ $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? null;
 
 try {
+    // TODO: remover esta ação depois de rodar a importação uma única vez.
+    // Ação temporária e dedicada para importar as categorias/frases do
+    // frases_convertidas.json (em vez de reativar a linha antiga dentro de
+    // listar-com-quantidade, que rodaria em toda requisição de todo usuário).
+    if ($action === 'importar_frases_json') {
+        $result = Categorias::addFrasesFromJson($pdo, 47, __DIR__ . '/frases_convertidas.json');
+        echo json_encode($result);
+        exit;
+    }
+
     if ($action === 'listar-com-quantidade') {
-       
+
         $dados = Categorias::listarComQuantidade($pdo,$user_id);
 
         Configuracoes::setConfiguracoes($pdo,$user_id);
-
-        //função para adicionar frases manualmente
-       //$result = Categorias::addFrasesFromJson($pdo,47,__DIR__ . '/frases_convertidas.json');
 
         echo json_encode($dados);
         exit;
