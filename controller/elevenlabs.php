@@ -49,9 +49,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 
-// Voz natural (ElevenLabs) é exclusiva do plano premium, com limite diário
-// pra manter o custo por chamada da API sob controle.
+// Voz natural (ElevenLabs) é liberada pro plano premium (limite diário, pra
+// manter o custo por chamada da API sob controle) e, como amostra grátis,
+// pro plano limitado (limite vitalício único - depois disso só virando
+// premium pra continuar usando voz natural).
 const AUDIO_IA_LIMITE_DIARIO = 50;
+const AUDIO_IA_LIMITE_VITALICIO_LIMITADO = 10;
 
 function usoAudioIaHoje(PDO $pdo, int $userId): int
 {
@@ -66,10 +69,45 @@ function usoAudioIaHoje(PDO $pdo, int $userId): int
     return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 }
 
+function usoAudioIaTotal(PDO $pdo, int $userId): int
+{
+    $sql = "SELECT COUNT(*) as total
+            FROM audio_ia_uso
+            WHERE user_id = :user_id";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':user_id' => $userId]);
+
+    return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+}
+
 function registrarUsoAudioIa(PDO $pdo, int $userId): void
 {
     $stmt = $pdo->prepare("INSERT INTO audio_ia_uso (user_id) VALUES (:user_id)");
     $stmt->execute([':user_id' => $userId]);
+}
+
+// Verifica se o plano do usuário pode usar voz natural e, se puder, se ainda
+// está dentro do limite (diário pro premium, vitalício pro limitado).
+// Retorna null se pode prosseguir, ou o array de resposta JSON pra retornar
+// direto (bloqueando o acesso).
+function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano): ?array
+{
+    if ($plano === 1) {
+        if (usoAudioIaHoje($pdo, $userId) >= AUDIO_IA_LIMITE_DIARIO) {
+            return ["erro" => false, "limite_atingido" => true];
+        }
+        return null;
+    }
+
+    if ($plano === 3) {
+        if (usoAudioIaTotal($pdo, $userId) >= AUDIO_IA_LIMITE_VITALICIO_LIMITADO) {
+            return ["erro" => false, "limite_atingido" => true];
+        }
+        return null;
+    }
+
+    return ["erro" => false, "premium_necessario" => true];
 }
 
 // =========================
@@ -101,17 +139,11 @@ try {
             throw new Exception("Texto não informado");
         }
 
-        if ((int) ($user['plano'] ?? 0) !== 1) {
-            header('Content-Type: application/json');
-            echo json_encode(["erro" => false, "premium_necessario" => true]);
-            exit;
-        }
+        $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
 
-        $usoHoje = usoAudioIaHoje($pdo, $user_id);
-
-        if ($usoHoje >= AUDIO_IA_LIMITE_DIARIO) {
+        if ($bloqueio !== null) {
             header('Content-Type: application/json');
-            echo json_encode(["erro" => false, "limite_atingido" => true]);
+            echo json_encode($bloqueio);
             exit;
         }
 
@@ -173,15 +205,10 @@ try {
             throw new Exception("Texto não informado");
         }
 
-        if ((int) ($user['plano'] ?? 0) !== 1) {
-            echo json_encode(["erro" => false, "premium_necessario" => true]);
-            exit;
-        }
+        $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
 
-        $usoHoje = usoAudioIaHoje($pdo, $user_id);
-
-        if ($usoHoje >= AUDIO_IA_LIMITE_DIARIO) {
-            echo json_encode(["erro" => false, "limite_atingido" => true]);
+        if ($bloqueio !== null) {
+            echo json_encode($bloqueio);
             exit;
         }
 
