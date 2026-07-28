@@ -172,8 +172,8 @@ class Treino {
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
             $sqlUpdate = "
-                UPDATE frases 
-                SET id_treino = 2
+                UPDATE frases
+                SET id_treino = 3
                 WHERE id IN ($placeholders)
                 AND status_id > 0
                 AND categoria_id = ?
@@ -194,7 +194,7 @@ class Treino {
         }
 
         // =========================
-        // 4️⃣ INSERT (id_treino = 2)
+        // 4️⃣ INSERT (id_treino = 3)
         // =========================
         $placeholdersInsert = [];
         $paramsInsert = [];
@@ -202,7 +202,7 @@ class Treino {
         foreach ($dados as $row) {
             $placeholdersInsert[] = "(?, ?, ?)";
             $paramsInsert[] = $row['id_frase'];
-            $paramsInsert[] = 2;
+            $paramsInsert[] = 3;
             $paramsInsert[] = 1;
         }
 
