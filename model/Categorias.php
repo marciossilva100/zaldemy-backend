@@ -3,6 +3,20 @@ session_start();
 
 class Categorias
 {
+    public static function contarCategoriasAtivas(PDO $pdo, $user_id): int
+    {
+        $sql = "SELECT COUNT(*) as total
+                FROM categorias
+                WHERE id_user = :id_user
+                  AND status_id > 0";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    }
+
     public static function listarComQuantidade(PDO $pdo,$user_id): array
     {
         $sql = "
