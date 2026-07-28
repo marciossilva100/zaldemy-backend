@@ -106,44 +106,43 @@ class Treino {
         // =========================
         // 1️⃣ SELECT com métricas
         // =========================
+        // Filtra direto por f.id_treino (o campo real/atual da frase), não
+        // pelo último registro em treino_data_atualizacao - esse histórico
+        // pode ficar dessincronizado do campo atual (ex: frase em id_treino=4
+        // cujo último log ainda mostra um estágio anterior), o que fazia essa
+        // consulta não encontrar quase nenhuma frase vencida na prática.
         $sqlSelect = "
-            SELECT 
-                tda.id_frase,
+            SELECT
+                f.id AS id_frase,
                 f.categoria_id,
                 COALESCE(AVG(m.acertou), 0) as media_acertos,
-                tda.data_atualizacao as ultima_data
+                MAX(tda.data_atualizacao) as ultima_data
 
-            FROM treino_data_atualizacao tda
+            FROM frases f
 
-            INNER JOIN (
-                SELECT id_frase, MAX(data_atualizacao) as max_data
-                FROM treino_data_atualizacao
-                GROUP BY id_frase
-            ) ult 
-                ON ult.id_frase = tda.id_frase 
-                AND ult.max_data = tda.data_atualizacao
+            LEFT JOIN treino_data_atualizacao tda
+                ON tda.id_frase = f.id
 
-            INNER JOIN frases f 
-                ON f.id = tda.id_frase
-
-            LEFT JOIN metricas m 
-                ON m.frase_id = tda.id_frase
+            LEFT JOIN metricas m
+                ON m.frase_id = f.id
                 AND m.user_id = ?
 
-            WHERE 
-                tda.id_treino = ?
-                
-            GROUP BY tda.id_frase, f.categoria_id, tda.data_atualizacao
+            WHERE
+                f.id_treino = ?
+                AND f.usuario_id = ?
+                AND f.status_id > 0
 
-            HAVING ultima_data <= NOW() - INTERVAL 
-                CASE 
+            GROUP BY f.id, f.categoria_id
+
+            HAVING ultima_data <= NOW() - INTERVAL
+                CASE
                     WHEN media_acertos >= 0.7 THEN 15
                     ELSE 7
                 END DAY
         ";
 
         $stmtSelect = $pdo->prepare($sqlSelect);
-        $stmtSelect->execute([$user_id, $idTreino]);
+        $stmtSelect->execute([$user_id, $idTreino, $user_id]);
 
         $dados = $stmtSelect->fetchAll(PDO::FETCH_ASSOC);
 
