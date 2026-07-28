@@ -25,7 +25,11 @@ class Idioma
         ";
 
         if($modo =='learning'){
-            $sql .=" WHERE id <> (SELECT idioma_nativo FROM idioma_referencia WHERE id_user = :id_user AND idioma_nativo IS NOT NULL LIMIT 1)";
+            // COALESCE(..., 0) é essencial aqui: se o usuário ainda não tem
+            // idioma_nativo salvo em idioma_referencia, a subquery retorna NULL,
+            // e "id <> NULL" nunca é verdadeiro pra nenhuma linha - a lista
+            // inteira vinha vazia em vez de simplesmente não excluir nada.
+            $sql .=" WHERE id <> COALESCE((SELECT idioma_nativo FROM idioma_referencia WHERE id_user = :id_user AND idioma_nativo IS NOT NULL LIMIT 1), 0)";
         }
 
         $sql .=" ORDER BY id ASC";
