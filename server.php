@@ -1,19 +1,21 @@
 <?php
 date_default_timezone_set('America/Sao_Paulo');
 
-//$pass = "@Sdsfsfsfs8f7sdf78sd57f8sd9fs87fs8f";
-$host = "localhost";
-// $db   = "memly";
-// $user = "root";
-// $pass = "h@cker02";
+// Permite sobrescrever a conexão via .env (não versionado) pra rodar num
+// banco local sem tocar nas credenciais de produção abaixo, que continuam
+// sendo o fallback padrão se as variáveis não existirem no .env.
+require_once __DIR__ . '/dotenv.php';
+carregarEnv(__DIR__ . '/.env');
 
-$db   = "u712858045_zaldemy";
-$user = "u712858045_mhp";
-$pass = "u2Kd@Hl@0z&";
+$host = $_ENV['DB_HOST'] ?? "localhost";
+$port = $_ENV['DB_PORT'] ?? "3306";
+$db   = $_ENV['DB_DATABASE'] ?? "u712858045_zaldemy";
+$user = $_ENV['DB_USERNAME'] ?? "u712858045_mhp";
+$pass = $_ENV['DB_PASSWORD'] ?? "u2Kd@Hl@0z&";
 
 try {
     $pdo = new PDO(
-        "mysql:host=$host;dbname=$db;charset=utf8mb4",
+        "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4",
         $user,
         $pass,
         [
