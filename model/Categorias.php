@@ -10,6 +10,10 @@ class Categorias
     // na Home, mas continuam existindo - contar todas, sem esse filtro,
     // fazia o limite ser atingido com base em categorias que o usuário nem
     // vê mais na tela.
+    //
+    // Também exclui tipo=3 (categoria criada automaticamente no cadastro,
+    // uma por idioma) - o usuário não escolheu criá-la, então ela não deve
+    // consumir a cota do limite de categorias do plano.
     public static function contarCategoriasAtivas(PDO $pdo, $user_id): int
     {
         $sql = "SELECT COUNT(*) as total
@@ -19,7 +23,8 @@ class Categorias
                     AND ir.idioma_aprender = c.idioma_aprendendo
                     AND ir.id_user = :id_user
                 WHERE c.id_user = :id_user
-                  AND c.status_id > 0";
+                  AND c.status_id > 0
+                  AND (c.tipo IS NULL OR c.tipo <> 3)";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
