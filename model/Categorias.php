@@ -3,12 +3,23 @@ session_start();
 
 class Categorias
 {
+    // Conta só as categorias do par de idiomas (nativo/aprendendo) atual do
+    // usuário - o mesmo par usado por listarComQuantidade() pra exibir a
+    // Home. Um usuário pode ter categorias de pares de idiomas antigos (ex:
+    // depois de trocar o idioma que está aprendendo) que não aparecem mais
+    // na Home, mas continuam existindo - contar todas, sem esse filtro,
+    // fazia o limite ser atingido com base em categorias que o usuário nem
+    // vê mais na tela.
     public static function contarCategoriasAtivas(PDO $pdo, $user_id): int
     {
         $sql = "SELECT COUNT(*) as total
-                FROM categorias
-                WHERE id_user = :id_user
-                  AND status_id > 0";
+                FROM categorias c
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = c.idioma_nativo
+                    AND ir.idioma_aprender = c.idioma_aprendendo
+                    AND ir.id_user = :id_user
+                WHERE c.id_user = :id_user
+                  AND c.status_id > 0";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
