@@ -38,26 +38,35 @@ $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? null;
 $frase = new Frases;
 
-// Limite diário de frases criadas - premium (1) não tem limite; free (2) e
-// limitado (3) ficam no mesmo teto, pra evitar criação em massa (uso
-// legítimo raramente passa de algumas dezenas por dia).
+// Limite diário de frases criadas - free (2) e limitado (3) ficam no mesmo
+// teto baixo, pra evitar criação em massa. Premium (1) tem um teto bem mais
+// alto (não é sobre uso legítimo, é sobre não deixar a criação de conteúdo
+// sem nenhum limite - a mensagem pro usuário é pedagógica de propósito, não
+// menciona custo/abuso.
 const LIMITE_FRASES_DIARIO = 10;
+const LIMITE_FRASES_DIARIO_PREMIUM = 100;
 
 function verificarLimiteFrasesDiario(PDO $pdo, int $user_id, int $plano): ?array
 {
-    if ($plano === 1) {
+    $limite = $plano === 1 ? LIMITE_FRASES_DIARIO_PREMIUM : LIMITE_FRASES_DIARIO;
+
+    if (Frases::contarFrasesCriadasHoje($pdo, $user_id) < $limite) {
         return null;
     }
 
-    if (Frases::contarFrasesCriadasHoje($pdo, $user_id) >= LIMITE_FRASES_DIARIO) {
+    if ($plano === 1) {
         return [
             "success" => false,
             "limite_atingido" => true,
-            "message" => "Você atingiu o limite de " . LIMITE_FRASES_DIARIO . " frases criadas hoje. Vire premium para criar frases ilimitadas."
+            "message" => "Você atingiu o limite de {$limite} frases criadas hoje. Uma pausa agora ajuda a fixar melhor o que você já aprendeu - volte amanhã para continuar!"
         ];
     }
 
-    return null;
+    return [
+        "success" => false,
+        "limite_atingido" => true,
+        "message" => "Você atingiu o limite de {$limite} frases criadas hoje. Vire premium para criar até " . LIMITE_FRASES_DIARIO_PREMIUM . " frases por dia."
+    ];
 }
 
 try {
