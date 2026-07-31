@@ -13,6 +13,23 @@ class Frases
     public $correctIds;
     public $response = array();
 
+    // Conta frases criadas hoje pelo usuário, usada pro limite diário de
+    // criação (planos free/limitado) - premium não tem esse teto.
+    public static function contarFrasesCriadasHoje(PDO $pdo, int $user_id): int
+    {
+        $sql = "SELECT COUNT(*) as total
+                FROM frases
+                WHERE usuario_id = :user_id
+                  AND status_id > 0
+                  AND DATE(data_criacao) = CURDATE()";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    }
+
     public function listarFrases($user_id): array
     {
 

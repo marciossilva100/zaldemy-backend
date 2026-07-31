@@ -56,6 +56,12 @@ require_once 'authMiddleware.php';
 const AUDIO_IA_LIMITE_DIARIO = 50;
 const AUDIO_IA_LIMITE_VITALICIO_LIMITADO = 10;
 
+// O custo do ElevenLabs é por caractere, não por chamada - sem esse teto,
+// o limite de chamadas acima não protege o custo de verdade (uma única
+// chamada com texto gigante custaria muito mais que o previsto). Aplica
+// pra todo mundo que tiver acesso, mesmo cap independente do plano.
+const AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA = 300;
+
 function usoAudioIaHoje(PDO $pdo, int $userId): int
 {
     $sql = "SELECT COUNT(*) as total
@@ -139,6 +145,10 @@ try {
             throw new Exception("Texto não informado");
         }
 
+        if (mb_strlen($texto) > AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA) {
+            throw new Exception("Texto excede o limite de " . AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA . " caracteres por chamada de áudio.");
+        }
+
         $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
 
         if ($bloqueio !== null) {
@@ -203,6 +213,10 @@ try {
 
         if (!$texto) {
             throw new Exception("Texto não informado");
+        }
+
+        if (mb_strlen($texto) > AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA) {
+            throw new Exception("Texto excede o limite de " . AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA . " caracteres por chamada de áudio.");
         }
 
         $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
