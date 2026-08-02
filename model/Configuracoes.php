@@ -2,9 +2,13 @@
 
 class Configuracoes
 {
-    // Vozes aceitas pra TTS - mantido enxuto de propósito (masculina/feminina),
-    // dá pra adicionar mais variações depois sem quebrar quem já escolheu.
-    const VOZES_TTS_VALIDAS = ['feminina', 'masculina'];
+    // Vozes nativas do gpt-4o-mini-tts (OpenAI) - o usuário escolhe direto
+    // qual delas quer, sem abstração de gênero.
+    const VOZES_TTS_VALIDAS = [
+        'alloy', 'ash', 'ballad', 'cedar', 'coral', 'echo', 'fable',
+        'marin', 'nova', 'onyx', 'sage', 'shimmer', 'verse'
+    ];
+    const VOZ_TTS_PADRAO = 'nova';
 
     public static function setConfiguracoes(PDO $pdo, $user_id): array
     {
@@ -36,7 +40,7 @@ class Configuracoes
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':quantidade_frases_aprender', 8, PDO::PARAM_INT);
         $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
-        $stmt->bindValue(':voz_tts', 'feminina', PDO::PARAM_STR);
+        $stmt->bindValue(':voz_tts', self::VOZ_TTS_PADRAO, PDO::PARAM_STR);
         $stmt->execute();
 
         return [
@@ -64,7 +68,7 @@ class Configuracoes
         return [
             'success' => true,
             'quantidade_frases_aprender' => (int) ($configuracao['quantidade_frases_aprender'] ?? 8),
-            'voz_tts' => $configuracao['voz_tts'] ?? 'feminina'
+            'voz_tts' => $configuracao['voz_tts'] ?? self::VOZ_TTS_PADRAO
         ];
     }
 
@@ -78,7 +82,7 @@ class Configuracoes
 
         $voz = $stmt->fetch(PDO::FETCH_ASSOC)['voz_tts'] ?? null;
 
-        return in_array($voz, self::VOZES_TTS_VALIDAS, true) ? $voz : 'feminina';
+        return in_array($voz, self::VOZES_TTS_VALIDAS, true) ? $voz : self::VOZ_TTS_PADRAO;
     }
 
     public static function atualizarVozTts(PDO $pdo, $user_id, $voz): array

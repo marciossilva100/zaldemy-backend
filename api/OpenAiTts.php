@@ -6,11 +6,10 @@ class OpenAiTts {
     private $model = "gpt-4o-mini-tts";
     private $cacheDir;
 
-    // Mapeia a preferência de voz do usuário (Configuracoes::VOZES_TTS_VALIDAS)
-    // pras vozes reais da OpenAI.
-    const VOZES = [
-        'feminina' => 'nova',
-        'masculina' => 'onyx',
+    // Vozes nativas do gpt-4o-mini-tts - mesma lista de Configuracoes::VOZES_TTS_VALIDAS.
+    const VOZES_VALIDAS = [
+        'alloy', 'ash', 'ballad', 'cedar', 'coral', 'echo', 'fable',
+        'marin', 'nova', 'onyx', 'sage', 'shimmer', 'verse'
     ];
     const VOZ_PADRAO = 'nova';
 
@@ -28,7 +27,7 @@ class OpenAiTts {
 
     public function gerarAudio($texto, $idioma = "pt", $usarCache = true, $vozPreferida = null) {
 
-        $voice = self::VOZES[$vozPreferida] ?? self::VOZ_PADRAO;
+        $voice = in_array($vozPreferida, self::VOZES_VALIDAS, true) ? $vozPreferida : self::VOZ_PADRAO;
 
         // 🔥 gera hash único - inclui a voz pra não misturar áudio de vozes diferentes
         $hash = md5($texto . $idioma . $voice);
