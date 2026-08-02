@@ -10,7 +10,7 @@ error_reporting(E_ALL);
 require_once __DIR__ . '/../dotenv.php';
 carregarEnv(__DIR__ . '/../.env');
 
-if (!isset($_ENV['ELEVENLABS_API_KEY'])) {
+if (!isset($_ENV['OPEN_AI'])) {
     die(json_encode([
         "erro" => true,
         "mensagem" => "API KEY não configurada"
@@ -127,9 +127,12 @@ $action = $input['action'] ?? null;
 // =========================
 // 📦 CLASS
 // =========================
-require_once __DIR__ . '/../api/ElevenLabs.php';
+// Trocado de ElevenLabs pra OpenAI (TTS) - api/ElevenLabs.php continua
+// intacto e com a mesma interface (gerarAudio), então voltar atrás é só
+// trocar essas duas linhas de novo.
+require_once __DIR__ . '/../api/OpenAiTts.php';
 
-$eleven = new ElevenLabs($_ENV['ELEVENLABS_API_KEY']);
+$eleven = new OpenAiTts($_ENV['OPEN_AI']);
 
 try {
 
