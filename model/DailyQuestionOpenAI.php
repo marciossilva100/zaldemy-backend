@@ -129,6 +129,13 @@ class DailyQuestionOpenAI
 
         $transcricao = $transcricaoResult['texto'];
 
+        // A API pode responder 200 com texto vazio (áudio silencioso, baixo
+        // demais, ruído só) - sem essa checagem isso seguia pra correção com
+        // uma transcrição vazia, gerando um feedback sem sentido.
+        if (trim($transcricao) === '') {
+            return ["success" => false, "message" => "Não conseguimos identificar sua fala no áudio. Tente gravar de novo, falando mais perto do microfone."];
+        }
+
         // Mesma checagem já aplicada em frases/categorias - a transcrição é
         // texto que o próprio usuário falou, sem moderação nenhuma antes disso.
         if (verificarConteudoImproprio($transcricao)) {
