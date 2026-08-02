@@ -29,27 +29,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once '../server.php';
 require_once 'authMiddleware.php';
-require_once '../model/DailyQuestionIA.php';
+require_once '../model/DailyQuestionOpenAI.php';
+require_once __DIR__ . '/../api/OpenAiChat.php';
+require_once __DIR__ . '/../api/OpenAiTranscribe.php';
 require_once __DIR__ . '/../dotenv.php';
 
 carregarEnv(__DIR__ . '/../.env');
 
 class DailyQuestionController
 {
-    private $ai;
     private $pdo;
+    private $chat;
+    private $transcribe;
 
-    public function __construct(PDO $pdo)
+    public function __construct(PDO $pdo, string $apiKey)
     {
         $this->pdo = $pdo;
-
-        $apiKey = getenv('GROQ_API_KEY') ?: ($_ENV['GROQ_API_KEY'] ?? '');
-
-        if (!$apiKey) {
-            throw new Exception("API Key não configurada.");
-        }
-
-        $this->ai = new DailyQuestionIA($apiKey, $this->pdo);
+        $this->chat = new OpenAiChat($apiKey);
+        $this->transcribe = new OpenAiTranscribe($apiKey);
     }
 
     /* ===============================
@@ -60,201 +57,115 @@ class DailyQuestionController
         try {
             $user_id = $this->getUserId();
 
-            $sql = "
-                UPDATE perguntas_ia 
-                SET status_id = 1 
-                WHERE user_id = :user_id 
-                AND status_id = 0
-                ORDER BY id DESC 
-                LIMIT 1
-            ";
+            $sql = "UPDATE perguntas_ia
+                    SET status_id = 1
+                    WHERE user_id = :user_id AND status_id = 0
+                    ORDER BY id DESC LIMIT 1";
 
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([
-                ':user_id' => $user_id
-            ]);
+            $stmt->execute([':user_id' => $user_id]);
 
-            $this->json([
-                'success' => true,
-                'total_today' => $this->getTotalToday($user_id)
-            ]);
-
-        } catch (Exception $e) {
-            $this->error($e);
-        }
-    }
-    /* ===============================
-       GET → GERAR PERGUNTA
-    =============================== */
-   public function getDailyQuestion()
-    {
-        try {
-            $user_id = $this->getUserId();
-
-            if ($this->getPlano() !== 1) {
-                $this->json([
-                    'success' => false,
-                    'error' => 'Perguntas diárias por IA são um recurso exclusivo do plano Premium.',
-                    'premium_necessario' => true
-                ]);
-                return;
-            }
-
-            // 🔥 NOVO: verifica se já existe pergunta pendente
-            $pending = $this->getPendingQuestion($user_id);
-
-            if ($pending) {
-                $this->json([
-                    'success' => true,
-                    'question' => $pending['question'],
-                    'total_today' => $this->getTotalToday($user_id),
-                    'limit_reached' => false
-                ]);
-                return;
-            }
-
-            // 🔥 se não tiver, gera nova
-            $phrases = $this->getUserPhrases($user_id);
-
-            if (empty($phrases)) {
-                throw new Exception("Usuário não possui frases cadastradas.");
-            }
-
-            // Chegou até aqui só quem é premium (ver checagem acima)
-            $result = $this->ai->generateQuestion($phrases, $user_id, 'beginner', 0, 5);
-
-            $this->json([
-                'success' => true,
-                'question' => $result['question'] ?? null,
-                'total_today' => $result['total_today'] ?? 0,
-                'limit_reached' => $result['limit_reached'] ?? false
-            ]);
-
+            $this->json(['success' => true]);
         } catch (Exception $e) {
             $this->error($e);
         }
     }
 
-    private function getPendingQuestion($user_id)
-    {
-        $sql = "SELECT question 
-                FROM perguntas_ia 
-                WHERE user_id = :user_id 
-                AND status_id = 0
-                ORDER BY id DESC 
-                LIMIT 1";
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([':user_id' => $user_id]);
-
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-
     /* ===============================
-       POST → RESPONDER
+       GET → OBTER PERGUNTA
     =============================== */
-   public function answerDailyQuestion()
+    public function getDailyQuestion()
     {
         try {
             $user_id = $this->getUserId();
 
-            if ($this->getPlano() !== 1) {
-                $this->json([
-                    'success' => false,
-                    'error' => 'Perguntas diárias por IA são um recurso exclusivo do plano Premium.',
-                    'premium_necessario' => true
-                ]);
+            $bloqueio = DailyQuestionOpenAI::verificarAcesso($this->pdo, $user_id, $this->getPlano());
+
+            if ($bloqueio !== null) {
+                $this->json($bloqueio);
                 return;
             }
 
-            $data = json_decode(file_get_contents('php://input'), true);
-
-            if (!is_array($data)) {
-                throw new Exception('JSON inválido.');
-            }
-
-            if (empty($data['question']) || empty($data['answer'])) {
-                throw new Exception('Pergunta e resposta são obrigatórias.');
-            }
-
             $phrases = $this->getUserPhrases($user_id);
+            $idioma = $this->getIdiomaAprendendo($user_id);
 
-            $result = $this->ai->evaluateAnswer(
-                $phrases,
-                $data['question'],
-                $data['answer']
+            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chat, $user_id, $phrases, $idioma);
+
+            $this->json($resultado);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
+    }
+
+    /* ===============================
+       POST → RESPONDER (áudio, multipart)
+    =============================== */
+    public function answerDailyQuestion()
+    {
+        try {
+            $user_id = $this->getUserId();
+
+            $bloqueio = DailyQuestionOpenAI::verificarAcesso($this->pdo, $user_id, $this->getPlano());
+
+            if ($bloqueio !== null) {
+                $this->json($bloqueio);
+                return;
+            }
+
+            $perguntaId = (int) ($_POST['question_id'] ?? 0);
+
+            if (!$perguntaId) {
+                throw new Exception('question_id obrigatório.');
+            }
+
+            if (empty($_FILES['audio']) || $_FILES['audio']['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception('Áudio obrigatório.');
+            }
+
+            $resultado = DailyQuestionOpenAI::responder(
+                $this->pdo,
+                $this->chat,
+                $this->transcribe,
+                $user_id,
+                $perguntaId,
+                $_FILES['audio']['tmp_name'],
+                $_FILES['audio']['type'] ?: 'audio/webm'
             );
 
-            // ✅ SÓ MARCA COMO RESPONDIDA SE ACERTAR
-            if ($result['is_correct']) {
-
-                $sql = "
-                    UPDATE perguntas_ia 
-                    SET status_id = 1 
-                    WHERE user_id = :user_id 
-                    AND question = :question
-                    ORDER BY id DESC 
-                    LIMIT 1
-                ";
-
-                $stmt = $this->pdo->prepare($sql);
-                $stmt->execute([
-                    ':user_id' => $user_id,
-                    ':question' => $data['question']
-                ]);
-            }
-
-            $this->json([
-                'success' => true,
-                'feedback' => $result['feedback'] ?? '',
-                'is_correct' => $result['is_correct'] ?? false,
-                'total_today' => $this->getTotalToday($user_id)
-            ]);
-
+            $this->json($resultado);
         } catch (Exception $e) {
             $this->error($e);
         }
     }
-
-    /* ===============================
-       TOTAL DO DIA
-    =============================== */
-    private function getTotalToday($user_id)
-{
-    $inicioDia = date('Y-m-d 00:00:00');
-    $fimDia = date('Y-m-d 23:59:59');
-
-   $sql = "SELECT COUNT(*) as total 
-        FROM perguntas_ia 
-        WHERE user_id = :user_id 
-        AND status_id = 1
-        AND data_criacao BETWEEN :inicio AND :fim";
-
-    $stmt = $this->pdo->prepare($sql);
-    $stmt->execute([
-        ':user_id' => $user_id,
-        ':inicio' => $inicioDia,
-        ':fim' => $fimDia
-    ]);
-
-    return (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
-}
 
     private function getUserPhrases($user_id)
     {
-        $sql = "
-            SELECT texto_traduzido
-            FROM frases
-            WHERE texto_traduzido IS NOT NULL
-            AND usuario_id = :user_id
-            AND TRIM(texto_nativo) <> ''
-            AND status_id > 0
-        ";
+        $sql = "SELECT texto_traduzido
+                FROM frases
+                WHERE texto_traduzido IS NOT NULL
+                AND usuario_id = :user_id
+                AND TRIM(texto_nativo) <> ''
+                AND status_id > 0";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
 
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    private function getIdiomaAprendendo($user_id): string
+    {
+        $sql = "SELECT i.idioma
+                FROM idioma_referencia ir
+                JOIN idiomas i ON i.id = ir.idioma_aprender
+                WHERE ir.id_user = :user_id
+                LIMIT 1";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        $idioma = $stmt->fetch(PDO::FETCH_ASSOC)['idioma'] ?? null;
+
+        return $idioma ?: 'inglês';
     }
 
     private function getUserId()
@@ -265,14 +176,14 @@ class DailyQuestionController
             throw new Exception('Usuário não autenticado.');
         }
 
-        return (int)$user_id;
+        return (int) $user_id;
     }
 
     private function getPlano()
     {
         global $user;
 
-        return (int)($user['plano'] ?? 0);
+        return (int) ($user['plano'] ?? 0);
     }
 
     private function json(array $data)
@@ -287,7 +198,7 @@ class DailyQuestionController
 
         echo json_encode([
             'success' => false,
-            'error' => $e->getMessage()
+            'message' => $e->getMessage()
         ], JSON_UNESCAPED_UNICODE);
 
         exit;
@@ -299,16 +210,20 @@ class DailyQuestionController
 =============================== */
 
 try {
-    $controller = new DailyQuestionController($pdo);
+    if (!isset($_ENV['OPEN_AI'])) {
+        throw new Exception('API KEY não configurada.');
+    }
+
+    $controller = new DailyQuestionController($pdo, $_ENV['OPEN_AI']);
 
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $controller->getDailyQuestion();
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $data = json_decode(file_get_contents('php://input'), true);
+        $action = $_POST['action'] ?? null;
 
-        if (isset($data['action']) && $data['action'] === 'skip') {
+        if ($action === 'skip') {
             $controller->skipDailyQuestion();
         } else {
             $controller->answerDailyQuestion();
@@ -320,6 +235,6 @@ try {
 
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage()
+        'message' => $e->getMessage()
     ]);
 }
