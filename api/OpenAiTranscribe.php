@@ -45,12 +45,10 @@ class OpenAiTranscribe {
 
         if (curl_errno($ch)) {
             $erroCurl = curl_error($ch);
-            curl_close($ch);
             return ["erro" => true, "mensagem" => $erroCurl];
         }
 
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         $result = json_decode($response, true);
 

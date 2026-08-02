@@ -77,14 +77,11 @@ class OpenAiTts {
 
         if (curl_errno($ch)) {
             $erroCurl = curl_error($ch);
-            curl_close($ch);
             return [
                 "erro" => true,
                 "mensagem" => $erroCurl
             ];
         }
-
-        curl_close($ch);
 
         // =========================
         // ❌ ERRO HTTP
