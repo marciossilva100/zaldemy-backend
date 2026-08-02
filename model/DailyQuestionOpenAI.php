@@ -129,6 +129,12 @@ class DailyQuestionOpenAI
 
         $transcricao = $transcricaoResult['texto'];
 
+        // Mesma checagem já aplicada em frases/categorias - a transcrição é
+        // texto que o próprio usuário falou, sem moderação nenhuma antes disso.
+        if (verificarConteudoImproprio($transcricao)) {
+            return ["success" => false, "message" => "O áudio contém conteúdo impróprio."];
+        }
+
         $systemPrompt = "Você é um professor de idiomas avaliando a resposta ORAL de um aluno. Vai receber a pergunta e a "
             . "transcrição da resposta falada (hesitação/frase incompleta aparece como texto desconexo). Avalie se responde "
             . "à pergunta e a qualidade gramatical/fluência. Dê nota de 0 a 10, se está correto, e explique os principais "

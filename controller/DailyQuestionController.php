@@ -32,6 +32,7 @@ require_once 'authMiddleware.php';
 require_once '../model/DailyQuestionOpenAI.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
 require_once __DIR__ . '/../api/OpenAiTranscribe.php';
+require_once 'moderation.php';
 require_once __DIR__ . '/../dotenv.php';
 
 carregarEnv(__DIR__ . '/../.env');

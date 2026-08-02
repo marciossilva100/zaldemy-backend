@@ -40,6 +40,7 @@ require_once 'authMiddleware.php';
 require_once '../model/FraseDoDia.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
 require_once __DIR__ . '/../api/OpenAiTranscribe.php';
+require_once 'moderation.php';
 
 header('Content-Type: application/json');
 

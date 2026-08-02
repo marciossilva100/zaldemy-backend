@@ -117,6 +117,12 @@ class FraseDoDia
 
         $transcricao = $transcricaoResult['texto'];
 
+        // Mesma checagem já aplicada em frases/categorias - a transcrição é
+        // texto que o próprio usuário falou, sem moderação nenhuma antes disso.
+        if (verificarConteudoImproprio($transcricao)) {
+            return ["success" => false, "message" => "O áudio contém conteúdo impróprio."];
+        }
+
         $systemPrompt = "Você é um professor de idiomas avaliando a leitura em voz alta de um aluno. "
             . "Vai receber a frase original e a transcrição de voz-pra-texto do que o aluno disse. "
             . "Divergências entre elas podem indicar erro de pronúncia, palavra trocada/omitida ou hesitação. "
