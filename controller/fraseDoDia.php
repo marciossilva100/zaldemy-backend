@@ -112,6 +112,20 @@ try {
         exit;
     }
 
+    if ($action === 'historico') {
+        $sql = "SELECT frase, transcricao, nota, feedback_gramatica, feedback_pronuncia, feedback_fluencia, data_criacao
+                FROM frase_dia_ia
+                WHERE user_id = :user_id AND status_id = 1 AND nota IS NOT NULL
+                ORDER BY id DESC
+                LIMIT 30";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+
+        echo json_encode(["success" => true, "historico" => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(["success" => false, "message" => "Action inválida"]);
 
