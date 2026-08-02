@@ -3,7 +3,7 @@
 class OpenAiTts {
 
     private $apiKey;
-    private $model = "tts-1";
+    private $model = "gpt-4o-mini-tts";
     private $cacheDir;
 
     // Mapeia a preferência de voz do usuário (Configuracoes::VOZES_TTS_VALIDAS)
