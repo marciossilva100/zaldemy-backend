@@ -139,6 +139,32 @@ class DailyQuestionController
         }
     }
 
+    /* ===============================
+       GET → HISTÓRICO DE RESPOSTAS
+    =============================== */
+    public function getHistorico()
+    {
+        try {
+            $user_id = $this->getUserId();
+
+            $sql = "SELECT question, transcricao, nota, feedback, data_criacao
+                    FROM perguntas_ia
+                    WHERE user_id = :user_id AND status_id = 1 AND nota IS NOT NULL
+                    ORDER BY id DESC
+                    LIMIT 30";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([':user_id' => $user_id]);
+
+            $this->json([
+                'success' => true,
+                'historico' => $stmt->fetchAll(PDO::FETCH_ASSOC)
+            ]);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
+    }
+
     private function getUserPhrases($user_id)
     {
         $sql = "SELECT texto_traduzido
@@ -218,7 +244,11 @@ try {
     $controller = new DailyQuestionController($pdo, $_ENV['OPEN_AI']);
 
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $controller->getDailyQuestion();
+        if (($_GET['action'] ?? null) === 'historico') {
+            $controller->getHistorico();
+        } else {
+            $controller->getDailyQuestion();
+        }
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
