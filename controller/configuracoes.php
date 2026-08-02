@@ -66,6 +66,25 @@ try {
         exit;
     }
 
+    if ($action === 'atualizar_voz_tts') {
+        $voz = $input['voz_tts'] ?? null;
+
+        if (!$voz) {
+            http_response_code(400);
+            echo json_encode(["error" => "voz_tts obrigatória"]);
+            exit;
+        }
+
+        $dados = Configuracoes::atualizarVozTts($pdo, $user_id, $voz);
+
+        if (!$dados['success']) {
+            http_response_code(400);
+        }
+
+        echo json_encode($dados);
+        exit;
+    }
+
     if ($action === 'excluir_conta') {
         $auth = new Auth($pdo);
         $dados = $auth->excluirConta($user_id);

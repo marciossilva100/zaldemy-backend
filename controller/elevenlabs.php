@@ -48,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // =========================
 require_once '../server.php';
 require_once 'authMiddleware.php';
+require_once '../model/Configuracoes.php';
 
 // Voz natural (ElevenLabs) é liberada pro plano premium (limite diário, pra
 // manter o custo por chamada da API sob controle) e, como amostra grátis,
@@ -161,7 +162,8 @@ try {
         }
 
         // 🔥 agora com cache ativado
-        $result = $eleven->gerarAudio($texto, $idioma, true);
+        $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
+        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida);
 
         if ($result["erro"]) {
             throw new Exception($result["mensagem"]);
@@ -229,7 +231,8 @@ try {
             exit;
         }
 
-        $result = $eleven->gerarAudio($texto, $idioma, true);
+        $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
+        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida);
 
         // Toda reprodução conta contra o limite, cache ou não - mas só se
         // realmente saiu áudio (erro da API não deveria consumir a cota).

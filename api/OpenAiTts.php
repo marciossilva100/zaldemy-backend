@@ -3,9 +3,16 @@
 class OpenAiTts {
 
     private $apiKey;
-    private $voice = "alloy";
     private $model = "tts-1";
     private $cacheDir;
+
+    // Mapeia a preferência de voz do usuário (Configuracoes::VOZES_TTS_VALIDAS)
+    // pras vozes reais da OpenAI.
+    const VOZES = [
+        'feminina' => 'nova',
+        'masculina' => 'onyx',
+    ];
+    const VOZ_PADRAO = 'nova';
 
     public function __construct($apiKey) {
         $this->apiKey = $apiKey;
@@ -19,10 +26,12 @@ class OpenAiTts {
         }
     }
 
-    public function gerarAudio($texto, $idioma = "pt", $usarCache = true) {
+    public function gerarAudio($texto, $idioma = "pt", $usarCache = true, $vozPreferida = null) {
 
-        // 🔥 gera hash único
-        $hash = md5($texto . $idioma);
+        $voice = self::VOZES[$vozPreferida] ?? self::VOZ_PADRAO;
+
+        // 🔥 gera hash único - inclui a voz pra não misturar áudio de vozes diferentes
+        $hash = md5($texto . $idioma . $voice);
         $file = $this->cacheDir . $hash . ".mp3";
 
         // =========================
@@ -44,7 +53,7 @@ class OpenAiTts {
         $data = [
             "model" => $this->model,
             "input" => $texto,
-            "voice" => $this->voice,
+            "voice" => $voice,
             "response_format" => "mp3"
         ];
 
