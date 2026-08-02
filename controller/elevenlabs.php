@@ -164,10 +164,10 @@ try {
             throw new Exception($result["mensagem"]);
         }
 
-        // Só conta contra o limite diário quando de fato chama a API (cache não tem custo)
-        if (empty($result["cache"])) {
-            registrarUsoAudioIa($pdo, $user_id);
-        }
+        // Toda reprodução conta contra o limite, cache ou não - senão o
+        // usuário podia reproduzir a mesma frase infinitas vezes de graça
+        // sem nunca gastar a cota.
+        registrarUsoAudioIa($pdo, $user_id);
 
         if (empty($result["audio"])) {
             throw new Exception("Áudio vazio");
@@ -228,7 +228,9 @@ try {
 
         $result = $eleven->gerarAudio($texto, $idioma, true);
 
-        if (empty($result["cache"])) {
+        // Toda reprodução conta contra o limite, cache ou não - mas só se
+        // realmente saiu áudio (erro da API não deveria consumir a cota).
+        if (!$result["erro"]) {
             registrarUsoAudioIa($pdo, $user_id);
         }
 
