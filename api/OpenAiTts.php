@@ -25,12 +25,14 @@ class OpenAiTts {
         }
     }
 
-    public function gerarAudio($texto, $idioma = "pt", $usarCache = true, $vozPreferida = null) {
+    public function gerarAudio($texto, $idioma = "pt", $usarCache = true, $vozPreferida = null, $velocidade = null) {
 
         $voice = in_array($vozPreferida, self::VOZES_VALIDAS, true) ? $vozPreferida : self::VOZ_PADRAO;
+        $speed = is_numeric($velocidade) ? (float) $velocidade : 1.0;
+        $speed = max(0.25, min(4.0, $speed));
 
-        // 🔥 gera hash único - inclui a voz pra não misturar áudio de vozes diferentes
-        $hash = md5($texto . $idioma . $voice);
+        // 🔥 gera hash único - inclui voz e velocidade pra não misturar áudios diferentes
+        $hash = md5($texto . $idioma . $voice . $speed);
         $file = $this->cacheDir . $hash . ".mp3";
 
         // =========================
@@ -53,7 +55,8 @@ class OpenAiTts {
             "model" => $this->model,
             "input" => $texto,
             "voice" => $voice,
-            "response_format" => "mp3"
+            "response_format" => "mp3",
+            "speed" => $speed
         ];
 
         $ch = curl_init($url);

@@ -66,6 +66,25 @@ try {
         exit;
     }
 
+    if ($action === 'atualizar_velocidade_tts') {
+        $velocidade = $input['velocidade_tts'] ?? null;
+
+        if ($velocidade === null) {
+            http_response_code(400);
+            echo json_encode(["error" => "velocidade_tts obrigatória"]);
+            exit;
+        }
+
+        $dados = Configuracoes::atualizarVelocidadeTts($pdo, $user_id, $velocidade);
+
+        if (!$dados['success']) {
+            http_response_code(400);
+        }
+
+        echo json_encode($dados);
+        exit;
+    }
+
     if ($action === 'atualizar_voz_tts') {
         $voz = $input['voz_tts'] ?? null;
 

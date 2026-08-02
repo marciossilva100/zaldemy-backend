@@ -163,7 +163,8 @@ try {
 
         // 🔥 agora com cache ativado
         $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
-        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida);
+        $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
+        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
 
         if ($result["erro"]) {
             throw new Exception($result["mensagem"]);
@@ -232,7 +233,8 @@ try {
         }
 
         $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
-        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida);
+        $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
+        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
 
         // Toda reprodução conta contra o limite, cache ou não - mas só se
         // realmente saiu áudio (erro da API não deveria consumir a cota).
