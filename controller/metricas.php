@@ -61,8 +61,14 @@ try {
             'streak' => $metricasModel->getStreak($user_id, $idioma_nativo, $idioma_aprendendo),
             'melhor_streak' => $metricasModel->getMelhorStreak($user_id, $idioma_nativo, $idioma_aprendendo),
             'melhor_sequencia_acertos' => $metricasModel->getMelhorSequenciaAcertos($user_id, $idioma_nativo, $idioma_aprendendo),
-            'resumo' => $metricasModel->getResumo($user_id, $idioma_nativo, $idioma_aprendendo)
+            'resumo' => $metricasModel->getResumo($user_id, $idioma_nativo, $idioma_aprendendo),
+            'treino_ia' => $metricasModel->getTreinoIA($user_id)
         ];
+    }
+
+    // ========== TREINO POR IA (Perguntas + Frase do Dia) ==========
+    elseif ($action === 'treino_ia') {
+        $response = $metricasModel->getTreinoIA($user_id);
     }
 
     // ========== GRÁFICO DE DESEMPENHO ==========
