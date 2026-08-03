@@ -31,6 +31,7 @@ require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/DailyQuestionOpenAI.php';
 require_once '../model/PlanoLimitado.php';
+require_once '../model/Nivel.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
 require_once __DIR__ . '/../api/OpenAiTranscribe.php';
 require_once 'moderation.php';
@@ -91,8 +92,9 @@ class DailyQuestionController
             $phrases = $this->getUserPhrases($user_id);
             $idioma = $this->getIdiomaAprendendo($user_id);
             $idiomaNativo = $this->getIdiomaNativo($user_id);
+            $nivel = DailyQuestionOpenAI::getNivelNome($this->pdo, $user_id);
 
-            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chat, $user_id, $phrases, $idioma, $idiomaNativo);
+            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chat, $user_id, $phrases, $idioma, $idiomaNativo, $nivel);
 
             if ($resultado['success']) {
                 $plano = $this->getPlano();
@@ -144,7 +146,9 @@ class DailyQuestionController
                 $user_id,
                 $perguntaId,
                 $_FILES['audio']['tmp_name'],
-                $_FILES['audio']['type'] ?: 'audio/webm'
+                $_FILES['audio']['type'] ?: 'audio/webm',
+                $this->getIdiomaAprendendo($user_id),
+                $this->getIdiomaNativo($user_id)
             );
 
             if ($resultado['success'] && !($resultado['pode_tentar_novamente'] ?? false)) {
