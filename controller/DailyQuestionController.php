@@ -30,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/DailyQuestionOpenAI.php';
+require_once '../model/PlanoLimitado.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
 require_once __DIR__ . '/../api/OpenAiTranscribe.php';
 require_once 'moderation.php';
@@ -89,8 +90,21 @@ class DailyQuestionController
 
             $phrases = $this->getUserPhrases($user_id);
             $idioma = $this->getIdiomaAprendendo($user_id);
+            $idiomaNativo = $this->getIdiomaNativo($user_id);
 
-            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chat, $user_id, $phrases, $idioma);
+            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chat, $user_id, $phrases, $idioma, $idiomaNativo);
+
+            if ($resultado['success']) {
+                $plano = $this->getPlano();
+
+                if ($plano === 1) {
+                    $resultado['numero'] = DailyQuestionOpenAI::contarHoje($this->pdo, $user_id) + 1;
+                    $resultado['total'] = DailyQuestionOpenAI::LIMITE_DIARIO_PREMIUM;
+                } else {
+                    $resultado['numero'] = DailyQuestionOpenAI::contarTotal($this->pdo, $user_id) + 1;
+                    $resultado['total'] = DailyQuestionOpenAI::LIMITE_VITALICIO_LIMITADO;
+                }
+            }
 
             $this->json($resultado);
         } catch (Exception $e) {
@@ -133,6 +147,10 @@ class DailyQuestionController
                 $_FILES['audio']['type'] ?: 'audio/webm'
             );
 
+            if ($resultado['success'] && !($resultado['pode_tentar_novamente'] ?? false)) {
+                PlanoLimitado::verificarEDowngradear($this->pdo, $user_id, $this->getPlano());
+            }
+
             $this->json($resultado);
         } catch (Exception $e) {
             $this->error($e);
@@ -165,14 +183,24 @@ class DailyQuestionController
         }
     }
 
+    // Só frases do par de idioma (nativo/aprendendo) ATUAL do usuário -
+    // sem esse filtro, alguém que já trocou de idioma de estudo (ou tem
+    // frases de mais de um par cadastradas) tinha tudo misturado indo pra
+    // IA junto, gerando pergunta sem relação nenhuma com o que está
+    // estudando agora. Mesmo filtro de idioma_referencia já usado em
+    // Categorias::contarCategoriasAtivas.
     private function getUserPhrases($user_id)
     {
-        $sql = "SELECT texto_traduzido
-                FROM frases
-                WHERE texto_traduzido IS NOT NULL
-                AND usuario_id = :user_id
-                AND TRIM(texto_nativo) <> ''
-                AND status_id > 0";
+        $sql = "SELECT f.texto_traduzido
+                FROM frases f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprendendo
+                    AND ir.id_user = :user_id
+                WHERE f.texto_traduzido IS NOT NULL
+                AND f.usuario_id = :user_id
+                AND TRIM(f.texto_nativo) <> ''
+                AND f.status_id > 0";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
@@ -193,6 +221,21 @@ class DailyQuestionController
         $idioma = $stmt->fetch(PDO::FETCH_ASSOC)['idioma'] ?? null;
 
         return $idioma ?: 'inglês';
+    }
+
+    private function getIdiomaNativo($user_id): string
+    {
+        $sql = "SELECT i.idioma
+                FROM idioma_referencia ir
+                JOIN idiomas i ON i.id = ir.idioma_nativo
+                WHERE ir.id_user = :user_id
+                LIMIT 1";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        $idioma = $stmt->fetch(PDO::FETCH_ASSOC)['idioma'] ?? null;
+
+        return $idioma ?: 'português';
     }
 
     private function getUserId()

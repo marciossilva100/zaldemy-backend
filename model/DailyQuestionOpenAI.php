@@ -10,6 +10,7 @@ class DailyQuestionOpenAI
 {
     const LIMITE_DIARIO_PREMIUM = 5;
     const LIMITE_VITALICIO_LIMITADO = 3;
+    const MAX_TENTATIVAS_POR_PERGUNTA = 3;
 
     public static function contarHoje(PDO $pdo, int $user_id): int
     {
@@ -51,7 +52,7 @@ class DailyQuestionOpenAI
 
     private static function getPendente(PDO $pdo, int $user_id): ?array
     {
-        $sql = "SELECT id, question FROM perguntas_ia
+        $sql = "SELECT id, question, question_traducao FROM perguntas_ia
                 WHERE user_id = :user_id AND status_id = 0
                 ORDER BY id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
@@ -60,12 +61,48 @@ class DailyQuestionOpenAI
         return $row ?: null;
     }
 
-    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome): array
+    // Só conta como "estudada" a frase que já passou pelo menos uma vez pelo
+    // treino 2 (memorizando) - treino_data_atualizacao é um histórico (várias
+    // linhas por frase ao longo do tempo), então cobre o caso de ter voltado
+    // pro treino 1 depois. Frases recém-cadastradas (inclusive as da categoria
+    // criada automaticamente no cadastro, categorias.tipo=3) nunca chegaram
+    // lá, então não contam pra liberar o recurso - só existir a frase não
+    // significa que o aluno já estudou aquele conteúdo.
+    private static function contarFrasesEstudadas(PDO $pdo, int $user_id): int
+    {
+        $sql = "SELECT COUNT(DISTINCT f.id) as total
+                FROM frases f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprendendo
+                    AND ir.id_user = :user_id
+                INNER JOIN treino_data_atualizacao t
+                    ON t.id_frase = f.id
+                    AND t.id_treino >= 2
+                WHERE f.usuario_id = :user_id
+                AND f.status_id > 0";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    }
+
+    // Gera também a tradução da pergunta pro idioma nativo - a tela
+    // funciona como um flashcard (frente = pergunta gerada, verso = tradução).
+    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome): array
     {
         $pendente = self::getPendente($pdo, $user_id);
 
         if ($pendente) {
-            return ["success" => true, "id" => (int) $pendente['id'], "question" => $pendente['question']];
+            return [
+                "success" => true,
+                "id" => (int) $pendente['id'],
+                "question" => $pendente['question'],
+                "traducao" => $pendente['question_traducao'],
+            ];
+        }
+
+        if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
+            return ["success" => false, "message" => "Adicione mais frases aos flashcards para gerar perguntas melhores."];
         }
 
         $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
@@ -77,28 +114,62 @@ class DailyQuestionOpenAI
 
         shuffle($phrases);
         $phrases = array_slice($phrases, 0, 300);
-        $phrases = array_map(fn($p) => mb_substr($p, 0, 200), $phrases);
+        $phrases = array_map(fn($p) => mb_substr($p, 0, 220), $phrases);
         $phrasesText = implode("\n", $phrases);
 
-        $systemPrompt = "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome} baseada apenas nas frases "
-            . "fornecidas pelo aluno, respondível oralmente em uma frase. Máximo 150 caracteres. Não use aspas. "
-            . "Responda apenas com a pergunta.";
+        $systemPrompt = "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome}, respondível oralmente em "
+            . "uma frase, e também a tradução dela em {$idiomaNativoNome}. Baseie pelo menos 80% do vocabulário da pergunta "
+            . "nas frases fornecidas pelo aluno a seguir, pra focar no que ele está estudando. O restante do vocabulário "
+            . "pode ser palavras comuns do idioma, inclusive artigos, conectivos e concordância gramatical necessários pra "
+            . "pergunta soar natural. Máximo 220 caracteres na pergunta. Não use aspas. "
+            . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
 
         $resultado = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => "Frases:\n" . $phrasesText],
-        ]);
+        ], true, 400);
 
         if ($resultado['erro']) {
             return ["success" => false, "message" => "Não foi possível gerar a pergunta: " . $resultado['mensagem']];
         }
 
-        $question = mb_substr(trim($resultado['texto'], "\" \n\r\t"), 0, 150);
+        $decodificado = json_decode($resultado['texto'], true);
 
-        $stmt = $pdo->prepare("INSERT INTO perguntas_ia (user_id, status_id, question) VALUES (:user_id, 0, :question)");
-        $stmt->execute([':user_id' => $user_id, ':question' => $question]);
+        if (!is_array($decodificado) || empty($decodificado['pergunta'])) {
+            return ["success" => false, "message" => "Resposta inválida da IA."];
+        }
 
-        return ["success" => true, "id" => (int) $pdo->lastInsertId(), "question" => $question];
+        $question = mb_substr(trim((string) $decodificado['pergunta'], "\" \n\r\t"), 0, 220);
+        $traducao = mb_substr(trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t"), 0, 220);
+
+        $stmt = $pdo->prepare("INSERT INTO perguntas_ia (user_id, status_id, question, question_traducao) VALUES (:user_id, 0, :question, :traducao)");
+        $stmt->execute([':user_id' => $user_id, ':question' => $question, ':traducao' => $traducao]);
+
+        return ["success" => true, "id" => (int) $pdo->lastInsertId(), "question" => $question, "traducao" => $traducao];
+    }
+
+    // Usado quando a tentativa não chega a gerar nota (áudio vazio ou
+    // conteúdo impróprio) - mesmo assim consome uma tentativa e uma chamada
+    // de IA de verdade (transcrição), então tem que contar pro limite de
+    // MAX_TENTATIVAS_POR_PERGUNTA, senão dá pra ficar gravando áudio vazio
+    // pra sempre sem nunca fechar a pergunta.
+    private static function registrarTentativaSemNota(PDO $pdo, int $perguntaId, int $tentativaAtual, string $transcricao): bool
+    {
+        $esgotou = $tentativaAtual >= self::MAX_TENTATIVAS_POR_PERGUNTA;
+
+        $stmt = $pdo->prepare("
+            UPDATE perguntas_ia
+            SET status_id = :status_id, tentativas = :tentativas, transcricao = :transcricao
+            WHERE id = :id
+        ");
+        $stmt->execute([
+            ':status_id' => $esgotou ? 1 : 0,
+            ':tentativas' => $tentativaAtual,
+            ':transcricao' => $transcricao,
+            ':id' => $perguntaId,
+        ]);
+
+        return $esgotou;
     }
 
     public static function responder(
@@ -110,7 +181,7 @@ class DailyQuestionOpenAI
         string $caminhoAudio,
         string $mimeType
     ): array {
-        $stmt = $pdo->prepare("SELECT question FROM perguntas_ia WHERE id = :id AND user_id = :user_id AND status_id = 0");
+        $stmt = $pdo->prepare("SELECT question, tentativas FROM perguntas_ia WHERE id = :id AND user_id = :user_id AND status_id = 0");
         $stmt->execute([':id' => $perguntaId, ':user_id' => $user_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -119,6 +190,7 @@ class DailyQuestionOpenAI
         }
 
         $question = $row['question'];
+        $tentativaAtual = (int) $row['tentativas'] + 1;
 
         $nomeArquivo = "audio." . self::extensaoParaMime($mimeType);
         $transcricaoResult = $transcribe->transcrever($caminhoAudio, $nomeArquivo, $mimeType);
@@ -133,13 +205,28 @@ class DailyQuestionOpenAI
         // demais, ruído só) - sem essa checagem isso seguia pra correção com
         // uma transcrição vazia, gerando um feedback sem sentido.
         if (trim($transcricao) === '') {
-            return ["success" => false, "message" => "Não conseguimos identificar sua fala no áudio. Tente gravar de novo, falando mais perto do microfone."];
+            $esgotou = self::registrarTentativaSemNota($pdo, $perguntaId, $tentativaAtual, $transcricao);
+
+            return [
+                "success" => false,
+                "audio_vazio" => true,
+                "pode_tentar_novamente" => !$esgotou,
+                "message" => $esgotou
+                    ? "Não conseguimos identificar sua fala nas últimas tentativas. Vamos pra próxima pergunta."
+                    : "Não conseguimos identificar sua fala no áudio. Tente gravar de novo, falando mais perto do microfone."
+            ];
         }
 
         // Mesma checagem já aplicada em frases/categorias - a transcrição é
         // texto que o próprio usuário falou, sem moderação nenhuma antes disso.
         if (verificarConteudoImproprio($transcricao)) {
-            return ["success" => false, "message" => "O áudio contém conteúdo impróprio."];
+            $esgotou = self::registrarTentativaSemNota($pdo, $perguntaId, $tentativaAtual, $transcricao);
+
+            return [
+                "success" => false,
+                "pode_tentar_novamente" => !$esgotou,
+                "message" => "O áudio contém conteúdo impróprio."
+            ];
         }
 
         $systemPrompt = "Você é um professor de idiomas avaliando a resposta ORAL de um aluno. Vai receber a pergunta e a "
@@ -167,12 +254,24 @@ class DailyQuestionOpenAI
         $correto = (bool) ($correcao['correto'] ?? false);
         $feedback = mb_substr((string) ($correcao['feedback'] ?? ''), 0, 300);
 
+        // Só marca como respondida (e conta pro limite) quando a resposta é
+        // boa o suficiente, OU quando já esgotou as tentativas dessa pergunta
+        // (não adianta deixar tentar de novo pra sempre - gasta tokens de IA
+        // à toa numa pergunta que o aluno não está conseguindo acertar).
+        // Enquanto isso não acontece, status_id continua 0 - getPendente()
+        // devolve a mesma pergunta de novo, sem gastar uma tentativa do plano.
+        $passou = $nota >= 5 && $correto;
+        $esgotouTentativas = $tentativaAtual >= self::MAX_TENTATIVAS_POR_PERGUNTA;
+        $statusFinal = ($passou || $esgotouTentativas) ? 1 : 0;
+
         $stmt = $pdo->prepare("
             UPDATE perguntas_ia
-            SET status_id = 1, transcricao = :transcricao, nota = :nota, feedback = :feedback
+            SET status_id = :status_id, tentativas = :tentativas, transcricao = :transcricao, nota = :nota, feedback = :feedback
             WHERE id = :id
         ");
         $stmt->execute([
+            ':status_id' => $statusFinal,
+            ':tentativas' => $tentativaAtual,
             ':transcricao' => $transcricao,
             ':nota' => $nota,
             ':feedback' => $feedback,
@@ -185,6 +284,7 @@ class DailyQuestionOpenAI
             "nota" => $nota,
             "correto" => $correto,
             "feedback" => $feedback,
+            "pode_tentar_novamente" => !$passou && !$esgotouTentativas,
         ];
     }
 

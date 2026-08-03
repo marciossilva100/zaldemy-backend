@@ -38,6 +38,7 @@ if (!isset($_ENV['OPEN_AI'])) {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/FraseDoDia.php';
+require_once '../model/PlanoLimitado.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
 require_once __DIR__ . '/../api/OpenAiTranscribe.php';
 require_once 'moderation.php';
@@ -66,8 +67,10 @@ try {
 
         $chat = new OpenAiChat($_ENV['OPEN_AI']);
         $idioma = FraseDoDia::getIdiomaAprendendo($pdo, $user_id);
+        $idiomaNativo = FraseDoDia::getIdiomaNativo($pdo, $user_id);
+        $frases = FraseDoDia::getFrasesDoUsuario($pdo, $user_id);
 
-        $resultado = FraseDoDia::obterFraseDoDia($pdo, $chat, $user_id, $idioma);
+        $resultado = FraseDoDia::obterFraseDoDia($pdo, $chat, $user_id, $idioma, $idiomaNativo, $frases);
 
         echo json_encode($resultado);
         exit;
@@ -107,6 +110,10 @@ try {
             $_FILES['audio']['tmp_name'],
             $_FILES['audio']['type'] ?: 'audio/webm'
         );
+
+        if ($resultado['success']) {
+            PlanoLimitado::verificarEDowngradear($pdo, $user_id, $plano);
+        }
 
         echo json_encode($resultado);
         exit;
