@@ -30,6 +30,7 @@ require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/Configuracoes.php';
 require_once '../model/Auth.php';
+require_once '../model/AcessoUsuario.php';
 
 
 // lê JSON do body
@@ -113,6 +114,14 @@ try {
         }
 
         echo json_encode($dados);
+        exit;
+    }
+
+    if ($action === 'historico_acessos') {
+        echo json_encode([
+            "success" => true,
+            "acessos" => AcessoUsuario::listar($pdo, $user_id)
+        ]);
         exit;
     }
 
