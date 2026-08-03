@@ -2,6 +2,14 @@
 
 class Configuracoes
 {
+    // Subconjunto curado das vozes nativas do gpt-4o-mini-tts, com nome
+    // amigável exibido no app (Emma/Sophia/David/Michael).
+    const VOZES_TTS_VALIDAS = ['coral', 'nova', 'onyx', 'ash'];
+    const VOZ_TTS_PADRAO = 'nova';
+
+    const VELOCIDADES_TTS_VALIDAS = [0.75, 1.00, 1.25, 1.50];
+    const VELOCIDADE_TTS_PADRAO = 1.00;
+
     public static function setConfiguracoes(PDO $pdo, $user_id): array
     {
         // verificar se já existe configuração para o usuário
@@ -25,13 +33,15 @@ class Configuracoes
 
         // inserir configuração padrão
         $sql = "INSERT INTO configuracoes
-                (quantidade_frases_aprender, user_id)
+                (quantidade_frases_aprender, user_id, voz_tts, velocidade_tts)
                 VALUES
-                (:quantidade_frases_aprender, :user_id)";
+                (:quantidade_frases_aprender, :user_id, :voz_tts, :velocidade_tts)";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':quantidade_frases_aprender', 8, PDO::PARAM_INT);
         $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->bindValue(':voz_tts', self::VOZ_TTS_PADRAO, PDO::PARAM_STR);
+        $stmt->bindValue(':velocidade_tts', self::VELOCIDADE_TTS_PADRAO);
         $stmt->execute();
 
         return [
@@ -45,7 +55,7 @@ class Configuracoes
         // garante que existe uma configuração antes de buscar
         self::setConfiguracoes($pdo, $user_id);
 
-        $sql = "SELECT quantidade_frases_aprender
+        $sql = "SELECT quantidade_frases_aprender, voz_tts, velocidade_tts
                 FROM configuracoes
                 WHERE user_id = :user_id
                 LIMIT 1";
@@ -58,7 +68,94 @@ class Configuracoes
 
         return [
             'success' => true,
-            'quantidade_frases_aprender' => (int) ($configuracao['quantidade_frases_aprender'] ?? 8)
+            'quantidade_frases_aprender' => (int) ($configuracao['quantidade_frases_aprender'] ?? 8),
+            'voz_tts' => $configuracao['voz_tts'] ?? self::VOZ_TTS_PADRAO,
+            'velocidade_tts' => isset($configuracao['velocidade_tts']) ? (float) $configuracao['velocidade_tts'] : self::VELOCIDADE_TTS_PADRAO
+        ];
+    }
+
+    public static function getVozTts(PDO $pdo, $user_id): string
+    {
+        $sql = "SELECT voz_tts FROM configuracoes WHERE user_id = :user_id LIMIT 1";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $voz = $stmt->fetch(PDO::FETCH_ASSOC)['voz_tts'] ?? null;
+
+        return in_array($voz, self::VOZES_TTS_VALIDAS, true) ? $voz : self::VOZ_TTS_PADRAO;
+    }
+
+    public static function getVelocidadeTts(PDO $pdo, $user_id): float
+    {
+        $sql = "SELECT velocidade_tts FROM configuracoes WHERE user_id = :user_id LIMIT 1";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $velocidade = $stmt->fetch(PDO::FETCH_ASSOC)['velocidade_tts'] ?? null;
+        $velocidade = $velocidade !== null ? (float) $velocidade : null;
+
+        return in_array($velocidade, self::VELOCIDADES_TTS_VALIDAS, true) ? $velocidade : self::VELOCIDADE_TTS_PADRAO;
+    }
+
+    public static function atualizarVozTts(PDO $pdo, $user_id, $voz): array
+    {
+        if (!in_array($voz, self::VOZES_TTS_VALIDAS, true)) {
+            return [
+                'success' => false,
+                'message' => 'Voz inválida.'
+            ];
+        }
+
+        // garante que existe uma configuração antes de atualizar
+        self::setConfiguracoes($pdo, $user_id);
+
+        $sql = "UPDATE configuracoes
+                SET voz_tts = :voz_tts
+                WHERE user_id = :user_id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':voz_tts', $voz, PDO::PARAM_STR);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'success' => true,
+            'message' => 'Voz atualizada com sucesso.',
+            'voz_tts' => $voz
+        ];
+    }
+
+    public static function atualizarVelocidadeTts(PDO $pdo, $user_id, $velocidade): array
+    {
+        $velocidade = (float) $velocidade;
+
+        if (!in_array($velocidade, self::VELOCIDADES_TTS_VALIDAS, true)) {
+            return [
+                'success' => false,
+                'message' => 'Velocidade inválida.'
+            ];
+        }
+
+        // garante que existe uma configuração antes de atualizar
+        self::setConfiguracoes($pdo, $user_id);
+
+        $sql = "UPDATE configuracoes
+                SET velocidade_tts = :velocidade_tts
+                WHERE user_id = :user_id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':velocidade_tts', $velocidade);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'success' => true,
+            'message' => 'Velocidade atualizada com sucesso.',
+            'velocidade_tts' => $velocidade
         ];
     }
 

@@ -30,6 +30,7 @@ require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/Configuracoes.php';
 require_once '../model/Auth.php';
+require_once '../model/AcessoUsuario.php';
 
 
 // lê JSON do body
@@ -66,6 +67,44 @@ try {
         exit;
     }
 
+    if ($action === 'atualizar_velocidade_tts') {
+        $velocidade = $input['velocidade_tts'] ?? null;
+
+        if ($velocidade === null) {
+            http_response_code(400);
+            echo json_encode(["error" => "velocidade_tts obrigatória"]);
+            exit;
+        }
+
+        $dados = Configuracoes::atualizarVelocidadeTts($pdo, $user_id, $velocidade);
+
+        if (!$dados['success']) {
+            http_response_code(400);
+        }
+
+        echo json_encode($dados);
+        exit;
+    }
+
+    if ($action === 'atualizar_voz_tts') {
+        $voz = $input['voz_tts'] ?? null;
+
+        if (!$voz) {
+            http_response_code(400);
+            echo json_encode(["error" => "voz_tts obrigatória"]);
+            exit;
+        }
+
+        $dados = Configuracoes::atualizarVozTts($pdo, $user_id, $voz);
+
+        if (!$dados['success']) {
+            http_response_code(400);
+        }
+
+        echo json_encode($dados);
+        exit;
+    }
+
     if ($action === 'excluir_conta') {
         $auth = new Auth($pdo);
         $dados = $auth->excluirConta($user_id);
@@ -75,6 +114,14 @@ try {
         }
 
         echo json_encode($dados);
+        exit;
+    }
+
+    if ($action === 'historico_acessos') {
+        echo json_encode([
+            "success" => true,
+            "acessos" => AcessoUsuario::listar($pdo, $user_id)
+        ]);
         exit;
     }
 

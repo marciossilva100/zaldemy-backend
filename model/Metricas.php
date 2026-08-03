@@ -97,6 +97,51 @@ class Metricas {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
+    // Agregado das features de IA (Perguntas e Frase do Dia) - tabelas
+    // separadas de `metricas`, não ligadas a uma categoria (as perguntas
+    // são geradas a partir de frases de várias categorias, e a Frase do
+    // Dia não pertence a nenhuma), então entram como um resumo geral em
+    // vez de item do breakdown por categoria.
+    public function getTreinoIA($user_id) {
+        $sqlPerguntas = "
+            SELECT COUNT(*) as total, AVG(nota) as media, SUM(CASE WHEN nota >= 5 THEN 1 ELSE 0 END) as acertos
+            FROM perguntas_ia
+            WHERE user_id = :user_id AND status_id = 1 AND nota IS NOT NULL
+        ";
+        $stmt = $this->pdo->prepare($sqlPerguntas);
+        $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+        $perguntas = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $sqlFrases = "
+            SELECT COUNT(*) as total, AVG(nota) as media, SUM(CASE WHEN nota >= 5 THEN 1 ELSE 0 END) as acertos
+            FROM frase_dia_ia
+            WHERE user_id = :user_id AND status_id = 1 AND nota IS NOT NULL
+        ";
+        $stmt2 = $this->pdo->prepare($sqlFrases);
+        $stmt2->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt2->execute();
+        $frases = $stmt2->fetch(PDO::FETCH_ASSOC);
+
+        $totalGeral = (int) $perguntas['total'] + (int) $frases['total'];
+        $acertosGeral = (int) $perguntas['acertos'] + (int) $frases['acertos'];
+
+        return [
+            'perguntas' => [
+                'total' => (int) $perguntas['total'],
+                'media_nota' => $perguntas['media'] !== null ? round((float) $perguntas['media'], 1) : null,
+                'taxa_acerto' => $perguntas['total'] > 0 ? round(($perguntas['acertos'] / $perguntas['total']) * 100, 2) : null,
+            ],
+            'frase_do_dia' => [
+                'total' => (int) $frases['total'],
+                'media_nota' => $frases['media'] !== null ? round((float) $frases['media'], 1) : null,
+                'taxa_acerto' => $frases['total'] > 0 ? round(($frases['acertos'] / $frases['total']) * 100, 2) : null,
+            ],
+            'total_geral' => $totalGeral,
+            'taxa_acerto_geral' => $totalGeral > 0 ? round(($acertosGeral / $totalGeral) * 100, 2) : null,
+        ];
+    }
+
     public function registrar($user_id, $frase_id, $acertou) {
         $sql = "
             INSERT INTO metricas (frase_id, user_id, acertou, created_at)

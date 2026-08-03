@@ -49,18 +49,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/Configuracoes.php';
+require_once '../model/PlanoLimitado.php';
 
-// Voz natural (ElevenLabs) é liberada pro plano premium (limite diário, pra
+// Voz natural (OpenAI TTS) é liberada pro plano premium (limite diário, pra
 // manter o custo por chamada da API sob controle) e, como amostra grátis,
 // pro plano limitado (limite vitalício único - depois disso só virando
 // premium pra continuar usando voz natural).
 const AUDIO_IA_LIMITE_DIARIO = 50;
 const AUDIO_IA_LIMITE_VITALICIO_LIMITADO = 10;
 
-// O custo do ElevenLabs é por caractere, não por chamada - sem esse teto,
-// o limite de chamadas acima não protege o custo de verdade (uma única
-// chamada com texto gigante custaria muito mais que o previsto). Aplica
-// pra todo mundo que tiver acesso, mesmo cap independente do plano.
+// O custo é por caractere, não por chamada - sem esse teto, o limite de
+// chamadas acima não protege o custo de verdade (uma única chamada com
+// texto gigante custaria muito mais que o previsto). Aplica pra todo
+// mundo que tiver acesso, mesmo cap independente do plano.
 const AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA = 300;
 
 function usoAudioIaHoje(PDO $pdo, int $userId): int
@@ -128,12 +129,9 @@ $action = $input['action'] ?? null;
 // =========================
 // 📦 CLASS
 // =========================
-// Trocado de ElevenLabs pra OpenAI (TTS) - api/ElevenLabs.php continua
-// intacto e com a mesma interface (gerarAudio), então voltar atrás é só
-// trocar essas duas linhas de novo.
 require_once __DIR__ . '/../api/OpenAiTts.php';
 
-$eleven = new OpenAiTts($_ENV['OPEN_AI']);
+$tts = new OpenAiTts($_ENV['OPEN_AI']);
 
 try {
 
@@ -164,7 +162,7 @@ try {
         // 🔥 agora com cache ativado
         $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
         $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
-        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
+        $result = $tts->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
 
         if ($result["erro"]) {
             throw new Exception($result["mensagem"]);
@@ -174,6 +172,7 @@ try {
         // usuário podia reproduzir a mesma frase infinitas vezes de graça
         // sem nunca gastar a cota.
         registrarUsoAudioIa($pdo, $user_id);
+        PlanoLimitado::verificarEDowngradear($pdo, $user_id, (int) ($user['plano'] ?? 0));
 
         if (empty($result["audio"])) {
             throw new Exception("Áudio vazio");
@@ -234,12 +233,13 @@ try {
 
         $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
         $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
-        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
+        $result = $tts->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
 
         // Toda reprodução conta contra o limite, cache ou não - mas só se
         // realmente saiu áudio (erro da API não deveria consumir a cota).
         if (!$result["erro"]) {
             registrarUsoAudioIa($pdo, $user_id);
+            PlanoLimitado::verificarEDowngradear($pdo, $user_id, (int) ($user['plano'] ?? 0));
         }
 
         echo json_encode([

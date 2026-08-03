@@ -234,7 +234,11 @@ class Idioma
         $categoria_id = (int) $categoriaEncontrada['id'];
         $categoria = $categoriaEncontrada['categoria'];
 
-        $categoria_id_usuario = Categorias::cadastrarCategoria($pdo,$categoria,$user_id,$categoria_id,0,null,$idiomaNativo,$idiomaAprender);
+        // tipo=3 marca essa categoria como criada automaticamente no cadastro
+        // (uma por idioma) - Categorias::contarCategoriasAtivas() exclui esse
+        // tipo do limite de categorias do plano, já que o usuário não escolheu
+        // criá-la.
+        $categoria_id_usuario = Categorias::cadastrarCategoria($pdo,$categoria,$user_id,$categoria_id,0,3,$idiomaNativo,$idiomaAprender);
 
         $frases = Categorias::getAllFrases($pdo,$categoria_id);
         $response = Categorias::addFrases($pdo,$user_id, $frases,$categoria_id_usuario['id']);
