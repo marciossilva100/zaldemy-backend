@@ -49,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/Configuracoes.php';
+require_once '../model/PlanoLimitado.php';
 
 // Voz natural (OpenAI TTS) é liberada pro plano premium (limite diário, pra
 // manter o custo por chamada da API sob controle) e, como amostra grátis,
@@ -171,6 +172,7 @@ try {
         // usuário podia reproduzir a mesma frase infinitas vezes de graça
         // sem nunca gastar a cota.
         registrarUsoAudioIa($pdo, $user_id);
+        PlanoLimitado::verificarEDowngradear($pdo, $user_id, (int) ($user['plano'] ?? 0));
 
         if (empty($result["audio"])) {
             throw new Exception("Áudio vazio");
@@ -237,6 +239,7 @@ try {
         // realmente saiu áudio (erro da API não deveria consumir a cota).
         if (!$result["erro"]) {
             registrarUsoAudioIa($pdo, $user_id);
+            PlanoLimitado::verificarEDowngradear($pdo, $user_id, (int) ($user['plano'] ?? 0));
         }
 
         echo json_encode([
