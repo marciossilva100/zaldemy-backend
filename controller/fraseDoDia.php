@@ -39,6 +39,7 @@ require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/FraseDoDia.php';
 require_once '../model/PlanoLimitado.php';
+require_once '../model/Nivel.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
 require_once __DIR__ . '/../api/OpenAiTranscribe.php';
 require_once 'moderation.php';
@@ -69,8 +70,9 @@ try {
         $idioma = FraseDoDia::getIdiomaAprendendo($pdo, $user_id);
         $idiomaNativo = FraseDoDia::getIdiomaNativo($pdo, $user_id);
         $frases = FraseDoDia::getFrasesDoUsuario($pdo, $user_id);
+        $nivel = FraseDoDia::getNivelNome($pdo, $user_id);
 
-        $resultado = FraseDoDia::obterFraseDoDia($pdo, $chat, $user_id, $idioma, $idiomaNativo, $frases);
+        $resultado = FraseDoDia::obterFraseDoDia($pdo, $chat, $user_id, $idioma, $idiomaNativo, $frases, $nivel);
 
         echo json_encode($resultado);
         exit;
@@ -108,7 +110,9 @@ try {
             $user_id,
             $fraseId,
             $_FILES['audio']['tmp_name'],
-            $_FILES['audio']['type'] ?: 'audio/webm'
+            $_FILES['audio']['type'] ?: 'audio/webm',
+            FraseDoDia::getIdiomaAprendendo($pdo, $user_id),
+            FraseDoDia::getIdiomaNativo($pdo, $user_id)
         );
 
         if ($resultado['success']) {

@@ -7,6 +7,37 @@ class FraseDoDia
     const LIMITE_DIARIO_PREMIUM = 1;
     const LIMITE_VITALICIO_LIMITADO = 1;
     const MAX_TENTATIVAS_POR_FRASE = 3;
+    const MAX_TENTATIVAS_GERACAO = 5;
+
+    // Chinês, japonês e coreano usam caracteres muito mais densos em
+    // significado que os idiomas alfabéticos - 200-220 caracteres nesses
+    // idiomas equivaleria a um texto MUITO mais longo/complexo (e o cartão
+    // do flashcard estouraria). Usa uma faixa bem menor pra manter a frase
+    // com complexidade equivalente. Mesma lógica em DailyQuestionOpenAI.
+    private static function faixaCaracteresPara(string $idiomaNome): array
+    {
+        $cjk = ['chin', 'japon', 'corean'];
+
+        foreach ($cjk as $termo) {
+            if (mb_stripos($idiomaNome, $termo) !== false) {
+                return [60, 90];
+            }
+        }
+
+        return [200, 220];
+    }
+
+    // Tradução tende a ficar um pouco mais longa que o original (idiomas
+    // alfabéticos) ou seguir a mesma densidade (CJK) - dá uma margem
+    // proporcional ao máximo já calculado pro idioma, em vez de um número
+    // fixo que corta traduções em idiomas CJK bem antes da hora ou trunca
+    // sem folga nenhuma nos idiomas alfabéticos.
+    private static function limiteTraducaoPara(string $idiomaNome): int
+    {
+        [, $max] = self::faixaCaracteresPara($idiomaNome);
+
+        return (int) round($max * 1.3);
+    }
 
     public static function contarHoje(PDO $pdo, int $user_id): int
     {
@@ -90,11 +121,12 @@ class FraseDoDia
     // gerar algo genérico que não cumpriria a promessa de personalização.
     // Gera também a tradução pro idioma nativo - a tela funciona como um
     // flashcard (frente = frase gerada, verso = tradução).
-    public static function obterFraseDoDia(PDO $pdo, OpenAiChat $chat, int $user_id, string $idiomaNome, string $idiomaNativoNome, array $phrases = []): array
+    public static function obterFraseDoDia(PDO $pdo, OpenAiChat $chat, int $user_id, string $idiomaNome, string $idiomaNativoNome, array $phrases = [], ?string $nivelNome = null): array
     {
+        $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
 
-        if ($pendente) {
+        if ($pendente && !empty($pendente['frase_traducao'])) {
             return [
                 "success" => true,
                 "id" => (int) $pendente['id'],
@@ -103,52 +135,180 @@ class FraseDoDia
             ];
         }
 
+        // Pendência órfã (gerada antes da coluna frase_traducao existir) - descarta
+        // e gera uma nova em vez de mostrar um flashcard sem verso.
+        if ($pendente) {
+            $pdo->prepare("DELETE FROM frase_dia_ia WHERE id = :id")->execute([':id' => $pendente['id']]);
+        }
+
         if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
             return ["success" => false, "message" => "Adicione mais frases aos flashcards para gerar sua frase do dia."];
         }
 
-        $phrases = array_values(array_filter($phrases, fn($p) => str_word_count($p) >= 2));
-
-        if (count($phrases) < 3) {
-            return ["success" => false, "message" => "Adicione mais frases aos flashcards para gerar sua frase do dia."];
-        }
+        // Só filtra frases vazias - NÃO exige mais de 1 palavra nem um total
+        // mínimo aqui: quem já passou no gate de contarFrasesEstudadas() tem
+        // conteúdo suficiente pra IA usar, mesmo que as frases individuais
+        // sejam curtas (ex: só "Trip"). O prompt (via $vocabularioEscasso)
+        // já lida com pouco vocabulário sem precisar bloquear o recurso.
+        $phrases = array_values(array_filter($phrases, fn($p) => trim($p) !== ''));
 
         shuffle($phrases);
-        $phrasesText = implode("\n", array_map(fn($p) => mb_substr($p, 0, 220), array_slice($phrases, 0, 30)));
+        [$min, $max] = self::faixaCaracteresPara($idiomaNome);
+        $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome);
+        $phrasesText = implode("\n", array_map(fn($p) => mb_substr($p, 0, $max), array_slice($phrases, 0, 30)));
 
-        $systemPrompt = "Você é um professor de idiomas. Gere UMA frase de exemplo em {$idiomaNome}, natural e do dia a dia, "
-            . "adequada pra um aluno ler em voz alta como exercício de pronúncia, e também a tradução dela em {$idiomaNativoNome}. "
-            . "Baseie pelo menos 80% do vocabulário da frase nas frases que o aluno já estuda (fornecidas a seguir), pra "
-            . "reforçar o que ele está aprendendo - a frase não precisa ser idêntica a nenhuma delas. O restante do "
-            . "vocabulário pode ser palavras comuns do idioma, inclusive artigos, conectivos e concordância gramatical "
-            . "necessários pra frase soar natural. Máximo 220 caracteres na frase. Gramaticalmente correta. Não repita "
-            . "estruturas óbvias como 'My name is'. "
+        // Quando o aluno tem pouco vocabulário estudado (ex: acabou de passar
+        // no gate de 3 frases treinadas, todas curtas), exigir 80% de uso desse
+        // vocabulário bate de frente com o requisito de tamanho da frase -
+        // forçaria repetir sempre as mesmas poucas palavras de forma forçada.
+        // Relaxa a exigência de vocabulário nesse caso, priorizando uma frase
+        // natural e no tamanho certo.
+        $totalPalavrasEstudadas = array_sum(array_map('str_word_count', $phrases));
+        $vocabularioEscasso = $totalPalavrasEstudadas < 40;
+
+        $instrucaoVocabulario = $vocabularioEscasso
+            ? "O aluno ainda tem pouco vocabulário estudado. Use o que fizer sentido das frases dele a seguir, mas "
+                . "tem liberdade de completar com palavras comuns do idioma pra formar uma frase natural e completa - "
+                . "não force repetir sempre as mesmas palavras só pra bater um percentual; priorize soar natural e "
+                . "ficar no tamanho certo."
+            : "Baseie pelo menos 80% do vocabulário da frase nas frases que o aluno já estuda (fornecidas a seguir), "
+                . "pra reforçar o que ele está aprendendo - a frase não precisa ser idêntica a nenhuma delas. O "
+                . "restante do vocabulário pode ser palavras comuns do idioma, inclusive artigos, conectivos e "
+                . "concordância gramatical necessários pra frase soar natural.";
+
+        $systemPrompt = "Você é um professor de idiomas escrevendo uma frase de exemplo em {$idiomaNome} pra um aluno "
+            . "de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical da frase pro nível dele - "
+            . "iniciante pede estruturas simples e vocabulário básico do dia a dia; intermediário pode incluir "
+            . "conectivos e tempos verbais variados; avançado pode usar vocabulário mais rico e estruturas mais "
+            . "elaboradas. "
+            . "REQUISITO MAIS IMPORTANTE: a frase precisa ter entre {$min} e {$max} caracteres, contando espaços e "
+            . "pontuação - conte os caracteres mentalmente antes de responder e, se estiver fora dessa faixa, "
+            . "reescreva até acertar. Frases curtas de uma oração só (tipo 'I like coffee.') SEMPRE ficam curtas "
+            . "demais - por isso a frase precisa ter pelo menos duas orações ligadas por conectivos (e, mas, porque, "
+            . "quando, embora, já que, etc.) ou uma oração com detalhes extras (tempo, lugar, motivo), pra "
+            . "naturalmente ocupar esse espaço. A frase deve ser natural e do dia a dia, adequada pra um aluno ler em "
+            . "voz alta como exercício de pronúncia, e sempre uma afirmação (declarativa) - nunca uma pergunta. "
+            . "{$instrucaoVocabulario} Gramaticalmente correta. Não repita estruturas óbvias como 'My name is'. "
             . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
 
         $userContent = "Frases que o aluno já estuda:\n" . $phrasesText;
 
-        $resultado = $chat->completar([
-            ['role' => 'system', 'content' => $systemPrompt],
-            ['role' => 'user', 'content' => $userContent],
-        ], true, 400);
+        // O prompt já pede a faixa certa de caracteres, mas a IA nem sempre
+        // obedece à risca - tenta de novo (até MAX_TENTATIVAS_GERACAO vezes)
+        // até a frase cair de fato nessa faixa, em vez de confiar só na
+        // instrução.
+        $frase = null;
+        $traducao = null;
 
-        if ($resultado['erro']) {
-            return ["success" => false, "message" => "Não foi possível gerar a frase: " . $resultado['mensagem']];
+        for ($tentativa = 1; $tentativa <= self::MAX_TENTATIVAS_GERACAO; $tentativa++) {
+            $resultado = $chat->completar([
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => $userContent],
+            ], true, 400);
+
+            if ($resultado['erro']) {
+                return ["success" => false, "message" => "Não foi possível gerar a frase: " . $resultado['mensagem']];
+            }
+
+            $decodificado = json_decode($resultado['texto'], true);
+
+            if (!is_array($decodificado) || empty($decodificado['frase'])) {
+                return ["success" => false, "message" => "Resposta inválida da IA."];
+            }
+
+            $fraseCandidata = trim((string) $decodificado['frase'], "\" \n\r\t");
+            $traducaoCandidata = trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t");
+
+            // Se saiu curta, tenta expandir a MESMA frase (tarefa mais fácil pro
+            // modelo acertar do que gerar já com o tamanho certo do zero) antes
+            // de desistir e regenerar tudo de novo.
+            if (mb_strlen($fraseCandidata) < $min) {
+                $expandida = self::expandirFrase($chat, $fraseCandidata, $idiomaNome, $idiomaNativoNome, $min, $max);
+                if ($expandida !== null) {
+                    $fraseCandidata = $expandida['frase'];
+                    $traducaoCandidata = $expandida['traducao'];
+                }
+            }
+
+            if (mb_strlen($fraseCandidata) >= $min && mb_strlen($fraseCandidata) <= $max) {
+                $frase = $fraseCandidata;
+                $traducao = self::truncarPreservandoPalavras($traducaoCandidata, $limiteTraducao);
+                break;
+            }
+
+            // Guarda a última tentativa como fallback caso nenhuma acerte a faixa.
+            $frase = self::truncarPreservandoPalavras($fraseCandidata, $max);
+            $traducao = self::truncarPreservandoPalavras($traducaoCandidata, $limiteTraducao);
         }
-
-        $decodificado = json_decode($resultado['texto'], true);
-
-        if (!is_array($decodificado) || empty($decodificado['frase'])) {
-            return ["success" => false, "message" => "Resposta inválida da IA."];
-        }
-
-        $frase = mb_substr(trim((string) $decodificado['frase'], "\" \n\r\t"), 0, 220);
-        $traducao = mb_substr(trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t"), 0, 220);
 
         $stmt = $pdo->prepare("INSERT INTO frase_dia_ia (user_id, frase, frase_traducao, status_id) VALUES (:user_id, :frase, :traducao, 0)");
         $stmt->execute([':user_id' => $user_id, ':frase' => $frase, ':traducao' => $traducao]);
 
         return ["success" => true, "id" => (int) $pdo->lastInsertId(), "frase" => $frase, "traducao" => $traducao];
+    }
+
+    // mb_substr corta no meio de uma palavra quando o texto passa do limite -
+    // isso deixava traduções cortadas de forma feia (ex: "vale a pen" em vez
+    // de "vale a pena..."). Corta no último espaço antes do limite. Chinês/
+    // japonês não usam espaço entre palavras, então cai pra pontuação (。！？，、
+    // e equivalentes ocidentais) como ponto de corte nesses casos.
+    private static function truncarPreservandoPalavras(string $texto, int $limite): string
+    {
+        if (mb_strlen($texto) <= $limite) {
+            return $texto;
+        }
+
+        $cortado = mb_substr($texto, 0, $limite);
+        $pontoDeCorte = mb_strrpos($cortado, ' ');
+
+        if ($pontoDeCorte === false) {
+            foreach (['。', '！', '？', '、', '，', '.', '!', '?', ','] as $pontuacao) {
+                $posicao = mb_strrpos($cortado, $pontuacao);
+                if ($posicao !== false && ($pontoDeCorte === false || $posicao > $pontoDeCorte)) {
+                    $pontoDeCorte = $posicao + 1;
+                }
+            }
+        }
+
+        if ($pontoDeCorte !== false) {
+            $cortado = mb_substr($cortado, 0, $pontoDeCorte);
+        }
+
+        return rtrim($cortado, " ,;:-、，");
+    }
+
+    // Expande uma frase curta demais em vez de descartar e gerar tudo de novo -
+    // pedir pra IA completar um texto existente até um tamanho é uma tarefa
+    // mais confiável do que pedir pra acertar o tamanho certo já na primeira
+    // geração.
+    private static function expandirFrase(OpenAiChat $chat, string $frase, string $idiomaNome, string $idiomaNativoNome, int $min, int $max): ?array
+    {
+        $tamanhoAtual = mb_strlen($frase);
+
+        $prompt = "A frase a seguir, em {$idiomaNome}, tem {$tamanhoAtual} caracteres e está curta demais. Reescreva "
+            . "ela adicionando um detalhe ou uma oração extra (ligada por 'e', 'porque', 'quando', 'mas', 'já que', "
+            . "etc.), mantendo o sentido original, até ficar com EXATAMENTE entre {$min} e {$max} caracteres no total. "
+            . "Também gere a tradução em {$idiomaNativoNome}. Frase original: \"{$frase}\". "
+            . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
+
+        $resultado = $chat->completar([
+            ['role' => 'system', 'content' => $prompt],
+        ], true, 400);
+
+        if ($resultado['erro']) {
+            return null;
+        }
+
+        $decodificado = json_decode($resultado['texto'], true);
+
+        if (!is_array($decodificado) || empty($decodificado['frase'])) {
+            return null;
+        }
+
+        return [
+            'frase' => trim((string) $decodificado['frase'], "\" \n\r\t"),
+            'traducao' => trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t"),
+        ];
     }
 
     // Usado quando a tentativa não chega a gerar nota (áudio vazio ou
@@ -182,7 +342,9 @@ class FraseDoDia
         int $user_id,
         int $fraseId,
         string $caminhoAudio,
-        string $mimeType
+        string $mimeType,
+        string $idiomaNome,
+        string $idiomaNativoNome
     ): array {
         $stmt = $pdo->prepare("SELECT frase, tentativas FROM frase_dia_ia WHERE id = :id AND user_id = :user_id AND status_id = 0");
         $stmt->execute([':id' => $fraseId, ':user_id' => $user_id]);
@@ -236,10 +398,15 @@ class FraseDoDia
         }
 
         $systemPrompt = "Você é um professor de idiomas avaliando a leitura em voz alta de um aluno. "
-            . "Vai receber a frase original e a transcrição de voz-pra-texto do que o aluno disse. "
-            . "Divergências entre elas podem indicar erro de pronúncia, palavra trocada/omitida ou hesitação. "
-            . "Avalie gramática, pronúncia (com base na divergência da transcrição) e fluência. "
-            . "Dê nota de 0 a 10 e feedback curto (máx 150 caracteres cada campo) em português, gentil e específico. "
+            . "Vai receber a frase original (em {$idiomaNome}) e a transcrição de voz-pra-texto do que o aluno disse. "
+            . "REQUISITO OBRIGATÓRIO: o aluno precisa ler em {$idiomaNome} - se a transcrição estiver em outro idioma "
+            . "(por exemplo, se ele leu a tradução em vez da frase original), a leitura é automaticamente incorreta "
+            . "(nota no máximo 3 em todos os campos), e o feedback de pronúncia deve deixar claro que ele leu no "
+            . "idioma errado. Se estiver no idioma certo, divergências entre a frase original e a transcrição podem "
+            . "indicar erro de pronúncia, palavra trocada/omitida ou hesitação - avalie gramática, pronúncia (com base "
+            . "na divergência da transcrição) e fluência normalmente. "
+            . "Dê nota de 0 a 10 e feedback curto (máx 150 caracteres cada campo) em {$idiomaNativoNome}, gentil e "
+            . "específico. "
             . 'Responda em JSON: {"nota": 0-10, "feedback_gramatica": "...", "feedback_pronuncia": "...", "feedback_fluencia": "..."}';
 
         $correcaoResult = $chat->completar([
@@ -352,5 +519,16 @@ class FraseDoDia
         $idioma = $stmt->fetch(PDO::FETCH_ASSOC)['idioma'] ?? null;
 
         return $idioma ?: 'português';
+    }
+
+    // Nível de proficiência informado pelo usuário no cadastro (Nivel::registrar)
+    // - usado no prompt pra ajustar a complexidade da frase gerada.
+    public static function getNivelNome(PDO $pdo, int $user_id): string
+    {
+        $stmt = $pdo->prepare("SELECT nivel FROM usuarios WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        $nivel = $stmt->fetch(PDO::FETCH_ASSOC)['nivel'] ?? null;
+
+        return Nivel::nomeParaPrompt($nivel !== null ? (int) $nivel : null);
     }
 }

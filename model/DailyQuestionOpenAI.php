@@ -12,6 +12,32 @@ class DailyQuestionOpenAI
     const LIMITE_VITALICIO_LIMITADO = 3;
     const MAX_TENTATIVAS_POR_PERGUNTA = 3;
 
+    // Chinês, japonês e coreano usam caracteres muito mais densos em
+    // significado que os idiomas alfabéticos - 220 caracteres nesses idiomas
+    // equivaleria a uma pergunta MUITO mais longa/complexa (e o cartão do
+    // flashcard estouraria). Usa um máximo bem menor pra manter a pergunta
+    // com complexidade equivalente. Mesma lógica em FraseDoDia.
+    private static function limiteCaracteresPara(string $idiomaNome): int
+    {
+        $cjk = ['chin', 'japon', 'corean'];
+
+        foreach ($cjk as $termo) {
+            if (mb_stripos($idiomaNome, $termo) !== false) {
+                return 90;
+            }
+        }
+
+        return 220;
+    }
+
+    // Tradução tende a ficar um pouco mais longa que o original (idiomas
+    // alfabéticos) ou seguir a mesma densidade (CJK) - dá uma margem
+    // proporcional ao máximo já calculado pro idioma.
+    private static function limiteTraducaoPara(string $idiomaNome): int
+    {
+        return (int) round(self::limiteCaracteresPara($idiomaNome) * 1.3);
+    }
+
     public static function contarHoje(PDO $pdo, int $user_id): int
     {
         $sql = "SELECT COUNT(*) as total FROM perguntas_ia
@@ -86,19 +112,37 @@ class DailyQuestionOpenAI
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     }
 
+    // Nível de proficiência informado pelo usuário no cadastro (Nivel::registrar)
+    // - usado no prompt pra ajustar a complexidade da pergunta gerada.
+    public static function getNivelNome(PDO $pdo, int $user_id): string
+    {
+        $stmt = $pdo->prepare("SELECT nivel FROM usuarios WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        $nivel = $stmt->fetch(PDO::FETCH_ASSOC)['nivel'] ?? null;
+
+        return Nivel::nomeParaPrompt($nivel !== null ? (int) $nivel : null);
+    }
+
     // Gera também a tradução da pergunta pro idioma nativo - a tela
     // funciona como um flashcard (frente = pergunta gerada, verso = tradução).
-    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome): array
+    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome, ?string $nivelNome = null): array
     {
+        $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
 
-        if ($pendente) {
+        if ($pendente && !empty($pendente['question_traducao'])) {
             return [
                 "success" => true,
                 "id" => (int) $pendente['id'],
                 "question" => $pendente['question'],
                 "traducao" => $pendente['question_traducao'],
             ];
+        }
+
+        // Pendência órfã (gerada antes da coluna question_traducao existir) - descarta
+        // e gera uma nova em vez de mostrar um flashcard sem verso.
+        if ($pendente) {
+            $pdo->prepare("DELETE FROM perguntas_ia WHERE id = :id")->execute([':id' => $pendente['id']]);
         }
 
         if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
@@ -113,15 +157,21 @@ class DailyQuestionOpenAI
         }
 
         shuffle($phrases);
+        $maxPergunta = self::limiteCaracteresPara($idiomaNome);
+        $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome);
         $phrases = array_slice($phrases, 0, 300);
-        $phrases = array_map(fn($p) => mb_substr($p, 0, 220), $phrases);
+        $phrases = array_map(fn($p) => mb_substr($p, 0, $maxPergunta), $phrases);
         $phrasesText = implode("\n", $phrases);
 
-        $systemPrompt = "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome}, respondível oralmente em "
-            . "uma frase, e também a tradução dela em {$idiomaNativoNome}. Baseie pelo menos 80% do vocabulário da pergunta "
-            . "nas frases fornecidas pelo aluno a seguir, pra focar no que ele está estudando. O restante do vocabulário "
-            . "pode ser palavras comuns do idioma, inclusive artigos, conectivos e concordância gramatical necessários pra "
-            . "pergunta soar natural. Máximo 220 caracteres na pergunta. Não use aspas. "
+        $systemPrompt = "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome}, pra um aluno de "
+            . "nível {$nivelNome}, respondível oralmente em uma frase, e também a tradução dela em {$idiomaNativoNome}. "
+            . "Ajuste o vocabulário e a complexidade gramatical da pergunta pro nível do aluno - iniciante pede "
+            . "estruturas simples e vocabulário básico; intermediário pode incluir conectivos e tempos verbais "
+            . "variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. Baseie pelo menos 80% "
+            . "do vocabulário da pergunta nas frases fornecidas pelo aluno a seguir, pra focar no que ele está "
+            . "estudando. O restante do vocabulário pode ser palavras comuns do idioma, inclusive artigos, conectivos "
+            . "e concordância gramatical necessários pra pergunta soar natural. Máximo {$maxPergunta} caracteres na "
+            . "pergunta. Não use aspas. "
             . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
 
         $resultado = $chat->completar([
@@ -139,13 +189,43 @@ class DailyQuestionOpenAI
             return ["success" => false, "message" => "Resposta inválida da IA."];
         }
 
-        $question = mb_substr(trim((string) $decodificado['pergunta'], "\" \n\r\t"), 0, 220);
-        $traducao = mb_substr(trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t"), 0, 220);
+        $question = self::truncarPreservandoPalavras(trim((string) $decodificado['pergunta'], "\" \n\r\t"), $maxPergunta);
+        $traducao = self::truncarPreservandoPalavras(trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t"), $limiteTraducao);
 
         $stmt = $pdo->prepare("INSERT INTO perguntas_ia (user_id, status_id, question, question_traducao) VALUES (:user_id, 0, :question, :traducao)");
         $stmt->execute([':user_id' => $user_id, ':question' => $question, ':traducao' => $traducao]);
 
         return ["success" => true, "id" => (int) $pdo->lastInsertId(), "question" => $question, "traducao" => $traducao];
+    }
+
+    // mb_substr corta no meio de uma palavra quando o texto passa do limite -
+    // isso deixava traduções cortadas de forma feia. Corta no último espaço
+    // antes do limite. Chinês/japonês não usam espaço entre palavras, então
+    // cai pra pontuação (。！？，、e equivalentes ocidentais) nesses casos.
+    // Mesma lógica usada em FraseDoDia::truncarPreservandoPalavras.
+    private static function truncarPreservandoPalavras(string $texto, int $limite): string
+    {
+        if (mb_strlen($texto) <= $limite) {
+            return $texto;
+        }
+
+        $cortado = mb_substr($texto, 0, $limite);
+        $pontoDeCorte = mb_strrpos($cortado, ' ');
+
+        if ($pontoDeCorte === false) {
+            foreach (['。', '！', '？', '、', '，', '.', '!', '?', ','] as $pontuacao) {
+                $posicao = mb_strrpos($cortado, $pontuacao);
+                if ($posicao !== false && ($pontoDeCorte === false || $posicao > $pontoDeCorte)) {
+                    $pontoDeCorte = $posicao + 1;
+                }
+            }
+        }
+
+        if ($pontoDeCorte !== false) {
+            $cortado = mb_substr($cortado, 0, $pontoDeCorte);
+        }
+
+        return rtrim($cortado, " ,;:-、，");
     }
 
     // Usado quando a tentativa não chega a gerar nota (áudio vazio ou
@@ -179,7 +259,9 @@ class DailyQuestionOpenAI
         int $user_id,
         int $perguntaId,
         string $caminhoAudio,
-        string $mimeType
+        string $mimeType,
+        string $idiomaNome,
+        string $idiomaNativoNome
     ): array {
         $stmt = $pdo->prepare("SELECT question, tentativas FROM perguntas_ia WHERE id = :id AND user_id = :user_id AND status_id = 0");
         $stmt->execute([':id' => $perguntaId, ':user_id' => $user_id]);
@@ -230,9 +312,13 @@ class DailyQuestionOpenAI
         }
 
         $systemPrompt = "Você é um professor de idiomas avaliando a resposta ORAL de um aluno. Vai receber a pergunta e a "
-            . "transcrição da resposta falada (hesitação/frase incompleta aparece como texto desconexo). Avalie se responde "
-            . "à pergunta e a qualidade gramatical/fluência. Dê nota de 0 a 10, se está correto, e explique os principais "
-            . "erros em português (máx 200 caracteres). "
+            . "transcrição da resposta falada (hesitação/frase incompleta aparece como texto desconexo). "
+            . "REQUISITO OBRIGATÓRIO: o aluno precisa responder em {$idiomaNome} (o mesmo idioma da pergunta) - se a "
+            . "transcrição estiver em outro idioma (incluindo o idioma nativo do aluno), a resposta é automaticamente "
+            . "incorreta (nota baixa, no máximo 3, correto=false), mesmo que o conteúdo em si responda bem à pergunta. "
+            . "Nesse caso, o feedback deve deixar claro que a resposta precisa ser em {$idiomaNome}. Se estiver no "
+            . "idioma certo, avalie normalmente se responde à pergunta e a qualidade gramatical/fluência. Dê nota de 0 "
+            . "a 10, se está correto, e explique os principais erros em {$idiomaNativoNome} (máx 200 caracteres). "
             . 'Responda em JSON: {"nota": 0-10, "correto": true ou false, "feedback": "..."}';
 
         $correcaoResult = $chat->completar([
