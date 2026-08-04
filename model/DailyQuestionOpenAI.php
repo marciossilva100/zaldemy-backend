@@ -136,6 +136,7 @@ class DailyQuestionOpenAI
                 "id" => (int) $pendente['id'],
                 "question" => $pendente['question'],
                 "traducao" => $pendente['question_traducao'],
+                "question_destacada" => self::destacarPalavrasConhecidas($pendente['question'], $phrases, $idiomaNome),
             ];
         }
 
@@ -148,6 +149,12 @@ class DailyQuestionOpenAI
         if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
             return ["success" => false, "message" => "Adicione mais frases aos flashcards para gerar perguntas melhores."];
         }
+
+        // Guarda a lista original (antes do filtro de tamanho mínimo abaixo)
+        // pra montar o destaque de vocabulário conhecido - frases curtas
+        // também contam como vocabulário já estudado, mesmo não servindo
+        // como exemplo pro prompt.
+        $phrasesOriginais = $phrases;
 
         $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
         $phrases = array_values($phrases);
@@ -195,7 +202,64 @@ class DailyQuestionOpenAI
         $stmt = $pdo->prepare("INSERT INTO perguntas_ia (user_id, status_id, question, question_traducao) VALUES (:user_id, 0, :question, :traducao)");
         $stmt->execute([':user_id' => $user_id, ':question' => $question, ':traducao' => $traducao]);
 
-        return ["success" => true, "id" => (int) $pdo->lastInsertId(), "question" => $question, "traducao" => $traducao];
+        return [
+            "success" => true,
+            "id" => (int) $pdo->lastInsertId(),
+            "question" => $question,
+            "traducao" => $traducao,
+            "question_destacada" => self::destacarPalavrasConhecidas($question, $phrasesOriginais, $idiomaNome),
+        ];
+    }
+
+    // Marca no texto gerado quais trechos vêm do vocabulário que o aluno já
+    // estuda (as frases passadas pro prompt) - o frontend usa isso pra
+    // destacar visualmente essas palavras. Idiomas CJK (sem espaço entre
+    // palavras) usam granularidade de caractere; os demais, de palavra.
+    private static function destacarPalavrasConhecidas(string $texto, array $phrases, string $idiomaNome): array
+    {
+        $cjk = false;
+        foreach (['chin', 'japon', 'corean'] as $termo) {
+            if (mb_stripos($idiomaNome, $termo) !== false) {
+                $cjk = true;
+                break;
+            }
+        }
+
+        $vocabulario = [];
+        foreach ($phrases as $frase) {
+            if ($cjk) {
+                preg_match_all('/\p{L}/u', $frase, $m);
+            } else {
+                preg_match_all('/[\p{L}\p{N}\']+/u', mb_strtolower($frase), $m);
+            }
+            foreach ($m[0] as $unidade) {
+                $vocabulario[$unidade] = true;
+            }
+        }
+
+        if ($cjk) {
+            $tokens = preg_split('//u', $texto, -1, PREG_SPLIT_NO_EMPTY);
+            $resultado = [];
+            foreach ($tokens as $caractere) {
+                $ehLetra = preg_match('/\p{L}/u', $caractere) === 1;
+                $resultado[] = [
+                    'texto' => $caractere,
+                    'destaque' => $ehLetra && isset($vocabulario[$caractere]),
+                ];
+            }
+            return $resultado;
+        }
+
+        $tokens = preg_split('/([\p{L}\p{N}\']+)/u', $texto, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+        $resultado = [];
+        foreach ($tokens as $token) {
+            $ehPalavra = preg_match('/^[\p{L}\p{N}\']+$/u', $token) === 1;
+            $resultado[] = [
+                'texto' => $token,
+                'destaque' => $ehPalavra && isset($vocabulario[mb_strtolower($token)]),
+            ];
+        }
+        return $resultado;
     }
 
     // mb_substr corta no meio de uma palavra quando o texto passa do limite -
