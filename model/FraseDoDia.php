@@ -9,6 +9,12 @@ class FraseDoDia
     const MAX_TENTATIVAS_POR_FRASE = 3;
     const MAX_TENTATIVAS_GERACAO = 5;
 
+    // Tamanho máximo de trecho (palavras ou caracteres, conforme o idioma)
+    // considerado ao montar/buscar os n-gramas do destaque de vocabulário -
+    // suficiente pra capturar frases inteiras curtas sem custo quadrático
+    // alto em frases muito longas.
+    const MAX_TAMANHO_TRECHO = 10;
+
     // Chinês, japonês e coreano usam caracteres muito mais densos em
     // significado que os idiomas alfabéticos - 200-220 caracteres nesses
     // idiomas equivaleria a um texto MUITO mais longo/complexo (e o cartão
@@ -259,10 +265,14 @@ class FraseDoDia
         ];
     }
 
-    // Marca no texto gerado quais trechos vêm do vocabulário que o aluno já
-    // estuda (as frases passadas pro prompt) - o frontend usa isso pra
-    // destacar visualmente essas palavras. Idiomas CJK (sem espaço entre
-    // palavras) usam granularidade de caractere; os demais, de palavra.
+    // Marca no texto gerado quais TRECHOS (2+ palavras/caracteres seguidos)
+    // vêm de uma frase que o aluno já estuda - o frontend usa isso pra
+    // destacar visualmente. Não marca palavras soltas isoladas (artigo,
+    // preposição etc. bateriam com qualquer frase por coincidência e não diz
+    // nada sobre o que o aluno realmente está estudando) - só quando o texto
+    // gerado reaproveita um pedaço de verdade de alguma frase dele. Idiomas
+    // CJK (sem espaço entre palavras) usam granularidade de caractere; os
+    // demais, de palavra.
     private static function destacarPalavrasConhecidas(string $texto, array $phrases, string $idiomaNome): array
     {
         $cjk = false;
@@ -273,39 +283,137 @@ class FraseDoDia
             }
         }
 
-        $vocabulario = [];
+        return $cjk
+            ? self::destacarTrechosPorCaractere($texto, $phrases)
+            : self::destacarTrechosPorPalavra($texto, $phrases);
+    }
+
+    // Constrói o conjunto de todos os n-gramas (sequências contíguas de 2+
+    // palavras, até MAX_TAMANHO_TRECHO) presentes nas frases do aluno, pra
+    // busca O(1) por trecho candidato.
+    private static function construirNGramasPalavras(array $phrases): array
+    {
+        $ngramas = [];
+
         foreach ($phrases as $frase) {
-            if ($cjk) {
-                preg_match_all('/\p{L}/u', $frase, $m);
-            } else {
-                preg_match_all('/[\p{L}\p{N}\']+/u', mb_strtolower($frase), $m);
-            }
-            foreach ($m[0] as $unidade) {
-                $vocabulario[$unidade] = true;
+            preg_match_all('/[\p{L}\p{N}\']+/u', mb_strtolower($frase), $m);
+            $palavras = $m[0];
+            $total = count($palavras);
+            $maxTam = min(self::MAX_TAMANHO_TRECHO, $total);
+
+            for ($tam = 2; $tam <= $maxTam; $tam++) {
+                for ($ini = 0; $ini <= $total - $tam; $ini++) {
+                    $ngramas[implode(' ', array_slice($palavras, $ini, $tam))] = true;
+                }
             }
         }
 
-        if ($cjk) {
-            $tokens = preg_split('//u', $texto, -1, PREG_SPLIT_NO_EMPTY);
-            $resultado = [];
-            foreach ($tokens as $caractere) {
-                $ehLetra = preg_match('/\p{L}/u', $caractere) === 1;
-                $resultado[] = [
-                    'texto' => $caractere,
-                    'destaque' => $ehLetra && isset($vocabulario[$caractere]),
-                ];
-            }
-            return $resultado;
-        }
+        return $ngramas;
+    }
 
+    private static function destacarTrechosPorPalavra(string $texto, array $phrases): array
+    {
+        $ngramas = self::construirNGramasPalavras($phrases);
+
+        // preserva separadores (espaços/pontuação) como tokens próprios, pra
+        // devolver o texto completo pro frontend renderizar
         $tokens = preg_split('/([\p{L}\p{N}\']+)/u', $texto, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+
+        $palavrasTexto = [];
+        foreach ($tokens as $i => $token) {
+            if (preg_match('/^[\p{L}\p{N}\']+$/u', $token) === 1) {
+                $palavrasTexto[] = ['indiceToken' => $i, 'palavra' => mb_strtolower($token)];
+            }
+        }
+
+        $destacado = array_fill(0, count($tokens), false);
+        $totalPalavras = count($palavrasTexto);
+        $i = 0;
+
+        // busca gulosa: em cada posição, tenta o maior trecho possível antes
+        // de desistir e avançar uma palavra - garante que "eu gosto de viajar
+        // muito" destaque o trecho inteiro, não só pedaços de 2 em 2.
+        while ($i < $totalPalavras) {
+            $encontrou = false;
+            $maxTam = min(self::MAX_TAMANHO_TRECHO, $totalPalavras - $i);
+
+            for ($tam = $maxTam; $tam >= 2; $tam--) {
+                $palavras = array_map(fn($p) => $p['palavra'], array_slice($palavrasTexto, $i, $tam));
+
+                if (isset($ngramas[implode(' ', $palavras)])) {
+                    $primeiroIndice = $palavrasTexto[$i]['indiceToken'];
+                    $ultimoIndice = $palavrasTexto[$i + $tam - 1]['indiceToken'];
+
+                    for ($t = $primeiroIndice; $t <= $ultimoIndice; $t++) {
+                        $destacado[$t] = true;
+                    }
+
+                    $i += $tam;
+                    $encontrou = true;
+                    break;
+                }
+            }
+
+            if (!$encontrou) {
+                $i++;
+            }
+        }
+
         $resultado = [];
-        foreach ($tokens as $token) {
-            $ehPalavra = preg_match('/^[\p{L}\p{N}\']+$/u', $token) === 1;
-            $resultado[] = [
-                'texto' => $token,
-                'destaque' => $ehPalavra && isset($vocabulario[mb_strtolower($token)]),
-            ];
+        foreach ($tokens as $idx => $token) {
+            $resultado[] = ['texto' => $token, 'destaque' => $destacado[$idx]];
+        }
+        return $resultado;
+    }
+
+    private static function destacarTrechosPorCaractere(string $texto, array $phrases): array
+    {
+        $ngramas = [];
+
+        foreach ($phrases as $frase) {
+            $caracteres = preg_split('//u', $frase, -1, PREG_SPLIT_NO_EMPTY);
+            $caracteres = array_values(array_filter($caracteres, fn($c) => preg_match('/\p{L}/u', $c) === 1));
+            $total = count($caracteres);
+            $maxTam = min(self::MAX_TAMANHO_TRECHO, $total);
+
+            for ($tam = 2; $tam <= $maxTam; $tam++) {
+                for ($ini = 0; $ini <= $total - $tam; $ini++) {
+                    $ngramas[implode('', array_slice($caracteres, $ini, $tam))] = true;
+                }
+            }
+        }
+
+        $tokens = preg_split('//u', $texto, -1, PREG_SPLIT_NO_EMPTY);
+        $destacado = array_fill(0, count($tokens), false);
+        $totalTokens = count($tokens);
+        $i = 0;
+
+        while ($i < $totalTokens) {
+            $encontrou = false;
+            $maxTam = min(self::MAX_TAMANHO_TRECHO, $totalTokens - $i);
+
+            for ($tam = $maxTam; $tam >= 2; $tam--) {
+                $trecho = implode('', array_slice($tokens, $i, $tam));
+
+                if (isset($ngramas[$trecho])) {
+                    for ($t = $i; $t < $i + $tam; $t++) {
+                        $destacado[$t] = true;
+                    }
+
+                    $i += $tam;
+                    $encontrou = true;
+                    break;
+                }
+            }
+
+            if (!$encontrou) {
+                $i++;
+            }
+        }
+
+        $resultado = [];
+        foreach ($tokens as $idx => $token) {
+            $resultado[] = ['texto' => $token, 'destaque' => $destacado[$idx]];
         }
         return $resultado;
     }
