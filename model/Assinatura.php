@@ -53,6 +53,52 @@ class Assinatura
         return ['success' => true, 'url' => $session->url];
     }
 
+    // Agenda o cancelamento pro fim do período já pago (cancel_at_period_end) -
+    // não corta o acesso na hora, já que o usuário pagou por esse período.
+    // O rebaixamento de plano de verdade só acontece quando o Stripe manda o
+    // evento customer.subscription.deleted (processarWebhook), no fim do ciclo.
+    public static function cancelarAssinatura(PDO $pdo, int $user_id): array
+    {
+        $stmt = $pdo->prepare("SELECT stripe_subscription_id FROM usuarios WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        $subscriptionId = $stmt->fetch(PDO::FETCH_ASSOC)['stripe_subscription_id'] ?? null;
+
+        if (!$subscriptionId) {
+            return ['success' => false, 'message' => 'Nenhuma assinatura ativa encontrada.'];
+        }
+
+        $stripe = self::client();
+        $subscription = $stripe->subscriptions->update($subscriptionId, ['cancel_at_period_end' => true]);
+
+        $previsto = date('Y-m-d H:i:s', $subscription->current_period_end);
+
+        $stmt = $pdo->prepare("UPDATE usuarios SET assinatura_cancelamento_previsto = :previsto WHERE id = :id");
+        $stmt->execute([':previsto' => $previsto, ':id' => $user_id]);
+
+        return ['success' => true, 'cancelamento_previsto' => $previsto];
+    }
+
+    // Desfaz um cancelamento agendado (ainda dentro do período pago) -
+    // simplesmente reverte cancel_at_period_end antes do fim do ciclo.
+    public static function reativarAssinatura(PDO $pdo, int $user_id): array
+    {
+        $stmt = $pdo->prepare("SELECT stripe_subscription_id FROM usuarios WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        $subscriptionId = $stmt->fetch(PDO::FETCH_ASSOC)['stripe_subscription_id'] ?? null;
+
+        if (!$subscriptionId) {
+            return ['success' => false, 'message' => 'Nenhuma assinatura encontrada.'];
+        }
+
+        $stripe = self::client();
+        $stripe->subscriptions->update($subscriptionId, ['cancel_at_period_end' => false]);
+
+        $stmt = $pdo->prepare("UPDATE usuarios SET assinatura_cancelamento_previsto = NULL WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+
+        return ['success' => true];
+    }
+
     // Verifica a assinatura do webhook (garante que a chamada veio mesmo do
     // Stripe) e atualiza o plano do usuário conforme o evento recebido.
     public static function processarWebhook(PDO $pdo, string $payload, string $sigHeader): array
@@ -73,7 +119,10 @@ class Assinatura
 
             case 'customer.subscription.updated':
                 $subscription = $event->data->object;
-                self::atualizarStatusPorCustomer($pdo, $subscription->customer, $subscription->id, $subscription->status);
+                $previsto = $subscription->cancel_at_period_end
+                    ? date('Y-m-d H:i:s', $subscription->current_period_end)
+                    : null;
+                self::atualizarStatusPorCustomer($pdo, $subscription->customer, $subscription->id, $subscription->status, $previsto);
                 break;
 
             case 'customer.subscription.deleted':
@@ -87,9 +136,11 @@ class Assinatura
 
     private static function ativarAssinatura(PDO $pdo, ?string $userId, string $customerId, string $subscriptionId): void
     {
+        // Limpa qualquer cancelamento agendado de uma assinatura anterior -
+        // esse é um checkout novo.
         $sql = $userId
-            ? "UPDATE usuarios SET plano = 1, assinatura_status = 'active', stripe_customer_id = :cid, stripe_subscription_id = :sid WHERE id = :id"
-            : "UPDATE usuarios SET plano = 1, assinatura_status = 'active', stripe_subscription_id = :sid WHERE stripe_customer_id = :cid";
+            ? "UPDATE usuarios SET plano = 1, assinatura_status = 'active', assinatura_cancelamento_previsto = NULL, stripe_customer_id = :cid, stripe_subscription_id = :sid WHERE id = :id"
+            : "UPDATE usuarios SET plano = 1, assinatura_status = 'active', assinatura_cancelamento_previsto = NULL, stripe_subscription_id = :sid WHERE stripe_customer_id = :cid";
 
         $stmt = $pdo->prepare($sql);
         $params = [':cid' => $customerId, ':sid' => $subscriptionId];
@@ -99,22 +150,29 @@ class Assinatura
         $stmt->execute($params);
     }
 
-    private static function atualizarStatusPorCustomer(PDO $pdo, string $customerId, string $subscriptionId, string $status): void
+    private static function atualizarStatusPorCustomer(PDO $pdo, string $customerId, string $subscriptionId, string $status, ?string $cancelamentoPrevisto): void
     {
         // Enquanto o Stripe ainda está tentando cobrar (past_due) ou a
         // assinatura está ativa/em trial, mantém o plano premium - só rebaixa
         // quando o evento subscription.deleted chegar de fato (assinatura
         // encerrada, seja por cancelamento ou esgotamento das tentativas).
+        // Sincroniza o cancelamento agendado mesmo se ele tiver sido feito
+        // direto pelo painel do Stripe (não só pelo app).
         $stmt = $pdo->prepare(
-            "UPDATE usuarios SET assinatura_status = :status, stripe_subscription_id = :sid WHERE stripe_customer_id = :cid"
+            "UPDATE usuarios SET assinatura_status = :status, stripe_subscription_id = :sid, assinatura_cancelamento_previsto = :previsto WHERE stripe_customer_id = :cid"
         );
-        $stmt->execute([':status' => $status, ':sid' => $subscriptionId, ':cid' => $customerId]);
+        $stmt->execute([
+            ':status' => $status,
+            ':sid' => $subscriptionId,
+            ':previsto' => $cancelamentoPrevisto,
+            ':cid' => $customerId,
+        ]);
     }
 
     private static function desativarAssinatura(PDO $pdo, string $customerId): void
     {
         $stmt = $pdo->prepare(
-            "UPDATE usuarios SET plano = 2, assinatura_status = 'canceled' WHERE stripe_customer_id = :cid"
+            "UPDATE usuarios SET plano = 2, assinatura_status = 'canceled', assinatura_cancelamento_previsto = NULL WHERE stripe_customer_id = :cid"
         );
         $stmt->execute([':cid' => $customerId]);
     }

@@ -59,7 +59,7 @@ require_once '../model/CategoriaIA.php';
 try {
 
     $stmt = $pdo->prepare("
-        SELECT id, nome, email, step, plano, nivel, interesses_definidos
+        SELECT id, nome, email, step, plano, nivel, interesses_definidos, assinatura_cancelamento_previsto
         FROM usuarios
         WHERE auth_token = :token
         LIMIT 1
@@ -121,6 +121,7 @@ try {
             "nivel" => $usuario['nivel'] ?? null,
             "interesses_definidos" => (bool) ($usuario['interesses_definidos'] ?? false),
             "categoria_ia_disponivel" => $categoriaIaDisponivel,
+            "assinatura_cancelamento_previsto" => $usuario['assinatura_cancelamento_previsto'] ?? null,
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,
             "learning_language" => $idioma_referencia['idioma_aprender'] ?? null
         ]

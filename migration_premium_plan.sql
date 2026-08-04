@@ -146,3 +146,13 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='interesses_definidos');
 SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN interesses_definidos TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- 11) usuarios.assinatura_cancelamento_previsto (coluna nova - data em que a
+--     assinatura Zaldemy+ vai efetivamente encerrar, quando o usuário pediu
+--     cancelamento mas ainda está dentro do período já pago). NULL = nenhum
+--     cancelamento agendado.
+-- ============================================================
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='assinatura_cancelamento_previsto');
+SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN assinatura_cancelamento_previsto DATETIME DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

@@ -41,6 +41,18 @@ try {
         exit;
     }
 
+    if ($action === 'cancelar') {
+        $dados = Assinatura::cancelarAssinatura($pdo, $user_id);
+        echo json_encode($dados);
+        exit;
+    }
+
+    if ($action === 'reativar') {
+        $dados = Assinatura::reativarAssinatura($pdo, $user_id);
+        echo json_encode($dados);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(["success" => false, "message" => "Action inválida"]);
 
