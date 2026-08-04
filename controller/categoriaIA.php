@@ -73,6 +73,30 @@ try {
         exit;
     }
 
+    if ($action === 'criar_onboarding') {
+        $topico = trim($input['categoria'] ?? '');
+
+        if ($topico === '') {
+            http_response_code(400);
+            echo json_encode(["success" => false, "message" => "Informe o tema da categoria"]);
+            exit;
+        }
+
+        $chat = new OpenAiChat($_ENV['OPEN_AI']);
+
+        $resultado = CategoriaIA::criarParaOnboarding($pdo, $chat, $user_id, $topico);
+
+        echo json_encode($resultado);
+        exit;
+    }
+
+    if ($action === 'marcar_interesses_definidos') {
+        $stmt = $pdo->prepare("UPDATE usuarios SET interesses_definidos = 1 WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        echo json_encode(["success" => true]);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(["success" => false, "message" => "Action inválida"]);
 

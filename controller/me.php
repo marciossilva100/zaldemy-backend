@@ -58,7 +58,7 @@ require_once '../server.php';
 try {
 
     $stmt = $pdo->prepare("
-        SELECT id, nome, email, step, plano, nivel
+        SELECT id, nome, email, step, plano, nivel, interesses_definidos
         FROM usuarios
         WHERE auth_token = :token
         LIMIT 1
@@ -112,6 +112,7 @@ try {
             "step" =>  $usuario['step'] ?? null,
             "plano" => $usuario['plano'] ?? null,
             "nivel" => $usuario['nivel'] ?? null,
+            "interesses_definidos" => (bool) ($usuario['interesses_definidos'] ?? false),
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,
             "learning_language" => $idioma_referencia['idioma_aprender'] ?? null
         ]

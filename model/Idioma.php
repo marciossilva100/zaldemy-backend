@@ -91,8 +91,9 @@ class Idioma
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
         $stmt->execute();
 
-
-        $this->cadastrarCategoriaFrasesTodosIdiomas($user_id, $this->idioma_nativo);
+        // Categoria automática única foi substituída pela escolha de 3
+        // categorias de interesse no onboarding (EscolherCategoriasInteresse.jsx
+        // + CategoriaIA::criarParaOnboarding) - não cadastra mais nada aqui.
 
         $sql = 'UPDATE usuarios SET step = 1 WHERE id = :id LIMIT 1';
         $stmt = $pdo->prepare($sql);

@@ -151,4 +151,51 @@ class CategoriaIA
             "inseridas" => $resultadoFrases['inseridas'],
         ];
     }
+
+    // Variante usada na escolha de categorias de interesse no onboarding
+    // (substituiu a antiga categoria única copiada automaticamente no
+    // cadastro) - sem checagem de acesso/limite de plano (disponível pra
+    // todo mundo nesse momento) e sem contar pro uso de "Criar com IA".
+    // tipo=3 marca como criada automaticamente, fora do limite de categorias
+    // do plano (mesmo padrão da antiga categoria única).
+    public static function criarParaOnboarding(PDO $pdo, OpenAiChat $chat, int $user_id, string $topico): array
+    {
+        $idiomas = self::getIdiomas($pdo, $user_id);
+
+        if (!$idiomas) {
+            return ["success" => false, "message" => "Selecione seu idioma nativo e de aprendizagem antes de continuar."];
+        }
+
+        $geracao = self::gerarFrases($chat, $topico, $idiomas['nativo_nome'], $idiomas['aprendendo_nome']);
+
+        if ($geracao['erro']) {
+            return ["success" => false, "message" => "Não foi possível gerar as frases: " . $geracao['mensagem']];
+        }
+
+        $resultadoCategoria = Categorias::cadastrarCategoria(
+            $pdo, $topico, $user_id, null, 0, 3, $idiomas['nativo_id'], $idiomas['aprendendo_id']
+        );
+
+        if (!$resultadoCategoria['success']) {
+            return $resultadoCategoria;
+        }
+
+        $categoriaId = $resultadoCategoria['id'];
+
+        $frasesParaInserir = array_map(fn($f) => [
+            'texto_nativo' => $f['nativo'] ?? '',
+            'texto_traduzido' => $f['traduzido'] ?? '',
+            'idioma_nativo' => $idiomas['nativo_id'],
+            'idioma_aprendendo' => $idiomas['aprendendo_id'],
+        ], $geracao['frases']);
+
+        $resultadoFrases = Categorias::addFrases($pdo, $user_id, $frasesParaInserir, $categoriaId);
+
+        return [
+            "success" => true,
+            "id" => $categoriaId,
+            "categoria" => $topico,
+            "inseridas" => $resultadoFrases['inseridas'],
+        ];
+    }
 }
