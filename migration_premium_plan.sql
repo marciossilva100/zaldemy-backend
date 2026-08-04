@@ -1,20 +1,39 @@
 -- Executar manualmente no banco de produção/homolog antes do deploy do
 -- backend da branch feature/premium-plan (mesclada em develop).
+--
+-- Seguro rodar mais de uma vez (idempotente): CREATE TABLE já usa IF NOT
+-- EXISTS (padrão, funciona em qualquer MySQL/MariaDB). Pra ADD COLUMN,
+-- em vez do IF NOT EXISTS (que é só do MariaDB, MySQL rejeita), cada
+-- coluna checa a própria existência em information_schema antes de
+-- alterar - funciona igual nos dois bancos. Testado localmente (MySQL 8).
 
 -- ============================================================
 -- 1) perguntas_ia (tabela já existe) - novas colunas
 -- ============================================================
-ALTER TABLE perguntas_ia
-  ADD COLUMN transcricao TEXT DEFAULT NULL,
-  ADD COLUMN nota INT DEFAULT NULL,
-  ADD COLUMN feedback TEXT DEFAULT NULL,
-  ADD COLUMN tentativas INT NOT NULL DEFAULT 0,
-  ADD COLUMN question_traducao TEXT DEFAULT NULL;
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perguntas_ia' AND COLUMN_NAME='transcricao');
+SET @sql := IF(@existe = 0, 'ALTER TABLE perguntas_ia ADD COLUMN transcricao TEXT DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perguntas_ia' AND COLUMN_NAME='nota');
+SET @sql := IF(@existe = 0, 'ALTER TABLE perguntas_ia ADD COLUMN nota INT DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perguntas_ia' AND COLUMN_NAME='feedback');
+SET @sql := IF(@existe = 0, 'ALTER TABLE perguntas_ia ADD COLUMN feedback TEXT DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perguntas_ia' AND COLUMN_NAME='tentativas');
+SET @sql := IF(@existe = 0, 'ALTER TABLE perguntas_ia ADD COLUMN tentativas INT NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perguntas_ia' AND COLUMN_NAME='question_traducao');
+SET @sql := IF(@existe = 0, 'ALTER TABLE perguntas_ia ADD COLUMN question_traducao TEXT DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ============================================================
 -- 2) frase_dia_ia (tabela nova - recurso "Frase do Dia")
 -- ============================================================
-CREATE TABLE frase_dia_ia (
+CREATE TABLE IF NOT EXISTS frase_dia_ia (
   id INT NOT NULL AUTO_INCREMENT,
   user_id INT NOT NULL,
   frase TEXT NOT NULL,
@@ -34,7 +53,7 @@ CREATE TABLE frase_dia_ia (
 -- ============================================================
 -- 3) categoria_ia_uso (tabela nova - controle de uso da Categoria por IA)
 -- ============================================================
-CREATE TABLE categoria_ia_uso (
+CREATE TABLE IF NOT EXISTS categoria_ia_uso (
   id INT NOT NULL AUTO_INCREMENT,
   user_id INT NOT NULL,
   data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -45,7 +64,7 @@ CREATE TABLE categoria_ia_uso (
 -- ============================================================
 -- 4) traducao_ia_uso (tabela nova - controle de uso da Tradução por IA)
 -- ============================================================
-CREATE TABLE traducao_ia_uso (
+CREATE TABLE IF NOT EXISTS traducao_ia_uso (
   id INT NOT NULL AUTO_INCREMENT,
   user_id INT NOT NULL,
   data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -56,7 +75,7 @@ CREATE TABLE traducao_ia_uso (
 -- ============================================================
 -- 5) acessos_usuario (tabela nova - histórico de acessos/login)
 -- ============================================================
-CREATE TABLE acessos_usuario (
+CREATE TABLE IF NOT EXISTS acessos_usuario (
   id INT NOT NULL AUTO_INCREMENT,
   user_id INT NOT NULL,
   ip VARCHAR(45) DEFAULT NULL,
@@ -65,3 +84,26 @@ CREATE TABLE acessos_usuario (
   PRIMARY KEY (id),
   KEY idx_user (user_id)
 );
+
+-- ============================================================
+-- 6) usuarios.nivel (coluna nova - nível de proficiência informado no
+--    cadastro, usado pra ajustar a dificuldade das perguntas/frases de IA)
+-- ============================================================
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='nivel');
+SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN nivel INT DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- 7) usuarios - colunas novas da assinatura Zaldemy+ via Stripe
+-- ============================================================
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='stripe_customer_id');
+SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN stripe_customer_id VARCHAR(255) DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='stripe_subscription_id');
+SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN stripe_subscription_id VARCHAR(255) DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='assinatura_status');
+SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN assinatura_status VARCHAR(50) DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
