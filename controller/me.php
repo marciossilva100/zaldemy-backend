@@ -54,6 +54,7 @@ $token = str_replace("Bearer ", "", $authHeader);
 // $token = str_replace("Bearer ", "", $headers['Authorization']);
 
 require_once '../server.php';
+require_once '../model/CategoriaIA.php';
 
 try {
 
@@ -103,6 +104,12 @@ try {
         ];
     }
 
+    // Usado pra decidir, ANTES de abrir o formulário, se mostra a opção
+    // "Criar categoria com IA" normal ou já com a coroa de premium - sem
+    // isso, quem já usou a amostra grátis (limitado) só descobria que não
+    // tinha mais acesso depois de preencher o formulário e tentar enviar.
+    $categoriaIaDisponivel = CategoriaIA::verificarAcesso($pdo, (int) $usuario['id'], (int) ($usuario['plano'] ?? 0)) === null;
+
     echo json_encode([
         "authenticated" => true,
         "user" => [
@@ -113,6 +120,7 @@ try {
             "plano" => $usuario['plano'] ?? null,
             "nivel" => $usuario['nivel'] ?? null,
             "interesses_definidos" => (bool) ($usuario['interesses_definidos'] ?? false),
+            "categoria_ia_disponivel" => $categoriaIaDisponivel,
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,
             "learning_language" => $idioma_referencia['idioma_aprender'] ?? null
         ]
