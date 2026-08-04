@@ -204,12 +204,16 @@ class FraseDoDia
                 . "tem liberdade de completar com palavras comuns do idioma pra formar uma frase natural e completa - "
                 . "não force repetir sempre as mesmas palavras só pra bater um percentual; priorize soar natural e "
                 . "ficar no tamanho certo."
-            : "A frase precisa soar 100% natural e coerente antes de qualquer outra coisa - isso vem sempre na "
-                . "frente do reaproveitamento de vocabulário. Sempre que fizer sentido, reaproveite palavras e "
-                . "expressões das frases que o aluno já estuda (fornecidas a seguir), pra reforçar o que ele está "
-                . "aprendendo de verdade - a frase não precisa ser idêntica a nenhuma delas. NUNCA junte pedaços de "
-                . "frases diferentes só pra encaixar vocabulário: se usar o vocabulário do aluno for deixar a frase "
-                . "estranha, forçada ou sem lógica, prefira usar palavras comuns do idioma em vez disso.";
+            : "Monte a frase usando o MÁXIMO de trechos que puder das frases que o aluno já estuda a seguir - "
+                . "combine quantas frases fizerem sentido, sem limite fixo de quantidade nem de percentual; elas "
+                . "são a matéria-prima principal da frase, não apenas uma referência solta de vocabulário. O "
+                . "conteúdo (temas, ações, situações) tem que vir claramente do que está nessas frases, não de uma "
+                . "ideia nova inventada do zero. Pra dar coesão entre os trechos combinados, ajuste o que for "
+                . "preciso (pronomes, tempos verbais, conectivos) e complete só com palavras genéricas do idioma "
+                . "(artigos, preposições, concordância) quando for indispensável. Mesmo assim, o resultado final "
+                . "precisa ter coesão, concordância gramatical e naturalidade como uma frase única - adapte os "
+                . "trechos até formarem uma ideia lógica, nunca deixe só colados lado a lado sem conexão real "
+                . "entre eles.";
 
         $systemPrompt = "Você é um professor de idiomas escrevendo uma frase de exemplo em {$idiomaNome} pra um aluno "
             . "de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical da frase pro nível dele - "
