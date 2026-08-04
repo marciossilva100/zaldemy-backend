@@ -18,15 +18,15 @@ class DailyQuestionOpenAI
     // alto em frases muito longas.
     const MAX_TAMANHO_TRECHO = 10;
 
-    // Trecho mínimo de 3 palavras (não 2) pra idiomas alfabéticos - com só 2,
-    // pares puramente gramaticais ("and I", "on the", "because the") batem
-    // com praticamente qualquer frase por coincidência, especialmente pra
-    // quem já tem muitas frases cadastradas (o vocabulário fica tão amplo
-    // que qualquer combinação comum de artigo/pronome/preposição acaba
-    // aparecendo em alguma frase). Cada trecho também precisa ter pelo menos
-    // uma palavra "de conteúdo" (ver temPalavraDeConteudo) - só bater 3
-    // palavras funcionais seguidas ainda não diz nada real.
-    const MIN_TAMANHO_TRECHO_PALAVRAS = 3;
+    // Trecho mínimo de 2 palavras, mas com regra mais rígida pra bigramas
+    // (ver trechoValidoPorPalavra): um bigrama só vale se AMBAS as palavras
+    // forem "de conteúdo" (ver TAMANHO_MIN_PALAVRA_CONTEUDO), senão pares
+    // puramente gramaticais ("and I", "on the", "because the") batem com
+    // praticamente qualquer frase por coincidência - mas um bigrama de duas
+    // palavras de conteúdo de verdade ("stay calm", "make sense") é um
+    // reaproveitamento genuíno e não deveria ficar de fora só por ter 2
+    // palavras. Trechos de 3+ palavras já bastam ter uma palavra de conteúdo.
+    const MIN_TAMANHO_TRECHO_PALAVRAS = 2;
     const TAMANHO_MIN_PALAVRA_CONTEUDO = 4;
 
     // Chinês, japonês e coreano usam caracteres muito mais densos em
@@ -270,7 +270,7 @@ class DailyQuestionOpenAI
                 for ($ini = 0; $ini <= $total - $tam; $ini++) {
                     $trecho = array_slice($palavras, $ini, $tam);
 
-                    if (self::temPalavraDeConteudo($trecho)) {
+                    if (self::trechoValidoPorPalavra($trecho)) {
                         $ngramas[implode(' ', $trecho)] = true;
                     }
                 }
@@ -284,8 +284,21 @@ class DailyQuestionOpenAI
     // (artigos, preposições, pronomes, conjunções - "and I", "on the",
     // "because the") que batem por coincidência gramatical com praticamente
     // qualquer frase, sem dizer nada de real sobre o vocabulário do aluno.
-    private static function temPalavraDeConteudo(array $palavras): bool
+    // Bigramas são mais rigorosos (exigem as DUAS palavras de conteúdo,
+    // senão "and I"/"on the" passariam) - trechos de 3+ palavras já bastam
+    // ter uma, já que o resto tem mais chance de ser conectivo/artigo
+    // natural da frase em vez de coincidência pura.
+    private static function trechoValidoPorPalavra(array $palavras): bool
     {
+        if (count($palavras) === 2) {
+            foreach ($palavras as $palavra) {
+                if (mb_strlen($palavra) < self::TAMANHO_MIN_PALAVRA_CONTEUDO) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         foreach ($palavras as $palavra) {
             if (mb_strlen($palavra) >= self::TAMANHO_MIN_PALAVRA_CONTEUDO) {
                 return true;
