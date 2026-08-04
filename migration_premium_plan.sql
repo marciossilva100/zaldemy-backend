@@ -1,11 +1,14 @@
--- Executar manualmente no banco de produção/homolog antes do deploy do
--- backend da branch feature/premium-plan (mesclada em develop).
+-- Executar manualmente no banco de produção antes do deploy do backend.
 --
--- Seguro rodar mais de uma vez (idempotente): CREATE TABLE já usa IF NOT
+-- Seguro rodar mais de uma vez (idempotente): CREATE TABLE usa IF NOT
 -- EXISTS (padrão, funciona em qualquer MySQL/MariaDB). Pra ADD COLUMN,
--- em vez do IF NOT EXISTS (que é só do MariaDB, MySQL rejeita), cada
--- coluna checa a própria existência em information_schema antes de
--- alterar - funciona igual nos dois bancos. Testado localmente (MySQL 8).
+-- cada coluna checa a própria existência em information_schema antes de
+-- alterar - funciona igual nos dois bancos (ADD COLUMN IF NOT EXISTS é só
+-- do MariaDB, MySQL rejeita). Testado localmente (MySQL 8).
+--
+-- Levantamento feito comparando o banco local (com tudo desta sessão) com
+-- o último backup do servidor (zaldemy-20260728.sql) - cobre tabelas que
+-- nunca chegaram a ser migradas, não só as mais recentes.
 
 -- ============================================================
 -- 1) perguntas_ia (tabela já existe) - novas colunas
@@ -86,7 +89,19 @@ CREATE TABLE IF NOT EXISTS acessos_usuario (
 );
 
 -- ============================================================
--- 6) usuarios.nivel (coluna nova - nível de proficiência informado no
+-- 6) audio_ia_uso (tabela nova - controle de uso da voz natural/TTS
+--    premium) - mais antiga que as outras, mas nunca tinha sido migrada
+-- ============================================================
+CREATE TABLE IF NOT EXISTS audio_ia_uso (
+  id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_user_data (user_id, data_criacao)
+);
+
+-- ============================================================
+-- 7) usuarios.nivel (coluna nova - nível de proficiência informado no
 --    cadastro, usado pra ajustar a dificuldade das perguntas/frases de IA)
 -- ============================================================
 SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='nivel');
@@ -94,7 +109,7 @@ SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN nivel INT DEFAULT N
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ============================================================
--- 7) usuarios - colunas novas da assinatura Zaldemy+ via Stripe
+-- 8) usuarios - colunas novas da assinatura Zaldemy+ via Stripe
 -- ============================================================
 SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='stripe_customer_id');
 SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN stripe_customer_id VARCHAR(255) DEFAULT NULL', 'SELECT 1');
@@ -106,4 +121,16 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='assinatura_status');
 SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN assinatura_status VARCHAR(50) DEFAULT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- 9) configuracoes.voz_tts / velocidade_tts (preferência de voz e
+--    velocidade da narração) - também nunca tinha sido migrada
+-- ============================================================
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='configuracoes' AND COLUMN_NAME='voz_tts');
+SET @sql := IF(@existe = 0, "ALTER TABLE configuracoes ADD COLUMN voz_tts VARCHAR(20) DEFAULT 'nova'", 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='configuracoes' AND COLUMN_NAME='velocidade_tts');
+SET @sql := IF(@existe = 0, "ALTER TABLE configuracoes ADD COLUMN velocidade_tts DECIMAL(3,2) DEFAULT '1.00'", 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
