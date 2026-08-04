@@ -192,11 +192,13 @@ class DailyQuestionOpenAI
             . "nível {$nivelNome}, respondível oralmente em uma frase, e também a tradução dela em {$idiomaNativoNome}. "
             . "Ajuste o vocabulário e a complexidade gramatical da pergunta pro nível do aluno - iniciante pede "
             . "estruturas simples e vocabulário básico; intermediário pode incluir conectivos e tempos verbais "
-            . "variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. Use o MÁXIMO possível "
-            . "(pelo menos 80%) do vocabulário da pergunta a partir das frases fornecidas pelo aluno a seguir, pra "
-            . "focar no que ele está estudando de verdade - só use palavras genéricas do idioma (artigos, conectivos, "
-            . "concordância gramatical) quando forem realmente necessárias pra pergunta soar natural, não como "
-            . "preenchimento. Máximo {$maxPergunta} caracteres na "
+            . "variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. A pergunta precisa "
+            . "soar 100% natural e coerente antes de qualquer outra coisa - isso vem sempre na frente do "
+            . "reaproveitamento de vocabulário. Sempre que fizer sentido, reaproveite palavras e expressões das "
+            . "frases fornecidas pelo aluno a seguir, pra focar no que ele está estudando de verdade. NUNCA junte "
+            . "pedaços de frases diferentes só pra encaixar vocabulário: se usar o vocabulário do aluno for deixar "
+            . "a pergunta estranha, forçada ou sem lógica, prefira usar palavras comuns do idioma em vez disso. "
+            . "Máximo {$maxPergunta} caracteres na "
             . "pergunta. Não use aspas. "
             . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
 

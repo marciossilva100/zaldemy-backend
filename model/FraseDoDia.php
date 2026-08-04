@@ -204,11 +204,12 @@ class FraseDoDia
                 . "tem liberdade de completar com palavras comuns do idioma pra formar uma frase natural e completa - "
                 . "não force repetir sempre as mesmas palavras só pra bater um percentual; priorize soar natural e "
                 . "ficar no tamanho certo."
-            : "Use o MÁXIMO possível (pelo menos 80%) do vocabulário da frase a partir das frases que o aluno já "
-                . "estuda (fornecidas a seguir), pra reforçar o que ele está aprendendo de verdade - a frase não "
-                . "precisa ser idêntica a nenhuma delas. Só use palavras genéricas do idioma (artigos, conectivos, "
-                . "concordância gramatical) quando forem realmente necessárias pra frase soar natural, não como "
-                . "preenchimento.";
+            : "A frase precisa soar 100% natural e coerente antes de qualquer outra coisa - isso vem sempre na "
+                . "frente do reaproveitamento de vocabulário. Sempre que fizer sentido, reaproveite palavras e "
+                . "expressões das frases que o aluno já estuda (fornecidas a seguir), pra reforçar o que ele está "
+                . "aprendendo de verdade - a frase não precisa ser idêntica a nenhuma delas. NUNCA junte pedaços de "
+                . "frases diferentes só pra encaixar vocabulário: se usar o vocabulário do aluno for deixar a frase "
+                . "estranha, forçada ou sem lógica, prefira usar palavras comuns do idioma em vez disso.";
 
         $systemPrompt = "Você é um professor de idiomas escrevendo uma frase de exemplo em {$idiomaNome} pra um aluno "
             . "de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical da frase pro nível dele - "
