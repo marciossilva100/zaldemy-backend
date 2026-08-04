@@ -134,3 +134,15 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='configuracoes' AND COLUMN_NAME='velocidade_tts');
 SET @sql := IF(@existe = 0, "ALTER TABLE configuracoes ADD COLUMN velocidade_tts DECIMAL(3,2) DEFAULT '1.00'", 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- 10) usuarios.interesses_definidos (coluna nova - marca se o usuário já
+--     escolheu as 3 categorias de interesse no onboarding). Faltando essa
+--     coluna, controller/me.php quebra em TODA chamada (SELECT inclui a
+--     coluna), o que derruba o checkAuth e faz o login (inclusive o de
+--     Google) voltar pra tela de login sem erro visível - mesmo sintoma já
+--     visto antes com a coluna usuarios.nivel faltando.
+-- ============================================================
+SET @existe := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME='interesses_definidos');
+SET @sql := IF(@existe = 0, 'ALTER TABLE usuarios ADD COLUMN interesses_definidos TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

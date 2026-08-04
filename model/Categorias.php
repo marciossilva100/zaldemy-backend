@@ -418,6 +418,23 @@ class Categorias
         return $result['categoria'] ?: null;
     }
 
+    // Apaga (soft delete) as categorias de interesse (tipo=3) do onboarding -
+    // usado quando o usuário volta pra tela de escolha de interesses depois
+    // de já ter concluído e reconfirma outras categorias, pra não ficar
+    // duplicando (as antigas + as novas).
+    public static function excluirCategoriasInteresse(PDO $pdo, int $user_id): void
+    {
+        $sql = "UPDATE categorias
+                SET status_id = 0
+                WHERE id_user = :id_user
+                  AND tipo = 3
+                  AND status_id > 0";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+    }
+
     public static function excluirCategoria(PDO $pdo,int $id,int $user_id): array
     {
         // verifica se a categoria existe e pertence ao usuário

@@ -90,6 +90,18 @@ try {
         exit;
     }
 
+    if ($action === 'reiniciar_interesses') {
+        // Usado quando o usuário volta pra tela de interesses do onboarding
+        // pra trocar a escolha - apaga as categorias de interesse antigas
+        // antes das novas serem criadas, senão duplicaria.
+        Categorias::excluirCategoriasInteresse($pdo, $user_id);
+
+        $stmt = $pdo->prepare("UPDATE usuarios SET interesses_definidos = 0 WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        echo json_encode(["success" => true]);
+        exit;
+    }
+
     if ($action === 'marcar_interesses_definidos') {
         $stmt = $pdo->prepare("UPDATE usuarios SET interesses_definidos = 1 WHERE id = :id");
         $stmt->execute([':id' => $user_id]);
