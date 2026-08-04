@@ -700,6 +700,24 @@ class FraseDoDia
     // pra não misturar frases de um idioma que o usuário já trocou.
     public static function getFrasesDoUsuario(PDO $pdo, int $user_id): array
     {
+        $frases = self::buscarFrasesPorEstagio($pdo, $user_id, true);
+
+        // O gate que libera o recurso (contarFrasesEstudadas) conta pelo
+        // histórico (já alcançou id_treino>=2 alguma vez), mas essa busca
+        // usa o estágio ATUAL da frase - se as frases regrediram todas de
+        // volta pro estágio 1 depois de já terem liberado o recurso, essa
+        // busca podia vir vazia mesmo com o gate liberado. Cai pra buscar
+        // sem esse filtro (mantendo a priorização por estágio) em vez de
+        // gerar conteúdo sem vocabulário nenhum do aluno.
+        if (count($frases) < 3) {
+            $frases = self::buscarFrasesPorEstagio($pdo, $user_id, false);
+        }
+
+        return $frases;
+    }
+
+    private static function buscarFrasesPorEstagio(PDO $pdo, int $user_id, bool $exigirTreinoMinimo): array
+    {
         $sql = "SELECT f.texto_traduzido
                 FROM frases f
                 INNER JOIN idioma_referencia ir
@@ -709,8 +727,8 @@ class FraseDoDia
                 WHERE f.texto_traduzido IS NOT NULL
                 AND f.usuario_id = :user_id
                 AND TRIM(f.texto_nativo) <> ''
-                AND f.status_id > 0
-                AND f.id_treino >= 2
+                AND f.status_id > 0"
+                . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "") . "
                 ORDER BY f.id_treino DESC, RAND()
                 LIMIT " . self::MAX_FRASES_PROMPT;
 

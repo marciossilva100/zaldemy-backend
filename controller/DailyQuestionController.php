@@ -202,6 +202,24 @@ class DailyQuestionController
     // Categorias::contarCategoriasAtivas.
     private function getUserPhrases($user_id)
     {
+        $phrases = $this->buscarFrasesPorEstagio($user_id, true);
+
+        // O gate que libera o recurso (DailyQuestionOpenAI::contarFrasesEstudadas)
+        // conta pelo histórico (já alcançou id_treino>=2 alguma vez), mas essa
+        // busca usa o estágio ATUAL da frase - se as frases regrediram todas
+        // de volta pro estágio 1 depois de já terem liberado o recurso, essa
+        // busca podia vir vazia mesmo com o gate liberado. Cai pra buscar sem
+        // esse filtro (mantendo a priorização por estágio) em vez de bloquear
+        // a geração por falta de frases que na verdade existem.
+        if (count($phrases) < 3) {
+            $phrases = $this->buscarFrasesPorEstagio($user_id, false);
+        }
+
+        return $phrases;
+    }
+
+    private function buscarFrasesPorEstagio($user_id, bool $exigirTreinoMinimo)
+    {
         $sql = "SELECT f.texto_traduzido
                 FROM frases f
                 INNER JOIN idioma_referencia ir
@@ -211,8 +229,8 @@ class DailyQuestionController
                 WHERE f.texto_traduzido IS NOT NULL
                 AND f.usuario_id = :user_id
                 AND TRIM(f.texto_nativo) <> ''
-                AND f.status_id > 0
-                AND f.id_treino >= 2
+                AND f.status_id > 0"
+                . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "") . "
                 ORDER BY f.id_treino DESC, RAND()
                 LIMIT " . self::MAX_FRASES_PROMPT;
 
