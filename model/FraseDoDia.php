@@ -9,11 +9,29 @@ class FraseDoDia
     const MAX_TENTATIVAS_POR_FRASE = 3;
     const MAX_TENTATIVAS_GERACAO = 5;
 
+    // Limite de frases enviadas pro prompt da IA - mandar tudo que o usuário
+    // já tem cadastrado gastaria tokens/tempo de processamento à toa,
+    // principalmente pra quem tem centenas de frases. Prioriza as mais bem
+    // estudadas (id_treino mais alto - "memorizado" antes de "em treino"
+    // antes de "memorizando"), nunca as ainda não estudadas (id_treino=1).
+    const MAX_FRASES_PROMPT = 50;
+
     // Tamanho máximo de trecho (palavras ou caracteres, conforme o idioma)
     // considerado ao montar/buscar os n-gramas do destaque de vocabulário -
     // suficiente pra capturar frases inteiras curtas sem custo quadrático
     // alto em frases muito longas.
     const MAX_TAMANHO_TRECHO = 10;
+
+    // Trecho mínimo de 3 palavras (não 2) pra idiomas alfabéticos - com só 2,
+    // pares puramente gramaticais ("and I", "on the", "because the") batem
+    // com praticamente qualquer frase por coincidência, especialmente pra
+    // quem já tem muitas frases cadastradas (o vocabulário fica tão amplo
+    // que qualquer combinação comum de artigo/pronome/preposição acaba
+    // aparecendo em alguma frase). Cada trecho também precisa ter pelo menos
+    // uma palavra "de conteúdo" (ver temPalavraDeConteudo) - só bater 3
+    // palavras funcionais seguidas ainda não diz nada real.
+    const MIN_TAMANHO_TRECHO_PALAVRAS = 3;
+    const TAMANHO_MIN_PALAVRA_CONTEUDO = 4;
 
     // Chinês, japonês e coreano usam caracteres muito mais densos em
     // significado que os idiomas alfabéticos - 200-220 caracteres nesses
@@ -159,15 +177,18 @@ class FraseDoDia
         // já lida com pouco vocabulário sem precisar bloquear o recurso.
         $phrases = array_values(array_filter($phrases, fn($p) => trim($p) !== ''));
 
-        // Guarda a lista pra montar o destaque de vocabulário conhecido no
-        // texto final (a variável $phrases segue sendo reaproveitada/embaralhada
-        // abaixo pro prompt).
+        // $phrases já vem limitado (getFrasesDoUsuario) e ordenado por
+        // prioridade de treino - embaralha só a ordem de apresentação, sem
+        // mudar quais frases entram.
+        shuffle($phrases);
+
+        // Mesma lista (já filtrada e embaralhada) usada no prompt e no
+        // destaque - o destaque só deve marcar o que a IA realmente viu.
         $phrasesOriginais = $phrases;
 
-        shuffle($phrases);
         [$min, $max] = self::faixaCaracteresPara($idiomaNome);
         $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome);
-        $phrasesText = implode("\n", array_map(fn($p) => mb_substr($p, 0, $max), array_slice($phrases, 0, 30)));
+        $phrasesText = implode("\n", array_map(fn($p) => mb_substr($p, 0, $max), $phrases));
 
         // Quando o aluno tem pouco vocabulário estudado (ex: acabou de passar
         // no gate de 3 frases treinadas, todas curtas), exigir 80% de uso desse
@@ -183,10 +204,11 @@ class FraseDoDia
                 . "tem liberdade de completar com palavras comuns do idioma pra formar uma frase natural e completa - "
                 . "não force repetir sempre as mesmas palavras só pra bater um percentual; priorize soar natural e "
                 . "ficar no tamanho certo."
-            : "Baseie pelo menos 80% do vocabulário da frase nas frases que o aluno já estuda (fornecidas a seguir), "
-                . "pra reforçar o que ele está aprendendo - a frase não precisa ser idêntica a nenhuma delas. O "
-                . "restante do vocabulário pode ser palavras comuns do idioma, inclusive artigos, conectivos e "
-                . "concordância gramatical necessários pra frase soar natural.";
+            : "Use o MÁXIMO possível (pelo menos 80%) do vocabulário da frase a partir das frases que o aluno já "
+                . "estuda (fornecidas a seguir), pra reforçar o que ele está aprendendo de verdade - a frase não "
+                . "precisa ser idêntica a nenhuma delas. Só use palavras genéricas do idioma (artigos, conectivos, "
+                . "concordância gramatical) quando forem realmente necessárias pra frase soar natural, não como "
+                . "preenchimento.";
 
         $systemPrompt = "Você é um professor de idiomas escrevendo uma frase de exemplo em {$idiomaNome} pra um aluno "
             . "de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical da frase pro nível dele - "
@@ -301,14 +323,32 @@ class FraseDoDia
             $total = count($palavras);
             $maxTam = min(self::MAX_TAMANHO_TRECHO, $total);
 
-            for ($tam = 2; $tam <= $maxTam; $tam++) {
+            for ($tam = self::MIN_TAMANHO_TRECHO_PALAVRAS; $tam <= $maxTam; $tam++) {
                 for ($ini = 0; $ini <= $total - $tam; $ini++) {
-                    $ngramas[implode(' ', array_slice($palavras, $ini, $tam))] = true;
+                    $trecho = array_slice($palavras, $ini, $tam);
+
+                    if (self::temPalavraDeConteudo($trecho)) {
+                        $ngramas[implode(' ', $trecho)] = true;
+                    }
                 }
             }
         }
 
         return $ngramas;
+    }
+
+    // Evita destacar trechos formados só por palavras funcionais curtas
+    // (artigos, preposições, pronomes, conjunções - "and I", "on the",
+    // "because the") que batem por coincidência gramatical com praticamente
+    // qualquer frase, sem dizer nada de real sobre o vocabulário do aluno.
+    private static function temPalavraDeConteudo(array $palavras): bool
+    {
+        foreach ($palavras as $palavra) {
+            if (mb_strlen($palavra) >= self::TAMANHO_MIN_PALAVRA_CONTEUDO) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static function destacarTrechosPorPalavra(string $texto, array $phrases): array
@@ -337,7 +377,7 @@ class FraseDoDia
             $encontrou = false;
             $maxTam = min(self::MAX_TAMANHO_TRECHO, $totalPalavras - $i);
 
-            for ($tam = $maxTam; $tam >= 2; $tam--) {
+            for ($tam = $maxTam; $tam >= self::MIN_TAMANHO_TRECHO_PALAVRAS; $tam--) {
                 $palavras = array_map(fn($p) => $p['palavra'], array_slice($palavrasTexto, $i, $tam));
 
                 if (isset($ngramas[implode(' ', $palavras)])) {
@@ -656,7 +696,10 @@ class FraseDoDia
                 WHERE f.texto_traduzido IS NOT NULL
                 AND f.usuario_id = :user_id
                 AND TRIM(f.texto_nativo) <> ''
-                AND f.status_id > 0";
+                AND f.status_id > 0
+                AND f.id_treino >= 2
+                ORDER BY f.id_treino DESC, RAND()
+                LIMIT " . self::MAX_FRASES_PROMPT;
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);

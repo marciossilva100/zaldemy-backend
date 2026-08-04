@@ -18,6 +18,17 @@ class DailyQuestionOpenAI
     // alto em frases muito longas.
     const MAX_TAMANHO_TRECHO = 10;
 
+    // Trecho mínimo de 3 palavras (não 2) pra idiomas alfabéticos - com só 2,
+    // pares puramente gramaticais ("and I", "on the", "because the") batem
+    // com praticamente qualquer frase por coincidência, especialmente pra
+    // quem já tem muitas frases cadastradas (o vocabulário fica tão amplo
+    // que qualquer combinação comum de artigo/pronome/preposição acaba
+    // aparecendo em alguma frase). Cada trecho também precisa ter pelo menos
+    // uma palavra "de conteúdo" (ver temPalavraDeConteudo) - só bater 3
+    // palavras funcionais seguidas ainda não diz nada real.
+    const MIN_TAMANHO_TRECHO_PALAVRAS = 3;
+    const TAMANHO_MIN_PALAVRA_CONTEUDO = 4;
+
     // Chinês, japonês e coreano usam caracteres muito mais densos em
     // significado que os idiomas alfabéticos - 220 caracteres nesses idiomas
     // equivaleria a uma pergunta MUITO mais longa/complexa (e o cartão do
@@ -156,12 +167,6 @@ class DailyQuestionOpenAI
             return ["success" => false, "message" => "Adicione mais frases aos flashcards para gerar perguntas melhores."];
         }
 
-        // Guarda a lista original (antes do filtro de tamanho mínimo abaixo)
-        // pra montar o destaque de vocabulário conhecido - frases curtas
-        // também contam como vocabulário já estudado, mesmo não servindo
-        // como exemplo pro prompt.
-        $phrasesOriginais = $phrases;
-
         $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
         $phrases = array_values($phrases);
 
@@ -169,10 +174,17 @@ class DailyQuestionOpenAI
             return ["success" => false, "message" => "Adicione mais frases aos flashcards para gerar perguntas melhores."];
         }
 
+        // $phrases já vem limitado (getUserPhrases) e ordenado por prioridade
+        // de treino - embaralha só a ordem de apresentação, sem mudar quais
+        // frases entram.
         shuffle($phrases);
+
+        // Mesma lista (já filtrada e embaralhada) usada no prompt e no
+        // destaque - o destaque só deve marcar o que a IA realmente viu.
+        $phrasesOriginais = $phrases;
+
         $maxPergunta = self::limiteCaracteresPara($idiomaNome);
         $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome);
-        $phrases = array_slice($phrases, 0, 300);
         $phrases = array_map(fn($p) => mb_substr($p, 0, $maxPergunta), $phrases);
         $phrasesText = implode("\n", $phrases);
 
@@ -180,10 +192,11 @@ class DailyQuestionOpenAI
             . "nível {$nivelNome}, respondível oralmente em uma frase, e também a tradução dela em {$idiomaNativoNome}. "
             . "Ajuste o vocabulário e a complexidade gramatical da pergunta pro nível do aluno - iniciante pede "
             . "estruturas simples e vocabulário básico; intermediário pode incluir conectivos e tempos verbais "
-            . "variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. Baseie pelo menos 80% "
-            . "do vocabulário da pergunta nas frases fornecidas pelo aluno a seguir, pra focar no que ele está "
-            . "estudando. O restante do vocabulário pode ser palavras comuns do idioma, inclusive artigos, conectivos "
-            . "e concordância gramatical necessários pra pergunta soar natural. Máximo {$maxPergunta} caracteres na "
+            . "variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. Use o MÁXIMO possível "
+            . "(pelo menos 80%) do vocabulário da pergunta a partir das frases fornecidas pelo aluno a seguir, pra "
+            . "focar no que ele está estudando de verdade - só use palavras genéricas do idioma (artigos, conectivos, "
+            . "concordância gramatical) quando forem realmente necessárias pra pergunta soar natural, não como "
+            . "preenchimento. Máximo {$maxPergunta} caracteres na "
             . "pergunta. Não use aspas. "
             . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
 
@@ -253,14 +266,32 @@ class DailyQuestionOpenAI
             $total = count($palavras);
             $maxTam = min(self::MAX_TAMANHO_TRECHO, $total);
 
-            for ($tam = 2; $tam <= $maxTam; $tam++) {
+            for ($tam = self::MIN_TAMANHO_TRECHO_PALAVRAS; $tam <= $maxTam; $tam++) {
                 for ($ini = 0; $ini <= $total - $tam; $ini++) {
-                    $ngramas[implode(' ', array_slice($palavras, $ini, $tam))] = true;
+                    $trecho = array_slice($palavras, $ini, $tam);
+
+                    if (self::temPalavraDeConteudo($trecho)) {
+                        $ngramas[implode(' ', $trecho)] = true;
+                    }
                 }
             }
         }
 
         return $ngramas;
+    }
+
+    // Evita destacar trechos formados só por palavras funcionais curtas
+    // (artigos, preposições, pronomes, conjunções - "and I", "on the",
+    // "because the") que batem por coincidência gramatical com praticamente
+    // qualquer frase, sem dizer nada de real sobre o vocabulário do aluno.
+    private static function temPalavraDeConteudo(array $palavras): bool
+    {
+        foreach ($palavras as $palavra) {
+            if (mb_strlen($palavra) >= self::TAMANHO_MIN_PALAVRA_CONTEUDO) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static function destacarTrechosPorPalavra(string $texto, array $phrases): array

@@ -41,6 +41,13 @@ carregarEnv(__DIR__ . '/../.env');
 
 class DailyQuestionController
 {
+    // Limite de frases enviadas pro prompt da IA - mandar tudo que o usuário
+    // já tem cadastrado gastaria tokens/tempo de processamento à toa,
+    // principalmente pra quem tem centenas de frases. Prioriza as mais bem
+    // estudadas (id_treino mais alto - "memorizado" antes de "em treino"
+    // antes de "memorizando"), nunca as ainda não estudadas (id_treino=1).
+    const MAX_FRASES_PROMPT = 50;
+
     private $pdo;
     private $chat;
     private $transcribe;
@@ -204,7 +211,10 @@ class DailyQuestionController
                 WHERE f.texto_traduzido IS NOT NULL
                 AND f.usuario_id = :user_id
                 AND TRIM(f.texto_nativo) <> ''
-                AND f.status_id > 0";
+                AND f.status_id > 0
+                AND f.id_treino >= 2
+                ORDER BY f.id_treino DESC, RAND()
+                LIMIT " . self::MAX_FRASES_PROMPT;
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
