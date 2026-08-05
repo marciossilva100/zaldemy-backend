@@ -438,8 +438,30 @@ class FraseDoDia
 
             for ($tam = $maxTam; $tam >= self::MIN_TAMANHO_TRECHO_PALAVRAS; $tam--) {
                 $palavras = array_map(fn($p) => $p['palavra'], array_slice($palavrasTexto, $i, $tam));
+                $bateu = isset($ngramas[implode(' ', $palavras)]);
 
-                if (isset($ngramas[implode(' ', $palavras)])) {
+                // Se não bateu em cheio, tenta de novo removendo UMA palavra curta
+                // (gramatical - artigo, preposição etc.) de dentro do trecho. A IA
+                // às vezes reescreve a frase do aluno inserindo uma palavra assim
+                // pra soar mais natural/correto (ex: frase do aluno "go for walk",
+                // texto gerado "go for a walk") - sem essa tolerância, essa
+                // reaproveitagem legítima nunca seria reconhecida, mesmo sendo
+                // claramente a mesma frase de origem.
+                if (!$bateu && $tam >= 3) {
+                    foreach ($palavras as $idx => $palavra) {
+                        if (mb_strlen($palavra) >= self::TAMANHO_MIN_PALAVRA_CONTEUDO) {
+                            continue;
+                        }
+                        $reduzido = $palavras;
+                        unset($reduzido[$idx]);
+                        if (isset($ngramas[implode(' ', $reduzido)])) {
+                            $bateu = true;
+                            break;
+                        }
+                    }
+                }
+
+                if ($bateu) {
                     $primeiroIndice = $palavrasTexto[$i]['indiceToken'];
                     $ultimoIndice = $palavrasTexto[$i + $tam - 1]['indiceToken'];
 
