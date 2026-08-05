@@ -91,6 +91,20 @@ class DailyQuestionController
     /* ===============================
        GET → OBTER PERGUNTA
     =============================== */
+    // Checagem leve (sem gerar nada) pro ModalIA decidir se mostra o selo de
+    // premium no botão antes mesmo do usuário clicar - mesma regra de
+    // verificarAcesso, incluindo a amostra vitalícia do limitado expirada.
+    public function verificarAcessoRoute()
+    {
+        try {
+            $user_id = $this->getUserId();
+            $bloqueio = DailyQuestionOpenAI::verificarAcesso($this->pdo, $user_id, $this->getPlano());
+            $this->json(["acesso" => $bloqueio === null]);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
+    }
+
     public function getDailyQuestion()
     {
         try {
@@ -328,6 +342,8 @@ try {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if (($_GET['action'] ?? null) === 'historico') {
             $controller->getHistorico();
+        } elseif (($_GET['action'] ?? null) === 'verificar_acesso') {
+            $controller->verificarAcessoRoute();
         } else {
             $controller->getDailyQuestion();
         }

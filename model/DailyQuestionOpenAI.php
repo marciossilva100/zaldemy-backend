@@ -75,6 +75,21 @@ class DailyQuestionOpenAI
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     }
 
+    // O limitado pode continuar vendo/respondendo a pergunta pendente no
+    // mesmo dia em que ela foi gerada (a amostra vitalícia só é "gasta" de
+    // verdade quando ele responde), mas se voltar em outro dia sem ter
+    // respondido, essa amostra é considerada perdida - senão as perguntas
+    // grátis ficariam disponíveis pra sempre, bastando nunca responder.
+    private static function temPendenteExpirada(PDO $pdo, int $user_id): bool
+    {
+        $sql = "SELECT COUNT(*) as total FROM perguntas_ia
+                WHERE user_id = :user_id AND status_id = 0
+                  AND DATE(data_criacao) < CURDATE()";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'] > 0;
+    }
+
     public static function verificarAcesso(PDO $pdo, int $user_id, int $plano): ?array
     {
         if ($plano === 1) {
@@ -85,7 +100,7 @@ class DailyQuestionOpenAI
         }
 
         if ($plano === 3) {
-            if (self::contarTotal($pdo, $user_id) >= self::LIMITE_VITALICIO_LIMITADO) {
+            if (self::contarTotal($pdo, $user_id) >= self::LIMITE_VITALICIO_LIMITADO || self::temPendenteExpirada($pdo, $user_id)) {
                 return ["success" => false, "limite_atingido" => true, "message" => "Você já usou suas " . self::LIMITE_VITALICIO_LIMITADO . " perguntas grátis. Vire premium para ter acesso diário."];
             }
             return null;

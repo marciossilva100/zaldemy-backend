@@ -58,6 +58,15 @@ if ($action === null) {
 
 try {
 
+    // Checagem leve (sem gerar nada) pro ModalIA decidir se mostra o selo de
+    // premium no botão antes mesmo do usuário clicar - mesma regra de
+    // verificarAcesso, incluindo a amostra vitalícia do limitado expirada.
+    if ($action === 'verificar_acesso') {
+        $bloqueio = FraseDoDia::verificarAcesso($pdo, $user_id, $plano);
+        echo json_encode(["acesso" => $bloqueio === null]);
+        exit;
+    }
+
     if ($action === 'obter') {
         $bloqueio = FraseDoDia::verificarAcesso($pdo, $user_id, $plano);
 
