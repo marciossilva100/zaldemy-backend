@@ -130,6 +130,31 @@ class DailyQuestionOpenAI
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     }
 
+    // Usado só pra recalcular o destaque de uma pergunta PENDENTE (já gerada,
+    // ainda não respondida) - reabrir a tela sorteia um novo lote aleatório de
+    // até 50 frases (mesmo filtro de par de idioma do controller), quase
+    // certamente diferente do lote que gerou o texto original, fazendo o
+    // destaque sumir mesmo a pergunta reaproveitando vocabulário de verdade.
+    // Sem LIMIT porque isso é só computação local (n-gramas), não vai pra IA.
+    public static function getTodasFrasesElegiveis(PDO $pdo, int $user_id): array
+    {
+        $sql = "SELECT f.texto_traduzido
+                FROM frases f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprendendo
+                    AND ir.id_user = :user_id
+                WHERE f.texto_traduzido IS NOT NULL
+                AND f.usuario_id = :user_id
+                AND TRIM(f.texto_nativo) <> ''
+                AND f.status_id > 0";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
     // Nível de proficiência informado pelo usuário no cadastro (Nivel::registrar)
     // - usado no prompt pra ajustar a complexidade da pergunta gerada.
     public static function getNivelNome(PDO $pdo, int $user_id): string
@@ -149,12 +174,14 @@ class DailyQuestionOpenAI
         $pendente = self::getPendente($pdo, $user_id);
 
         if ($pendente && !empty($pendente['question_traducao'])) {
+            $todasFrases = self::getTodasFrasesElegiveis($pdo, $user_id);
+
             return [
                 "success" => true,
                 "id" => (int) $pendente['id'],
                 "question" => $pendente['question'],
                 "traducao" => $pendente['question_traducao'],
-                "question_destacada" => self::destacarPalavrasConhecidas($pendente['question'], $phrases, $idiomaNome),
+                "question_destacada" => self::destacarPalavrasConhecidas($pendente['question'], $todasFrases, $idiomaNome),
             ];
         }
 

@@ -151,12 +151,14 @@ class FraseDoDia
         $pendente = self::getPendente($pdo, $user_id);
 
         if ($pendente && !empty($pendente['frase_traducao'])) {
+            $todasFrases = self::getTodasFrasesElegiveis($pdo, $user_id);
+
             return [
                 "success" => true,
                 "id" => (int) $pendente['id'],
                 "frase" => $pendente['frase'],
                 "traducao" => $pendente['frase_traducao'],
-                "frase_destacada" => self::destacarPalavrasConhecidas($pendente['frase'], $phrases, $idiomaNome),
+                "frase_destacada" => self::destacarPalavrasConhecidas($pendente['frase'], $todasFrases, $idiomaNome),
             ];
         }
 
@@ -811,6 +813,33 @@ class FraseDoDia
                 . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "") . "
                 ORDER BY f.id_treino DESC, RAND()
                 LIMIT " . self::MAX_FRASES_PROMPT;
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    // Usado só pra recalcular o destaque de uma frase PENDENTE (já gerada,
+    // ainda não respondida) - reabrir a tela sorteia um novo lote aleatório de
+    // até 50 frases via getFrasesDoUsuario(), quase certamente diferente do
+    // lote que gerou o texto original (ex: usuário com 664 frases no par tem
+    // ~7% de chance de cada frase repetir no sorteio), fazendo o destaque
+    // sumir mesmo com a frase gerada reaproveitando vocabulário de verdade.
+    // Sem LIMIT porque isso é só computação local (n-gramas), não vai pra IA -
+    // o limite de 50 existe só pra não gastar tokens à toa na geração.
+    public static function getTodasFrasesElegiveis(PDO $pdo, int $user_id): array
+    {
+        $sql = "SELECT f.texto_traduzido
+                FROM frases f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprendendo
+                    AND ir.id_user = :user_id
+                WHERE f.texto_traduzido IS NOT NULL
+                AND f.usuario_id = :user_id
+                AND TRIM(f.texto_nativo) <> ''
+                AND f.status_id > 0";
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
