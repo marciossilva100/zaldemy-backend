@@ -35,17 +35,28 @@ class DailyQuestionOpenAI
     // equivaleria a uma pergunta MUITO mais longa/complexa (e o cartão do
     // flashcard estouraria). Usa um máximo bem menor pra manter a pergunta
     // com complexidade equivalente. Mesma lógica em FraseDoDia.
-    private static function limiteCaracteresPara(string $idiomaNome): int
+    // Iniciante recebe um limite bem menor - pergunta curta e direta é mais
+    // fácil de entender e responder oralmente em uma frase pra quem ainda tá
+    // começando; o limite maior (220/90) fica pra intermediário/avançado.
+    private static function limiteCaracteresPara(string $idiomaNome, ?string $nivelNome = null): int
     {
         $cjk = ['chin', 'japon', 'corean'];
+        $ehCjk = false;
 
         foreach ($cjk as $termo) {
             if (mb_stripos($idiomaNome, $termo) !== false) {
-                return 90;
+                $ehCjk = true;
+                break;
             }
         }
 
-        return 220;
+        $ehIniciante = $nivelNome !== null && mb_stripos($nivelNome, 'iniciante') !== false;
+
+        if ($ehIniciante) {
+            return $ehCjk ? 40 : 100;
+        }
+
+        return $ehCjk ? 90 : 220;
     }
 
     // Tradução tende a ficar um pouco mais longa que o original (idiomas
@@ -226,7 +237,7 @@ class DailyQuestionOpenAI
         // destaque - o destaque só deve marcar o que a IA realmente viu.
         $phrasesOriginais = $phrases;
 
-        $maxPergunta = self::limiteCaracteresPara($idiomaNome);
+        $maxPergunta = self::limiteCaracteresPara($idiomaNome, $nivelNome);
         $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome);
         $phrases = array_map(fn($p) => mb_substr($p, 0, $maxPergunta), $phrases);
         $phrasesText = implode("\n", $phrases);
@@ -234,8 +245,10 @@ class DailyQuestionOpenAI
         $systemPrompt = "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome}, pra um aluno de "
             . "nível {$nivelNome}, respondível oralmente em uma frase, e também a tradução dela em {$idiomaNativoNome}. "
             . "Ajuste o vocabulário e a complexidade gramatical da pergunta pro nível do aluno - iniciante pede "
-            . "estruturas simples e vocabulário básico; intermediário pode incluir conectivos e tempos verbais "
-            . "variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. Monte a pergunta "
+            . "uma pergunta CURTA e direta, com estruturas simples e vocabulário básico (evite orações "
+            . "subordinadas ou múltiplas ideias na mesma pergunta); intermediário pode incluir conectivos e "
+            . "tempos verbais variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. "
+            . "Monte a pergunta "
             . "usando o MÁXIMO de trechos que puder das frases fornecidas pelo aluno a seguir, sempre que fizerem "
             . "sentido juntas dentro de uma mesma cena/contexto - elas são a matéria-prima principal da pergunta, "
             . "não apenas uma referência solta de vocabulário. NÃO force incluir frases que não se encaixem bem: é "
@@ -641,15 +654,12 @@ class DailyQuestionOpenAI
         string $idiomaNome,
         string $idiomaNativoNome
     ): array {
-        $stmt = $pdo->prepare("SELECT question, tentativas FROM perguntas_ia WHERE id = :id AND user_id = :user_id AND status_id = 0");
-        $stmt->execute([':id' => $perguntaId, ':user_id' => $user_id]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $row = self::buscarPerguntaPendente($pdo, $perguntaId, $user_id);
 
         if (!$row) {
             return ["success" => false, "message" => "Pergunta não encontrada ou já respondida."];
         }
 
-        $question = $row['question'];
         $tentativaAtual = (int) $row['tentativas'] + 1;
 
         $nomeArquivo = "audio." . self::extensaoParaMime($mimeType);
@@ -677,31 +687,106 @@ class DailyQuestionOpenAI
             ];
         }
 
-        // Mesma checagem já aplicada em frases/categorias - a transcrição é
-        // texto que o próprio usuário falou, sem moderação nenhuma antes disso.
-        if (verificarConteudoImproprio($transcricao)) {
-            $esgotou = self::registrarTentativaSemNota($pdo, $perguntaId, $tentativaAtual, $transcricao);
+        return self::avaliarESalvarResposta($pdo, $chat, $perguntaId, $row, $tentativaAtual, $transcricao, $idiomaNome, $idiomaNativoNome, true);
+    }
+
+    // Mesmo fluxo de avaliação do áudio, mas pra quem prefere digitar a
+    // resposta em vez de gravar (botão "Digitar" na tela de Perguntas) - sem
+    // etapa de transcrição, o texto digitado já é a resposta final.
+    public static function responderTexto(
+        PDO $pdo,
+        OpenAiChat $chat,
+        int $user_id,
+        int $perguntaId,
+        string $respostaTexto,
+        string $idiomaNome,
+        string $idiomaNativoNome
+    ): array {
+        $row = self::buscarPerguntaPendente($pdo, $perguntaId, $user_id);
+
+        if (!$row) {
+            return ["success" => false, "message" => "Pergunta não encontrada ou já respondida."];
+        }
+
+        $respostaTexto = trim($respostaTexto);
+
+        if ($respostaTexto === '') {
+            return ["success" => false, "message" => "Digite uma resposta."];
+        }
+
+        $tentativaAtual = (int) $row['tentativas'] + 1;
+
+        return self::avaliarESalvarResposta($pdo, $chat, $perguntaId, $row, $tentativaAtual, $respostaTexto, $idiomaNome, $idiomaNativoNome, false);
+    }
+
+    private static function buscarPerguntaPendente(PDO $pdo, int $perguntaId, int $user_id): ?array
+    {
+        $stmt = $pdo->prepare("SELECT question, tentativas FROM perguntas_ia WHERE id = :id AND user_id = :user_id AND status_id = 0");
+        $stmt->execute([':id' => $perguntaId, ':user_id' => $user_id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
+    private static function avaliarESalvarResposta(
+        PDO $pdo,
+        OpenAiChat $chat,
+        int $perguntaId,
+        array $row,
+        int $tentativaAtual,
+        string $resposta,
+        string $idiomaNome,
+        string $idiomaNativoNome,
+        bool $ehAudio
+    ): array {
+        $question = $row['question'];
+
+        // Mesma checagem já aplicada em frases/categorias - a resposta é
+        // texto que o próprio usuário produziu, sem moderação nenhuma antes disso.
+        if (verificarConteudoImproprio($resposta)) {
+            $esgotou = self::registrarTentativaSemNota($pdo, $perguntaId, $tentativaAtual, $resposta);
 
             return [
                 "success" => false,
                 "pode_tentar_novamente" => !$esgotou,
-                "message" => "O áudio contém conteúdo impróprio."
+                "message" => "A resposta contém conteúdo impróprio."
             ];
         }
 
-        $systemPrompt = "Você é um professor de idiomas avaliando a resposta ORAL de um aluno. Vai receber a pergunta e a "
-            . "transcrição da resposta falada (hesitação/frase incompleta aparece como texto desconexo). "
+        // Foco da correção muda conforme a origem: quem grava está treinando
+        // fala (a transcrição pode trazer hesitação/texto desconexo, e erros
+        // de pronúncia às vezes aparecem como palavras estranhas/erradas na
+        // transcrição); quem digita está treinando escrita de verdade
+        // (ortografia, gramática, concordância avaliadas com precisão, sem
+        // margem pra "ruído de transcrição").
+        if ($ehAudio) {
+            $tipoResposta = "ORAL (transcrita automaticamente a partir do áudio)";
+            $focoAvaliacao = "Avalie principalmente se a resposta faz sentido pra pergunta e a fluência/gramática da "
+                . "fala. Como o texto vem de transcrição automática, palavras estranhas ou fora de contexto podem "
+                . "indicar erro de pronúncia do aluno (e não erro de digitação) - quando notar isso, mencione no "
+                . "feedback como possível problema de pronúncia daquela palavra, sem penalizar tanto quanto um erro "
+                . "gramatical real.";
+        } else {
+            $tipoResposta = "ESCRITA (digitada pelo próprio aluno)";
+            $focoAvaliacao = "Avalie com rigor a escrita: ortografia, gramática, concordância (verbal e nominal), "
+                . "pontuação e uso correto das palavras, além de se a resposta faz sentido pra pergunta. Como o "
+                . "aluno digitou a resposta, não há motivo pra tolerância com erros - aponte no feedback os erros "
+                . "de escrita mais importantes de forma específica.";
+        }
+
+        $systemPrompt = "Você é um professor de idiomas avaliando a resposta {$tipoResposta} de um aluno. Vai receber a "
+            . "pergunta e a resposta do aluno. "
             . "REQUISITO OBRIGATÓRIO: o aluno precisa responder em {$idiomaNome} (o mesmo idioma da pergunta) - se a "
-            . "transcrição estiver em outro idioma (incluindo o idioma nativo do aluno), a resposta é automaticamente "
+            . "resposta estiver em outro idioma (incluindo o idioma nativo do aluno), a resposta é automaticamente "
             . "incorreta (nota baixa, no máximo 3, correto=false), mesmo que o conteúdo em si responda bem à pergunta. "
             . "Nesse caso, o feedback deve deixar claro que a resposta precisa ser em {$idiomaNome}. Se estiver no "
-            . "idioma certo, avalie normalmente se responde à pergunta e a qualidade gramatical/fluência. Dê nota de 0 "
+            . "idioma certo, avalie se responde à pergunta e sua qualidade. {$focoAvaliacao} Dê nota de 0 "
             . "a 10, se está correto, e explique os principais erros em {$idiomaNativoNome} (máx 200 caracteres). "
             . 'Responda em JSON: {"nota": 0-10, "correto": true ou false, "feedback": "..."}';
 
         $correcaoResult = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
-            ['role' => 'user', 'content' => "Pergunta: {$question}\nTranscrição da resposta: {$transcricao}"],
+            ['role' => 'user', 'content' => "Pergunta: {$question}\nResposta do aluno: {$resposta}"],
         ], true, 500);
 
         if ($correcaoResult['erro']) {
@@ -736,7 +821,7 @@ class DailyQuestionOpenAI
         $stmt->execute([
             ':status_id' => $statusFinal,
             ':tentativas' => $tentativaAtual,
-            ':transcricao' => $transcricao,
+            ':transcricao' => $resposta,
             ':nota' => $nota,
             ':feedback' => $feedback,
             ':id' => $perguntaId,
@@ -744,7 +829,7 @@ class DailyQuestionOpenAI
 
         return [
             "success" => true,
-            "transcricao" => $transcricao,
+            "transcricao" => $resposta,
             "nota" => $nota,
             "correto" => $correto,
             "feedback" => $feedback,

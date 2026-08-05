@@ -190,6 +190,48 @@ class DailyQuestionController
     }
 
     /* ===============================
+       POST → RESPONDER (texto digitado)
+    =============================== */
+    public function answerDailyQuestionTexto()
+    {
+        try {
+            $user_id = $this->getUserId();
+
+            $bloqueio = DailyQuestionOpenAI::verificarAcesso($this->pdo, $user_id, $this->getPlano());
+
+            if ($bloqueio !== null) {
+                $this->json($bloqueio);
+                return;
+            }
+
+            $perguntaId = (int) ($_POST['question_id'] ?? 0);
+            $respostaTexto = (string) ($_POST['resposta'] ?? '');
+
+            if (!$perguntaId) {
+                throw new Exception('question_id obrigatório.');
+            }
+
+            $resultado = DailyQuestionOpenAI::responderTexto(
+                $this->pdo,
+                $this->chat,
+                $user_id,
+                $perguntaId,
+                $respostaTexto,
+                $this->getIdiomaAprendendo($user_id),
+                $this->getIdiomaNativo($user_id)
+            );
+
+            if ($resultado['success'] && !($resultado['pode_tentar_novamente'] ?? false)) {
+                PlanoLimitado::verificarEDowngradear($this->pdo, $user_id, $this->getPlano());
+            }
+
+            $this->json($resultado);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
+    }
+
+    /* ===============================
        GET → HISTÓRICO DE RESPOSTAS
     =============================== */
     public function getHistorico()
@@ -354,6 +396,8 @@ try {
 
         if ($action === 'skip') {
             $controller->skipDailyQuestion();
+        } elseif ($action === 'responder_texto') {
+            $controller->answerDailyQuestionTexto();
         } else {
             $controller->answerDailyQuestion();
         }
