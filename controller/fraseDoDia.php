@@ -66,7 +66,11 @@ try {
             exit;
         }
 
-        $chat = new OpenAiChat($_ENV['OPEN_AI']);
+        // gpt-5-mini só pra gerar a frase - testado direto na API, combina os
+        // trechos das frases do aluno de forma bem mais coerente que o nano
+        // nessa tarefa específica de "compor" texto novo a partir de várias
+        // frases soltas.
+        $chat = new OpenAiChat($_ENV['OPEN_AI'], "gpt-5-mini");
         $idioma = FraseDoDia::getIdiomaAprendendo($pdo, $user_id);
         $idiomaNativo = FraseDoDia::getIdiomaNativo($pdo, $user_id);
         $frases = FraseDoDia::getFrasesDoUsuario($pdo, $user_id);

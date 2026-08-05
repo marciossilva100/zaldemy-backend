@@ -1,15 +1,20 @@
 <?php
 
-// Wrapper genérico pro gpt-5-nano (modelo de raciocínio) via
+// Wrapper genérico pra modelos de raciocínio da família gpt-5 via
 // /v1/chat/completions. Usado pra gerar frase/pergunta do dia e pra corrigir
-// as respostas do aluno.
+// as respostas do aluno. Modelo padrão é o gpt-5-nano (mais barato); pra
+// geração de frase/pergunta usamos gpt-5-mini via o 2º parâmetro do
+// construtor - testado direto na API, o mini combina os trechos das frases
+// do aluno de forma bem mais coerente que o nano, que às vezes misturava
+// trechos sem relação (referências soltas a "you"/outra pessoa do nada).
 class OpenAiChat {
 
     private $apiKey;
-    private $model = "gpt-5-nano";
+    private $model;
 
-    public function __construct($apiKey) {
+    public function __construct($apiKey, $model = "gpt-5-nano") {
         $this->apiKey = $apiKey;
+        $this->model = $model;
     }
 
     // $messages: array no formato [{role, content}, ...] (igual chat/completions padrão)

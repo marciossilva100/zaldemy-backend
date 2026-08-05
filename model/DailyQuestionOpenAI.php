@@ -11,6 +11,7 @@ class DailyQuestionOpenAI
     const LIMITE_DIARIO_PREMIUM = 5;
     const LIMITE_VITALICIO_LIMITADO = 3;
     const MAX_TENTATIVAS_POR_PERGUNTA = 3;
+    const MAX_TENTATIVAS_GERACAO = 5;
 
     // Tamanho máximo de trecho (palavras ou caracteres, conforme o idioma)
     // considerado ao montar/buscar os n-gramas do destaque de vocabulário -
@@ -193,36 +194,79 @@ class DailyQuestionOpenAI
             . "Ajuste o vocabulário e a complexidade gramatical da pergunta pro nível do aluno - iniciante pede "
             . "estruturas simples e vocabulário básico; intermediário pode incluir conectivos e tempos verbais "
             . "variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. Monte a pergunta "
-            . "usando o MÁXIMO de trechos que puder das frases fornecidas pelo aluno a seguir - combine quantas "
-            . "frases fizerem sentido, sem limite fixo de quantidade nem de percentual; elas são a matéria-prima "
-            . "principal da pergunta, não apenas uma referência solta de vocabulário. O conteúdo (temas, ações, "
-            . "situações) tem que vir claramente do que está nessas frases, não de uma ideia nova inventada do "
-            . "zero. Pra dar coesão entre os trechos combinados, ajuste o que for preciso (pronomes, tempos "
-            . "verbais, conectivos) e complete só com palavras genéricas do idioma (artigos, preposições, "
-            . "concordância) quando for indispensável. Mesmo assim, o resultado final precisa ter coesão, "
-            . "concordância gramatical e naturalidade como uma pergunta única - adapte os trechos até formarem "
-            . "uma ideia lógica, nunca deixe só colados lado a lado sem conexão real entre eles. "
+            . "usando o MÁXIMO de trechos que puder das frases fornecidas pelo aluno a seguir, sempre que fizerem "
+            . "sentido juntas dentro de uma mesma cena/contexto - elas são a matéria-prima principal da pergunta, "
+            . "não apenas uma referência solta de vocabulário. NÃO force incluir frases que não se encaixem bem: é "
+            . "melhor combinar só 2 ou 3 delas com coerência real do que forçar várias frases desconectadas numa "
+            . "coisa só pra usar mais vocabulário - mas se muitas frases combinarem bem numa cena só, use todas "
+            . "elas. O conteúdo (temas, ações, situações) tem que vir claramente do que está nessas frases, não de "
+            . "uma ideia nova inventada do zero. As frases do aluno vêm de conversas soltas e diferentes "
+            . "entre si - muitas só fazem sentido dentro do contexto original delas (ex: uma resposta a alguém "
+            . "específico, uma instrução dirigida a outra pessoa). Preste atenção especial a quem fala e sobre "
+            . "quem/com quem se fala (sujeito, pessoa gramatical, referências a outras pessoas) - a pergunta final "
+            . "tem que soar como se fosse dita por UM narrador, sobre UMA cena só; nunca combine um trecho sobre "
+            . "uma pessoa/situação com outro trecho que introduz outra pessoa do nada, sem relação nenhuma com o "
+            . "resto - isso soa artificial e ninguém falaria assim no dia a dia. Se um trecho só encaixar "
+            . "ajustando pessoa gramatical, tempo verbal ou outro detalhe gramatical pra combinar com o resto, "
+            . "ajuste; se não der pra encaixar sem parecer forçado, não use esse trecho. Mesmo assim, o resultado "
+            . "final precisa ter coesão, concordância gramatical e naturalidade como uma pergunta única - nunca "
+            . "deixe só colados lado a lado sem conexão real entre eles. "
             . "Máximo {$maxPergunta} caracteres na "
             . "pergunta. Não use aspas. "
             . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
 
-        $resultado = $chat->completar([
-            ['role' => 'system', 'content' => $systemPrompt],
-            ['role' => 'user', 'content' => "Frases:\n" . $phrasesText],
-        ], true, 400);
+        // A IA nem sempre respeita o limite de caracteres à primeira tentativa -
+        // tenta encurtar a MESMA pergunta (até MAX_TENTATIVAS_GERACAO vezes)
+        // em vez de truncar o texto cru, que corta a pergunta no meio (ex:
+        // "...and I'll stay focused to", sem terminar o pensamento).
+        $question = null;
+        $traducao = null;
 
-        if ($resultado['erro']) {
-            return ["success" => false, "message" => "Não foi possível gerar a pergunta: " . $resultado['mensagem']];
+        for ($tentativa = 1; $tentativa <= self::MAX_TENTATIVAS_GERACAO; $tentativa++) {
+            $resultado = $chat->completar([
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => "Frases:\n" . $phrasesText],
+            ], true, 400);
+
+            if ($resultado['erro']) {
+                return ["success" => false, "message" => "Não foi possível gerar a pergunta: " . $resultado['mensagem']];
+            }
+
+            $decodificado = json_decode($resultado['texto'], true);
+
+            if (!is_array($decodificado) || empty($decodificado['pergunta'])) {
+                return ["success" => false, "message" => "Resposta inválida da IA."];
+            }
+
+            $questionCandidata = trim((string) $decodificado['pergunta'], "\" \n\r\t");
+            $traducaoCandidata = trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t");
+
+            if (mb_strlen($questionCandidata) > $maxPergunta) {
+                $encurtada = self::encurtarPergunta($chat, $questionCandidata, $idiomaNome, $idiomaNativoNome, $maxPergunta);
+                if ($encurtada !== null) {
+                    $questionCandidata = $encurtada['pergunta'];
+                    $traducaoCandidata = $encurtada['traducao'];
+                }
+            }
+
+            // Além do tamanho, a pergunta precisa terminar de fato com "?" - o
+            // limite de caracteres é bem menor que o da frase do dia, então o
+            // corte no encurtamento tem mais chance de comer o final e deixar a
+            // pergunta incompleta. Confere aqui em vez de confiar só no prompt.
+            $terminaComInterrogacao = mb_substr(rtrim($questionCandidata), -1) === '?';
+
+            if (mb_strlen($questionCandidata) <= $maxPergunta && $terminaComInterrogacao) {
+                $question = $questionCandidata;
+                $traducao = self::truncarPreservandoPalavras($traducaoCandidata, $limiteTraducao);
+                break;
+            }
+
+            // Guarda a última tentativa como fallback caso nenhuma acerte o limite -
+            // mantém a pergunta completa (mesmo que um pouco fora do limite) em vez
+            // de truncar no meio, o que deixaria o final sem sentido.
+            $question = $questionCandidata;
+            $traducao = $traducaoCandidata;
         }
-
-        $decodificado = json_decode($resultado['texto'], true);
-
-        if (!is_array($decodificado) || empty($decodificado['pergunta'])) {
-            return ["success" => false, "message" => "Resposta inválida da IA."];
-        }
-
-        $question = self::truncarPreservandoPalavras(trim((string) $decodificado['pergunta'], "\" \n\r\t"), $maxPergunta);
-        $traducao = self::truncarPreservandoPalavras(trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t"), $limiteTraducao);
 
         $stmt = $pdo->prepare("INSERT INTO perguntas_ia (user_id, status_id, question, question_traducao) VALUES (:user_id, 0, :question, :traducao)");
         $stmt->execute([':user_id' => $user_id, ':question' => $question, ':traducao' => $traducao]);
@@ -262,12 +306,22 @@ class DailyQuestionOpenAI
     // Constrói o conjunto de todos os n-gramas (sequências contíguas de 2+
     // palavras, até MAX_TAMANHO_TRECHO) presentes nas frases do aluno, pra
     // busca O(1) por trecho candidato.
+    // A IA costuma gerar contrações com apóstrofo tipográfico (U+2019, "I’ll")
+    // enquanto as frases que o aluno digitou usam o apóstrofo reto (U+0027,
+    // "I'll") - sem normalizar, as duas formas tokenizam igual mas nunca batem
+    // como string, quebrando o destaque de qualquer trecho com contração. Só
+    // usado nas chaves de comparação, nunca no texto exibido.
+    private static function normalizarApostrofo(string $texto): string
+    {
+        return str_replace('’', "'", $texto);
+    }
+
     private static function construirNGramasPalavras(array $phrases): array
     {
         $ngramas = [];
 
         foreach ($phrases as $frase) {
-            preg_match_all('/[\p{L}\p{N}\']+/u', mb_strtolower($frase), $m);
+            preg_match_all('/[\p{L}\p{N}\'’]+/u', self::normalizarApostrofo(mb_strtolower($frase)), $m);
             $palavras = $m[0];
             $total = count($palavras);
             $maxTam = min(self::MAX_TAMANHO_TRECHO, $total);
@@ -319,12 +373,15 @@ class DailyQuestionOpenAI
 
         // preserva separadores (espaços/pontuação) como tokens próprios, pra
         // devolver o texto completo pro frontend renderizar
-        $tokens = preg_split('/([\p{L}\p{N}\']+)/u', $texto, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+        $tokens = preg_split('/([\p{L}\p{N}\'’]+)/u', $texto, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
 
         $palavrasTexto = [];
         foreach ($tokens as $i => $token) {
-            if (preg_match('/^[\p{L}\p{N}\']+$/u', $token) === 1) {
-                $palavrasTexto[] = ['indiceToken' => $i, 'palavra' => mb_strtolower($token)];
+            if (preg_match('/^[\p{L}\p{N}\'’]+$/u', $token) === 1) {
+                // normaliza o apóstrofo só pra comparação - o texto original (com o
+                // apóstrofo tipográfico que a IA costuma usar) continua intacto no
+                // token exibido pro usuário.
+                $palavrasTexto[] = ['indiceToken' => $i, 'palavra' => self::normalizarApostrofo(mb_strtolower($token))];
             }
         }
 
@@ -418,6 +475,41 @@ class DailyQuestionOpenAI
             $resultado[] = ['texto' => $token, 'destaque' => $destacado[$idx]];
         }
         return $resultado;
+    }
+
+    // Encurta uma pergunta longa demais em vez de truncar o texto cru - truncar
+    // corta no meio de uma oração, o que é pior que a pergunta ficar um pouco
+    // fora do limite. Pedir pra IA reescrever mais curta preserva o sentido e
+    // garante que a pergunta termine de forma gramaticalmente completa.
+    private static function encurtarPergunta(OpenAiChat $chat, string $pergunta, string $idiomaNome, string $idiomaNativoNome, int $maxPergunta): ?array
+    {
+        $tamanhoAtual = mb_strlen($pergunta);
+
+        $prompt = "A pergunta a seguir, em {$idiomaNome}, tem {$tamanhoAtual} caracteres e está longa demais. "
+            . "Reescreva ela removendo um detalhe, mantendo o sentido principal, até ficar com no máximo "
+            . "{$maxPergunta} caracteres no total. A pergunta reescrita precisa continuar sendo uma pergunta "
+            . "completa, terminando com \"?\" (nunca cortada no meio). Também gere a tradução em "
+            . "{$idiomaNativoNome}. Pergunta original: \"{$pergunta}\". "
+            . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
+
+        $resultado = $chat->completar([
+            ['role' => 'system', 'content' => $prompt],
+        ], true, 400);
+
+        if ($resultado['erro']) {
+            return null;
+        }
+
+        $decodificado = json_decode($resultado['texto'], true);
+
+        if (!is_array($decodificado) || empty($decodificado['pergunta'])) {
+            return null;
+        }
+
+        return [
+            'pergunta' => trim((string) $decodificado['pergunta'], "\" \n\r\t"),
+            'traducao' => trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t"),
+        ];
     }
 
     // mb_substr corta no meio de uma palavra quando o texto passa do limite -

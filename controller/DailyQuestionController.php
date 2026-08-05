@@ -50,12 +50,19 @@ class DailyQuestionController
 
     private $pdo;
     private $chat;
+    private $chatGeracao;
     private $transcribe;
 
     public function __construct(PDO $pdo, string $apiKey)
     {
         $this->pdo = $pdo;
         $this->chat = new OpenAiChat($apiKey);
+        // gpt-5-mini só pra gerar a pergunta - testado direto na API, combina
+        // os trechos das frases do aluno de forma bem mais coerente que o
+        // nano nessa tarefa específica. A correção da resposta (mais simples,
+        // não precisa "compor" texto novo a partir de várias frases soltas)
+        // continua no nano de $this->chat.
+        $this->chatGeracao = new OpenAiChat($apiKey, "gpt-5-mini");
         $this->transcribe = new OpenAiTranscribe($apiKey);
     }
 
@@ -101,7 +108,7 @@ class DailyQuestionController
             $idiomaNativo = $this->getIdiomaNativo($user_id);
             $nivel = DailyQuestionOpenAI::getNivelNome($this->pdo, $user_id);
 
-            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chat, $user_id, $phrases, $idioma, $idiomaNativo, $nivel);
+            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chatGeracao, $user_id, $phrases, $idioma, $idiomaNativo, $nivel);
 
             if ($resultado['success']) {
                 $plano = $this->getPlano();

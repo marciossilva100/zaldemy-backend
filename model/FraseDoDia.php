@@ -204,16 +204,25 @@ class FraseDoDia
                 . "tem liberdade de completar com palavras comuns do idioma pra formar uma frase natural e completa - "
                 . "não force repetir sempre as mesmas palavras só pra bater um percentual; priorize soar natural e "
                 . "ficar no tamanho certo."
-            : "Monte a frase usando o MÁXIMO de trechos que puder das frases que o aluno já estuda a seguir - "
-                . "combine quantas frases fizerem sentido, sem limite fixo de quantidade nem de percentual; elas "
-                . "são a matéria-prima principal da frase, não apenas uma referência solta de vocabulário. O "
-                . "conteúdo (temas, ações, situações) tem que vir claramente do que está nessas frases, não de uma "
-                . "ideia nova inventada do zero. Pra dar coesão entre os trechos combinados, ajuste o que for "
-                . "preciso (pronomes, tempos verbais, conectivos) e complete só com palavras genéricas do idioma "
-                . "(artigos, preposições, concordância) quando for indispensável. Mesmo assim, o resultado final "
-                . "precisa ter coesão, concordância gramatical e naturalidade como uma frase única - adapte os "
-                . "trechos até formarem uma ideia lógica, nunca deixe só colados lado a lado sem conexão real "
-                . "entre eles.";
+            : "Monte a frase usando o MÁXIMO de trechos que puder das frases que o aluno já estuda a seguir, sempre "
+                . "que fizerem sentido juntas dentro de uma mesma cena/contexto - elas são a matéria-prima "
+                . "principal da frase, não apenas uma referência solta de vocabulário. NÃO force incluir frases "
+                . "que não se encaixem bem: é melhor combinar só 2 ou 3 delas com coerência real do que forçar "
+                . "várias frases desconectadas numa coisa só pra usar mais vocabulário - mas se muitas frases "
+                . "combinarem bem numa cena só, use todas elas. O conteúdo (temas, ações, situações) tem que vir "
+                . "claramente do que está nessas frases, não de uma ideia nova inventada do zero. As frases do "
+                . "aluno vêm de "
+                . "conversas soltas e diferentes entre si - muitas só fazem sentido dentro do contexto original "
+                . "delas (ex: uma resposta a alguém específico, uma instrução dirigida a outra pessoa). Preste "
+                . "atenção especial a quem fala e sobre quem/com quem se fala (sujeito, pessoa gramatical, "
+                . "referências a outras pessoas) - a frase final tem que soar como se fosse dita por UM narrador, "
+                . "sobre UMA cena só; nunca combine um trecho sobre uma pessoa/situação com outro trecho que "
+                . "introduz outra pessoa do nada, sem relação nenhuma com o resto - isso soa artificial e ninguém "
+                . "falaria assim no dia a dia. Se um trecho só encaixar ajustando pessoa gramatical, tempo verbal "
+                . "ou outro detalhe gramatical pra combinar com o resto, ajuste; se não der pra encaixar sem "
+                . "parecer forçado, não use esse trecho. Mesmo assim, o resultado final precisa ter coesão, "
+                . "concordância gramatical e naturalidade como uma frase única - nunca deixe só colados lado a "
+                . "lado sem conexão real entre eles.";
 
         $systemPrompt = "Você é um professor de idiomas escrevendo uma frase de exemplo em {$idiomaNome} pra um aluno "
             . "de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical da frase pro nível dele - "
@@ -226,7 +235,10 @@ class FraseDoDia
             . "demais - por isso a frase precisa ter pelo menos duas orações ligadas por conectivos (e, mas, porque, "
             . "quando, embora, já que, etc.) ou uma oração com detalhes extras (tempo, lugar, motivo), pra "
             . "naturalmente ocupar esse espaço. A frase deve ser natural e do dia a dia, adequada pra um aluno ler em "
-            . "voz alta como exercício de pronúncia, e sempre uma afirmação (declarativa) - nunca uma pergunta. "
+            . "voz alta como exercício de pronúncia, e tem que ser inteiramente uma afirmação (declarativa) do "
+            . "início ao fim - nenhuma oração dentro da frase pode ser uma pergunta, nem mesmo uma pergunta "
+            . "retórica ou tag question (tipo 'certo?', 'não é?'); o texto final não pode conter nenhum ponto de "
+            . "interrogação. "
             . "{$instrucaoVocabulario} Gramaticalmente correta. Não repita estruturas óbvias como 'My name is'. "
             . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
 
@@ -258,26 +270,40 @@ class FraseDoDia
             $fraseCandidata = trim((string) $decodificado['frase'], "\" \n\r\t");
             $traducaoCandidata = trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t");
 
-            // Se saiu curta, tenta expandir a MESMA frase (tarefa mais fácil pro
-            // modelo acertar do que gerar já com o tamanho certo do zero) antes
-            // de desistir e regenerar tudo de novo.
+            // Se saiu curta ou longa demais, tenta ajustar a MESMA frase (tarefa
+            // mais fácil pro modelo acertar do que gerar já com o tamanho certo
+            // do zero) antes de desistir e regenerar tudo de novo.
             if (mb_strlen($fraseCandidata) < $min) {
                 $expandida = self::expandirFrase($chat, $fraseCandidata, $idiomaNome, $idiomaNativoNome, $min, $max);
                 if ($expandida !== null) {
                     $fraseCandidata = $expandida['frase'];
                     $traducaoCandidata = $expandida['traducao'];
                 }
+            } elseif (mb_strlen($fraseCandidata) > $max) {
+                $encurtada = self::encurtarFrase($chat, $fraseCandidata, $idiomaNome, $idiomaNativoNome, $min, $max);
+                if ($encurtada !== null) {
+                    $fraseCandidata = $encurtada['frase'];
+                    $traducaoCandidata = $encurtada['traducao'];
+                }
             }
 
-            if (mb_strlen($fraseCandidata) >= $min && mb_strlen($fraseCandidata) <= $max) {
+            // Além do tamanho, a frase nunca pode virar pergunta (nem retórica/tag
+            // question) no meio - o prompt já pede isso, mas confere aqui também
+            // em vez de confiar só na instrução.
+            $temInterrogacao = mb_strpos($fraseCandidata, '?') !== false;
+
+            if (mb_strlen($fraseCandidata) >= $min && mb_strlen($fraseCandidata) <= $max && !$temInterrogacao) {
                 $frase = $fraseCandidata;
                 $traducao = self::truncarPreservandoPalavras($traducaoCandidata, $limiteTraducao);
                 break;
             }
 
-            // Guarda a última tentativa como fallback caso nenhuma acerte a faixa.
-            $frase = self::truncarPreservandoPalavras($fraseCandidata, $max);
-            $traducao = self::truncarPreservandoPalavras($traducaoCandidata, $limiteTraducao);
+            // Guarda a última tentativa como fallback caso nenhuma acerte a faixa
+            // exata - mantém a frase completa (mesmo que um pouco fora da faixa)
+            // em vez de truncar no meio de uma oração, o que deixaria o final sem
+            // sentido. A tradução também não é truncada pelo mesmo motivo.
+            $frase = $fraseCandidata;
+            $traducao = $traducaoCandidata;
         }
 
         $stmt = $pdo->prepare("INSERT INTO frase_dia_ia (user_id, frase, frase_traducao, status_id) VALUES (:user_id, :frase, :traducao, 0)");
@@ -315,6 +341,16 @@ class FraseDoDia
             : self::destacarTrechosPorPalavra($texto, $phrases);
     }
 
+    // A IA costuma gerar contrações com apóstrofo tipográfico (U+2019, "I’ll")
+    // enquanto as frases que o aluno digitou usam o apóstrofo reto (U+0027,
+    // "I'll") - sem normalizar, as duas formas tokenizam igual mas nunca batem
+    // como string, quebrando o destaque de qualquer trecho com contração. Só
+    // usado nas chaves de comparação, nunca no texto exibido.
+    private static function normalizarApostrofo(string $texto): string
+    {
+        return str_replace('’', "'", $texto);
+    }
+
     // Constrói o conjunto de todos os n-gramas (sequências contíguas de 2+
     // palavras, até MAX_TAMANHO_TRECHO) presentes nas frases do aluno, pra
     // busca O(1) por trecho candidato.
@@ -323,7 +359,7 @@ class FraseDoDia
         $ngramas = [];
 
         foreach ($phrases as $frase) {
-            preg_match_all('/[\p{L}\p{N}\']+/u', mb_strtolower($frase), $m);
+            preg_match_all('/[\p{L}\p{N}\'’]+/u', self::normalizarApostrofo(mb_strtolower($frase)), $m);
             $palavras = $m[0];
             $total = count($palavras);
             $maxTam = min(self::MAX_TAMANHO_TRECHO, $total);
@@ -375,12 +411,15 @@ class FraseDoDia
 
         // preserva separadores (espaços/pontuação) como tokens próprios, pra
         // devolver o texto completo pro frontend renderizar
-        $tokens = preg_split('/([\p{L}\p{N}\']+)/u', $texto, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+        $tokens = preg_split('/([\p{L}\p{N}\'’]+)/u', $texto, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
 
         $palavrasTexto = [];
         foreach ($tokens as $i => $token) {
-            if (preg_match('/^[\p{L}\p{N}\']+$/u', $token) === 1) {
-                $palavrasTexto[] = ['indiceToken' => $i, 'palavra' => mb_strtolower($token)];
+            if (preg_match('/^[\p{L}\p{N}\'’]+$/u', $token) === 1) {
+                // normaliza o apóstrofo só pra comparação - o texto original (com o
+                // apóstrofo tipográfico que a IA costuma usar) continua intacto no
+                // token exibido pro usuário.
+                $palavrasTexto[] = ['indiceToken' => $i, 'palavra' => self::normalizarApostrofo(mb_strtolower($token))];
             }
         }
 
@@ -518,6 +557,42 @@ class FraseDoDia
             . "ela adicionando um detalhe ou uma oração extra (ligada por 'e', 'porque', 'quando', 'mas', 'já que', "
             . "etc.), mantendo o sentido original, até ficar com EXATAMENTE entre {$min} e {$max} caracteres no total. "
             . "Também gere a tradução em {$idiomaNativoNome}. Frase original: \"{$frase}\". "
+            . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
+
+        $resultado = $chat->completar([
+            ['role' => 'system', 'content' => $prompt],
+        ], true, 400);
+
+        if ($resultado['erro']) {
+            return null;
+        }
+
+        $decodificado = json_decode($resultado['texto'], true);
+
+        if (!is_array($decodificado) || empty($decodificado['frase'])) {
+            return null;
+        }
+
+        return [
+            'frase' => trim((string) $decodificado['frase'], "\" \n\r\t"),
+            'traducao' => trim((string) ($decodificado['traducao'] ?? ''), "\" \n\r\t"),
+        ];
+    }
+
+    // Encurta uma frase longa demais em vez de truncar o texto cru - truncar
+    // corta no meio de uma oração (ex: "...and I'll stay focused to", sem
+    // terminar o pensamento), o que é pior que a frase ficar um pouco fora da
+    // faixa de tamanho. Pedir pra IA reescrever mais curta preserva o sentido
+    // e garante que a frase termine de forma gramaticalmente completa.
+    private static function encurtarFrase(OpenAiChat $chat, string $frase, string $idiomaNome, string $idiomaNativoNome, int $min, int $max): ?array
+    {
+        $tamanhoAtual = mb_strlen($frase);
+
+        $prompt = "A frase a seguir, em {$idiomaNome}, tem {$tamanhoAtual} caracteres e está longa demais. Reescreva "
+            . "ela removendo um detalhe ou uma oração, mantendo o sentido principal, até ficar com EXATAMENTE entre "
+            . "{$min} e {$max} caracteres no total. A frase reescrita precisa terminar de forma completa (nunca "
+            . "cortada no meio de uma oração). Também gere a tradução em {$idiomaNativoNome}. Frase original: "
+            . "\"{$frase}\". "
             . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
 
         $resultado = $chat->completar([
