@@ -40,6 +40,7 @@ require_once 'authMiddleware.php';
 require_once '../model/Categorias.php';
 require_once '../model/CategoriaIA.php';
 require_once '../model/PlanoLimitado.php';
+require_once '../model/Nivel.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
 require_once 'moderation.php';
 

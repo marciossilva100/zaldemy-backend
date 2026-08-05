@@ -26,6 +26,18 @@ class Nivel
         return ["success" => true, "nivel" => $nivel];
     }
 
+    // Busca o nível salvo do usuário (Nivel::registrar, no cadastro) já
+    // convertido pro texto usado nos prompts de IA - evita repetir a mesma
+    // query SELECT nivel FROM usuarios em cada recurso que gera conteúdo.
+    public static function obterNomeDoUsuario(PDO $pdo, int $user_id): string
+    {
+        $stmt = $pdo->prepare("SELECT nivel FROM usuarios WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        $nivel = $stmt->fetch(PDO::FETCH_ASSOC)['nivel'] ?? null;
+
+        return self::nomeParaPrompt($nivel !== null ? (int) $nivel : null);
+    }
+
     public static function nomeParaPrompt(?int $nivel): string
     {
         return match ($nivel) {

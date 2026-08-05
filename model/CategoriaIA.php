@@ -75,10 +75,13 @@ class CategoriaIA
         return $row ?: null;
     }
 
-    private static function gerarFrases(OpenAiChat $chat, string $topico, string $idiomaNativoNome, string $idiomaAprendendoNome): array
+    private static function gerarFrases(OpenAiChat $chat, string $topico, string $idiomaNativoNome, string $idiomaAprendendoNome, string $nivelNome): array
     {
         $systemPrompt = "Você é um professor de idiomas. Gere " . self::QUANTIDADE_FRASES . " frases curtas e úteis sobre o "
-            . "tema \"{$topico}\", em {$idiomaNativoNome} com a tradução correspondente em {$idiomaAprendendoNome}. "
+            . "tema \"{$topico}\", em {$idiomaNativoNome} com a tradução correspondente em {$idiomaAprendendoNome}, pra um "
+            . "aluno de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical pro nível dele - iniciante "
+            . "pede estruturas simples e vocabulário básico do dia a dia; intermediário pode incluir conectivos e tempos "
+            . "verbais variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. "
             . "Frases naturais, do dia a dia, variadas entre si (não repita a mesma estrutura), máximo 80 caracteres cada. "
             . 'Responda em JSON: {"frases": [{"nativo": "...", "traduzido": "..."}, ...]}';
 
@@ -119,7 +122,8 @@ class CategoriaIA
             return ["success" => false, "message" => "Selecione seu idioma nativo e de aprendizagem antes de continuar."];
         }
 
-        $geracao = self::gerarFrases($chat, $topico, $idiomas['nativo_nome'], $idiomas['aprendendo_nome']);
+        $nivelNome = Nivel::obterNomeDoUsuario($pdo, $user_id);
+        $geracao = self::gerarFrases($chat, $topico, $idiomas['nativo_nome'], $idiomas['aprendendo_nome'], $nivelNome);
 
         if ($geracao['erro']) {
             return ["success" => false, "message" => "Não foi possível gerar as frases: " . $geracao['mensagem']];
@@ -166,7 +170,8 @@ class CategoriaIA
             return ["success" => false, "message" => "Selecione seu idioma nativo e de aprendizagem antes de continuar."];
         }
 
-        $geracao = self::gerarFrases($chat, $topico, $idiomas['nativo_nome'], $idiomas['aprendendo_nome']);
+        $nivelNome = Nivel::obterNomeDoUsuario($pdo, $user_id);
+        $geracao = self::gerarFrases($chat, $topico, $idiomas['nativo_nome'], $idiomas['aprendendo_nome'], $nivelNome);
 
         if ($geracao['erro']) {
             return ["success" => false, "message" => "Não foi possível gerar as frases: " . $geracao['mensagem']];
