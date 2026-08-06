@@ -41,7 +41,11 @@ class FraseDoDia
     // Iniciante recebe uma faixa bem menor - a faixa padrão (200-220) exige
     // pelo menos duas orações ligadas por conectivo (ver systemPrompt), o
     // que é complexidade demais pra quem ainda tá começando, mesmo com
-    // vocabulário simples.
+    // vocabulário simples. Avançado recebe uma faixa um pouco maior - testado
+    // na prática, com a mesma faixa do intermediário a IA gerava frases quase
+    // idênticas em tamanho e complexidade pros dois níveis; um pouco mais de
+    // espaço ajuda a instrução de vocabulário/estrutura mais elaborada (ver
+    // systemPrompt) a se manifestar de verdade, não só na teoria do prompt.
     private static function faixaCaracteresPara(string $idiomaNome, ?string $nivelNome = null): array
     {
         $cjk = ['chin', 'japon', 'corean'];
@@ -55,9 +59,14 @@ class FraseDoDia
         }
 
         $ehIniciante = $nivelNome !== null && mb_stripos($nivelNome, 'iniciante') !== false;
+        $ehAvancado = $nivelNome !== null && mb_stripos($nivelNome, 'avan') !== false;
 
         if ($ehIniciante) {
             return $ehCjk ? [30, 45] : [90, 110];
+        }
+
+        if ($ehAvancado) {
+            return $ehCjk ? [90, 110] : [230, 260];
         }
 
         return $ehCjk ? [60, 90] : [200, 220];
@@ -256,8 +265,10 @@ class FraseDoDia
         $systemPrompt = "Você é um professor de idiomas escrevendo uma frase de exemplo em {$idiomaNome} pra um aluno "
             . "de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical da frase pro nível dele - "
             . "iniciante pede estruturas simples e vocabulário básico do dia a dia; intermediário pode incluir "
-            . "conectivos e tempos verbais variados; avançado pode usar vocabulário mais rico e estruturas mais "
-            . "elaboradas. "
+            . "conectivos e tempos verbais variados; avançado precisa se destacar claramente do intermediário: use "
+            . "vocabulário menos comum (não óbvio, nada de palavras básicas de novo), expressões idiomáticas ou "
+            . "phrasal verbs quando fizer sentido, oração subordinada (relativa, condicional ou concessiva) e "
+            . "variação de tempo/modo verbal - não apenas mais uma oração colada com 'e'/'porque'. "
             . "REQUISITO MAIS IMPORTANTE: a frase precisa ter entre {$min} e {$max} caracteres, contando espaços e "
             . "pontuação - conte os caracteres mentalmente antes de responder e, se estiver fora dessa faixa, "
             . "reescreva até acertar. Frases curtas de uma oração só (tipo 'I like coffee.') SEMPRE ficam curtas "
