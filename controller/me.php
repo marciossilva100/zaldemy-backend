@@ -59,7 +59,7 @@ require_once '../model/CategoriaIA.php';
 try {
 
     $stmt = $pdo->prepare("
-        SELECT id, nome, email, step, plano, nivel, interesses_definidos, assinatura_cancelamento_previsto
+        SELECT id, nome, email, foto_perfil, step, plano, nivel, interesses_definidos, assinatura_cancelamento_previsto
         FROM usuarios
         WHERE auth_token = :token
         LIMIT 1
@@ -116,6 +116,7 @@ try {
             "id" => $usuario['id'],
             "name" => $usuario['nome'],
             "email" => $usuario['email'],
+            "foto_perfil" => $usuario['foto_perfil'] ?? null,
             "step" =>  $usuario['step'] ?? null,
             "plano" => $usuario['plano'] ?? null,
             "nivel" => $usuario['nivel'] ?? null,
