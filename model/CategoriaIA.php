@@ -83,6 +83,8 @@ class CategoriaIA
             . "pede estruturas simples e vocabulário básico do dia a dia; intermediário pode incluir conectivos e tempos "
             . "verbais variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. "
             . "Frases naturais, do dia a dia, variadas entre si (não repita a mesma estrutura), máximo 80 caracteres cada. "
+            . "IMPORTANTE: todas as frases têm que ser afirmações (declarativas) - nunca perguntas. Não gere nenhuma "
+            . "frase terminando com \"?\" nem em {$idiomaNativoNome} nem em {$idiomaAprendendoNome}. "
             . 'Responda em JSON: {"frases": [{"nativo": "...", "traduzido": "..."}, ...]}';
 
         $resultado = $chat->completar([
@@ -99,6 +101,20 @@ class CategoriaIA
 
         if (!is_array($frases) || count($frases) === 0) {
             return ["erro" => true, "mensagem" => "A IA não retornou frases válidas."];
+        }
+
+        // Segurança além do prompt: a IA às vezes ignora a instrução e gera
+        // alguma pergunta mesmo assim - descarta qualquer frase (nativo ou
+        // traduzido) que termine com "?" em vez de deixar passar.
+        $frases = array_values(array_filter($frases, function ($f) {
+            $nativo = rtrim((string) ($f['nativo'] ?? ''));
+            $traduzido = rtrim((string) ($f['traduzido'] ?? ''));
+
+            return !str_ends_with($nativo, '?') && !str_ends_with($traduzido, '?');
+        }));
+
+        if (count($frases) === 0) {
+            return ["erro" => true, "mensagem" => "A IA só retornou perguntas - tente novamente."];
         }
 
         return ["erro" => false, "frases" => $frases];
