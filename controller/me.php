@@ -55,6 +55,7 @@ $token = str_replace("Bearer ", "", $authHeader);
 
 require_once '../server.php';
 require_once '../model/CategoriaIA.php';
+require_once '../model/Nivel.php';
 
 try {
 
@@ -109,6 +110,7 @@ try {
     // isso, quem já usou a amostra grátis (limitado) só descobria que não
     // tinha mais acesso depois de preencher o formulário e tentar enviar.
     $categoriaIaDisponivel = CategoriaIA::verificarAcesso($pdo, (int) $usuario['id'], (int) ($usuario['plano'] ?? 0)) === null;
+    $nivelSugerido = Nivel::sugestaoPromocao($pdo, (int) $usuario['id']);
 
     echo json_encode([
         "authenticated" => true,
@@ -120,6 +122,7 @@ try {
             "step" =>  $usuario['step'] ?? null,
             "plano" => $usuario['plano'] ?? null,
             "nivel" => $usuario['nivel'] ?? null,
+            "nivel_sugerido" => $nivelSugerido,
             "interesses_definidos" => (bool) ($usuario['interesses_definidos'] ?? false),
             "categoria_ia_disponivel" => $categoriaIaDisponivel,
             "assinatura_cancelamento_previsto" => $usuario['assinatura_cancelamento_previsto'] ?? null,

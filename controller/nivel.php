@@ -49,6 +49,20 @@ try {
         exit;
     }
 
+    if ($action === 'dispensar_sugestao') {
+        $nivel = (int) ($input['nivel'] ?? 0);
+
+        if (!$nivel) {
+            http_response_code(400);
+            echo json_encode(["success" => false, "message" => "Nível não informado"]);
+            exit;
+        }
+
+        Nivel::dispensarSugestao($pdo, $user_id, $nivel);
+        echo json_encode(["success" => true]);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(["error" => "Action inválida"]);
 

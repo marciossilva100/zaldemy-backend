@@ -47,4 +47,73 @@ class Nivel
             default => 'intermediário (B1/B2)',
         };
     }
+
+    // Quantas tentativas avaliadas mais recentes (Frase do Dia + Perguntas
+    // por IA, as duas fontes de nota 0-10 que usam nível) precisam ter nota
+    // alta pra sugerir a promoção de nível - critério rígido de propósito
+    // (todas as N, não uma média): uma sugestão errada é pior que uma
+    // atrasada, já que subir o nível manualmente é só um toque em
+    // Configurações.
+    const MIN_TENTATIVAS_SUGESTAO = 5;
+    const NOTA_MINIMA_SUGESTAO = 8;
+
+    // Decide se sugere promover o usuário pro próximo nível, com base nas
+    // últimas tentativas avaliadas. Retorna o nível sugerido (int) ou null
+    // se não há sugestão (sem dados suficientes, já é avançado, desempenho
+    // não bateu o critério, ou essa mesma sugestão já foi dispensada antes).
+    public static function sugestaoPromocao(PDO $pdo, int $user_id): ?int
+    {
+        $stmt = $pdo->prepare("SELECT nivel, nivel_sugestao_dispensada FROM usuarios WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $nivelAtual = (int) ($usuario['nivel'] ?? self::INTERMEDIARIO);
+        $nivelAtual = self::valido($nivelAtual) ? $nivelAtual : self::INTERMEDIARIO;
+
+        if ($nivelAtual >= self::AVANCADO) {
+            return null;
+        }
+
+        $nivelSugerido = $nivelAtual + 1;
+
+        $dispensada = $usuario['nivel_sugestao_dispensada'] ?? null;
+        if ($dispensada !== null && (int) $dispensada === $nivelSugerido) {
+            return null;
+        }
+
+        $sql = "SELECT nota FROM (
+                    SELECT nota, data_criacao FROM frase_dia_ia
+                        WHERE user_id = :user_id1 AND status_id = 1 AND nota IS NOT NULL
+                    UNION ALL
+                    SELECT nota, data_criacao FROM perguntas_ia
+                        WHERE user_id = :user_id2 AND status_id = 1 AND nota IS NOT NULL
+                ) tentativas
+                ORDER BY data_criacao DESC
+                LIMIT " . self::MIN_TENTATIVAS_SUGESTAO;
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id1' => $user_id, ':user_id2' => $user_id]);
+        $notas = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (count($notas) < self::MIN_TENTATIVAS_SUGESTAO) {
+            return null;
+        }
+
+        foreach ($notas as $nota) {
+            if ((int) $nota < self::NOTA_MINIMA_SUGESTAO) {
+                return null;
+            }
+        }
+
+        return $nivelSugerido;
+    }
+
+    // Guarda que o usuário recusou a sugestão de subir pro nível informado -
+    // sugestaoPromocao não repete a mesma sugestão depois disso (mas volta a
+    // sugerir se o desempenho justificar um nível seguinte mais tarde).
+    public static function dispensarSugestao(PDO $pdo, int $user_id, int $nivelSugerido): void
+    {
+        $stmt = $pdo->prepare("UPDATE usuarios SET nivel_sugestao_dispensada = :nivel WHERE id = :id");
+        $stmt->execute([':nivel' => $nivelSugerido, ':id' => $user_id]);
+    }
 }
