@@ -63,7 +63,11 @@ try {
     // seguro pra chamar a qualquer momento (ex: ao carregar a Home).
     if ($action === 'status_acesso') {
         $bloqueio = JogoChuvaFrases::verificarAcesso($pdo, $user_id, $plano);
-        echo json_encode(["success" => true, "bloqueado" => $bloqueio !== null]);
+        echo json_encode([
+            "success" => true,
+            "bloqueado" => $bloqueio !== null,
+            "message" => $bloqueio['message'] ?? null,
+        ]);
         exit;
     }
 
