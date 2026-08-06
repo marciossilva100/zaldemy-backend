@@ -38,17 +38,29 @@ class FraseDoDia
     // idiomas equivaleria a um texto MUITO mais longo/complexo (e o cartão
     // do flashcard estouraria). Usa uma faixa bem menor pra manter a frase
     // com complexidade equivalente. Mesma lógica em DailyQuestionOpenAI.
-    private static function faixaCaracteresPara(string $idiomaNome): array
+    // Iniciante recebe uma faixa bem menor - a faixa padrão (200-220) exige
+    // pelo menos duas orações ligadas por conectivo (ver systemPrompt), o
+    // que é complexidade demais pra quem ainda tá começando, mesmo com
+    // vocabulário simples.
+    private static function faixaCaracteresPara(string $idiomaNome, ?string $nivelNome = null): array
     {
         $cjk = ['chin', 'japon', 'corean'];
+        $ehCjk = false;
 
         foreach ($cjk as $termo) {
             if (mb_stripos($idiomaNome, $termo) !== false) {
-                return [60, 90];
+                $ehCjk = true;
+                break;
             }
         }
 
-        return [200, 220];
+        $ehIniciante = $nivelNome !== null && mb_stripos($nivelNome, 'iniciante') !== false;
+
+        if ($ehIniciante) {
+            return $ehCjk ? [30, 45] : [90, 110];
+        }
+
+        return $ehCjk ? [60, 90] : [200, 220];
     }
 
     // Tradução tende a ficar um pouco mais longa que o original (idiomas
@@ -56,9 +68,9 @@ class FraseDoDia
     // proporcional ao máximo já calculado pro idioma, em vez de um número
     // fixo que corta traduções em idiomas CJK bem antes da hora ou trunca
     // sem folga nenhuma nos idiomas alfabéticos.
-    private static function limiteTraducaoPara(string $idiomaNome): int
+    private static function limiteTraducaoPara(string $idiomaNome, ?string $nivelNome = null): int
     {
-        [, $max] = self::faixaCaracteresPara($idiomaNome);
+        [, $max] = self::faixaCaracteresPara($idiomaNome, $nivelNome);
 
         return (int) round($max * 1.3);
     }
@@ -203,8 +215,8 @@ class FraseDoDia
         // destaque - o destaque só deve marcar o que a IA realmente viu.
         $phrasesOriginais = $phrases;
 
-        [$min, $max] = self::faixaCaracteresPara($idiomaNome);
-        $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome);
+        [$min, $max] = self::faixaCaracteresPara($idiomaNome, $nivelNome);
+        $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome, $nivelNome);
         $phrasesText = implode("\n", array_map(fn($p) => mb_substr($p, 0, $max), $phrases));
 
         // Quando o aluno tem pouco vocabulário estudado (ex: acabou de passar
