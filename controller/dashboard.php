@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once '../server.php';
 require_once '../model/Dashboard.php';
+require_once '../model/PaisesLiberados.php';
 require_once 'authMiddleware.php';
 
 // Dashboard administrativo: acesso restrito a e-mails autorizados
@@ -61,6 +62,34 @@ try {
             'canais_aquisicao' => $dashboardModel->getCanaisAquisicao($pdo),
             'idiomas_mais_aprendidos' => $dashboardModel->getIdiomasMaisAprendidos($pdo),
         ];
+    } elseif ($action === 'listar_paises') {
+        $response = ['paises' => PaisesLiberados::listar($pdo)];
+
+    } elseif ($action === 'adicionar_pais') {
+        $codigo = trim($input['codigo'] ?? '');
+        $nome = trim($input['nome'] ?? '');
+
+        if (strlen($codigo) !== 2 || $nome === '') {
+            http_response_code(422);
+            echo json_encode(["error" => "Informe código (2 letras) e nome do país"]);
+            exit;
+        }
+
+        PaisesLiberados::adicionar($pdo, $codigo, $nome);
+        $response = ['paises' => PaisesLiberados::listar($pdo)];
+
+    } elseif ($action === 'remover_pais') {
+        $codigo = trim($input['codigo'] ?? '');
+
+        if ($codigo === '') {
+            http_response_code(422);
+            echo json_encode(["error" => "Informe o código do país"]);
+            exit;
+        }
+
+        PaisesLiberados::remover($pdo, $codigo);
+        $response = ['paises' => PaisesLiberados::listar($pdo)];
+
     } else {
         http_response_code(400);
         echo json_encode(["error" => "Action inválida: $action"]);
