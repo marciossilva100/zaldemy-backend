@@ -600,4 +600,13 @@ class Categorias
         ];
     }
 
+    // Guarda que o usuário já dispensou o balão "criar sua primeira
+    // categoria" (clicou no botão de adicionar) - não volta a aparecer
+    // depois disso, mesmo que ele ainda não tenha criado categoria nenhuma.
+    public static function dispensarGuiaPrimeiraCategoria(PDO $pdo, int $user_id): void
+    {
+        $stmt = $pdo->prepare("UPDATE usuarios SET guia_categoria_dispensado = 1 WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+    }
+
 }
