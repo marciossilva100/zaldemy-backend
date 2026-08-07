@@ -177,9 +177,21 @@ return;
 
     }
 
+    // Conta de referência/testes usada nesta sessão de desenvolvimento -
+    // protegida contra exclusão pelo fluxo normal do app. Exclusão real,
+    // se precisar, só direto no banco.
+    const USER_ID_PROTEGIDO = 47;
+
     // Exclui (soft-delete) a conta do usuário: anonimiza dados pessoais,
     // invalida o token de sessão e marca o registro como inativo.
     public function excluirConta($user_id) {
+
+        if ((int) $user_id === self::USER_ID_PROTEGIDO) {
+            return [
+                'success' => false,
+                'message' => 'Esta conta não pode ser excluída.'
+            ];
+        }
 
         $emailAnonimizado = 'excluido_' . $user_id . '_' . time() . '@zaldemy.local';
         $senhaInvalida = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
