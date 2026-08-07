@@ -9,7 +9,7 @@ class JogoChuvaFrases
     // Premium (1) joga sem limite - o jogo não usa nenhuma API paga (a voz é
     // sempre a padrão gratuita, nunca a natural). Limitado (3) ganha uma
     // amostra vitalícia, mesmo padrão dos outros recursos em PlanoLimitado.
-    const LIMITE_VITALICIO_LIMITADO = 3;
+    const LIMITE_VITALICIO_LIMITADO = 5;
 
     public static function contarTotal(PDO $pdo, int $user_id): int
     {
