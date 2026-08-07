@@ -39,6 +39,33 @@ $input = json_decode(file_get_contents('php://input'), true);
 // action vem do POST JSON
 $action = $input['action'] ?? null;
 
+// Limite de categorias (próprias + importadas somadas) por plano - premium (1)
+// não tem limite; free (2) e limitado (3) ficam no mesmo teto. Reduzido de 5
+// pra 2 porque agora todo usuário já ganha 3 categorias de interesse no
+// onboarding (tipo=3, fora dessa contagem - ver Categorias::contarCategoriasAtivas),
+// então o teto efetivo de categorias visíveis continua em 5 (3 + 2).
+const LIMITE_CATEGORIAS_FREE = 2;
+const LIMITE_CATEGORIAS_LIMITADO = 2;
+
+function verificarLimiteCategorias(PDO $pdo, int $user_id, int $plano): ?array
+{
+    if ($plano === 1) {
+        return null;
+    }
+
+    $limite = $plano === 3 ? LIMITE_CATEGORIAS_LIMITADO : LIMITE_CATEGORIAS_FREE;
+
+    if (Categorias::contarCategoriasAtivas($pdo, $user_id) >= $limite) {
+        return [
+            "success" => false,
+            "limite_atingido" => true,
+            "message" => "Você atingiu o limite de {$limite} categorias do seu plano. Vire premium para ter categorias ilimitadas."
+        ];
+    }
+
+    return null;
+}
+
 try {
     if ($action === 'listar-com-quantidade') {
 
@@ -75,6 +102,13 @@ try {
 
         if (verificarConteudoImproprio($categoria)) {
             echo json_encode(["success" => false, "message" => "Este texto contém conteúdo impróprio."]);
+            exit;
+        }
+
+        $bloqueio = verificarLimiteCategorias($pdo, $user_id, (int) ($user['plano'] ?? 0));
+
+        if ($bloqueio !== null) {
+            echo json_encode($bloqueio);
             exit;
         }
 
@@ -134,9 +168,16 @@ try {
             exit;
         }
 
+        $bloqueio = verificarLimiteCategorias($pdo, $user_id, (int) ($user['plano'] ?? 0));
+
+        if ($bloqueio !== null) {
+            echo json_encode($bloqueio);
+            exit;
+        }
+
         // Agora retorna frases já com a URL do áudio
         $categoria = Categorias::getById($pdo,$categoria_id);
-  
+
         $categoria_id_usuario = Categorias::cadastrarCategoria($pdo,$categoria,$user_id,$categoria_id);
 
         $frases = Categorias::getAllFrases($pdo,$categoria_id);

@@ -3,6 +3,36 @@ session_start();
 
 class Categorias
 {
+    // Conta só as categorias do par de idiomas (nativo/aprendendo) atual do
+    // usuário - o mesmo par usado por listarComQuantidade() pra exibir a
+    // Home. Um usuário pode ter categorias de pares de idiomas antigos (ex:
+    // depois de trocar o idioma que está aprendendo) que não aparecem mais
+    // na Home, mas continuam existindo - contar todas, sem esse filtro,
+    // fazia o limite ser atingido com base em categorias que o usuário nem
+    // vê mais na tela.
+    //
+    // Também exclui tipo=3 (categoria criada automaticamente no cadastro,
+    // uma por idioma) - o usuário não escolheu criá-la, então ela não deve
+    // consumir a cota do limite de categorias do plano.
+    public static function contarCategoriasAtivas(PDO $pdo, $user_id): int
+    {
+        $sql = "SELECT COUNT(*) as total
+                FROM categorias c
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = c.idioma_nativo
+                    AND ir.idioma_aprender = c.idioma_aprendendo
+                    AND ir.id_user = :id_user
+                WHERE c.id_user = :id_user
+                  AND c.status_id > 0
+                  AND (c.tipo IS NULL OR c.tipo <> 3)";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    }
+
     public static function listarComQuantidade(PDO $pdo,$user_id): array
     {
         $sql = "
@@ -10,6 +40,7 @@ class Categorias
                 c.id,
                 c.categoria,
                 c.public,
+                c.tipo,
                 COUNT(f.id) AS total_frases,
                 COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
                 COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo
@@ -29,7 +60,7 @@ class Categorias
                 AND ir.idioma_aprender > 0
             WHERE c.id_user = :id_user
             AND c.status_id > 0
-            GROUP BY c.id, c.categoria, c.public, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
+            GROUP BY c.id, c.categoria, c.public, c.tipo, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
             ORDER BY c.id ASC;
         ";
 
@@ -319,7 +350,8 @@ class Categorias
                 END) AS total_frases,
                 COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
                 COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo,
-                dono.nome AS usuario
+                dono.nome AS usuario,
+                dono.nivel AS nivel_dono
             FROM categorias c
 
             LEFT JOIN frases f
@@ -351,7 +383,7 @@ class Categorias
             AND c.id_user <> :id_user
             AND uc.id IS NULL
 
-            GROUP BY c.id, c.categoria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla, dono.nome
+            GROUP BY c.id, c.categoria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla, dono.nome, dono.nivel
             ORDER BY c.id ASC
             LIMIT :limit OFFSET :offset
         ";
@@ -386,6 +418,23 @@ class Categorias
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $result['categoria'] ?: null;
+    }
+
+    // Apaga (soft delete) as categorias de interesse (tipo=3) do onboarding -
+    // usado quando o usuário volta pra tela de escolha de interesses depois
+    // de já ter concluído e reconfirma outras categorias, pra não ficar
+    // duplicando (as antigas + as novas).
+    public static function excluirCategoriasInteresse(PDO $pdo, int $user_id): void
+    {
+        $sql = "UPDATE categorias
+                SET status_id = 0
+                WHERE id_user = :id_user
+                  AND tipo = 3
+                  AND status_id > 0";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
     }
 
     public static function excluirCategoria(PDO $pdo,int $id,int $user_id): array

@@ -72,6 +72,7 @@ if (!$action) {
 require_once '../server.php';
 require_once 'email.php';
 require_once '../model/Auth.php';
+require_once '../model/AcessoUsuario.php';
 
 try {
 
@@ -125,7 +126,7 @@ try {
 
         $stmt = $pdo->prepare("
             INSERT INTO usuarios (nome, email, password, email_token, plano)
-            VALUES (:nome, :email, :password, :token, 2)
+            VALUES (:nome, :email, :password, :token, 3)
         ");
 
         $stmt->bindParam(":nome", $nome, PDO::PARAM_STR);
@@ -209,6 +210,8 @@ try {
         $stmt->bindParam(":token", $auth_token, PDO::PARAM_STR);
         $stmt->bindParam(":id", $usuario['id'], PDO::PARAM_INT);
         $stmt->execute();
+
+        AcessoUsuario::registrar($pdo, (int) $usuario['id']);
 
         unset($usuario['password']);
 
@@ -346,6 +349,10 @@ try {
         $auth = new Auth($pdo);
 
         $result = $auth->loginGoogle($data['token']);
+
+        if ($result['sucesso'] ?? false) {
+            AcessoUsuario::registrar($pdo, (int) $result['user_id']);
+        }
 
         echo json_encode($result);
         exit;

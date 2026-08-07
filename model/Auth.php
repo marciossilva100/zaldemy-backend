@@ -28,23 +28,33 @@ class Auth {
     public function loginGoogle($googleToken) {
 
         // endpoint correto para access_token
-        $url = "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" . $googleToken;
+        $url = "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" . urlencode($googleToken);
 
-        $response = file_get_contents($url);
+        // file_get_contents depende de allow_url_fopen, que muitos servidores
+        // de hospedagem desabilitam por segurança - cURL é mais confiável e é
+        // o padrão já usado no resto do backend pra chamadas de API externas.
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $response = curl_exec($ch);
+        $curlErro = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
-        if (!$response) {
+        if ($response === false || $curlErro) {
             return [
                 "sucesso" => false,
-                "erro" => "Erro ao validar token"
+                "erro" => "Erro ao validar token: " . ($curlErro ?: "sem resposta do Google")
             ];
         }
 
         $google = json_decode($response);
 
-        if (!$google || !isset($google->email)) {
+        if ($httpCode !== 200 || !$google || !isset($google->email)) {
+            $motivo = $google->error->message ?? ("HTTP " . $httpCode);
             return [
                 "sucesso" => false,
-                "erro" => "Token inválido"
+                "erro" => "Token inválido: " . $motivo
             ];
         }
 
@@ -68,7 +78,7 @@ class Auth {
             $stmt = $this->pdo->prepare(
                 "INSERT INTO usuarios
                 (nome, email, email_verified, plano)
-                VALUES (:nome, :email, 1, 2)"
+                VALUES (:nome, :email, 1, 3)"
             );
 
             $stmt->bindParam(":nome", $nome);

@@ -13,6 +13,23 @@ class Frases
     public $correctIds;
     public $response = array();
 
+    // Conta frases criadas hoje pelo usuário, usada pro limite diário de
+    // criação (planos free/limitado) - premium não tem esse teto.
+    public static function contarFrasesCriadasHoje(PDO $pdo, int $user_id): int
+    {
+        $sql = "SELECT COUNT(*) as total
+                FROM frases
+                WHERE usuario_id = :user_id
+                  AND status_id > 0
+                  AND DATE(data_criacao) = CURDATE()";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    }
+
     public function listarFrases($user_id): array
     {
 
@@ -83,14 +100,25 @@ class Frases
 
         $result = $stmt->fetch();
 
+        // Filtra pelo par de idioma ATUAL do usuário (idioma_referencia) - sem
+        // isso, uma categoria com frases de mais de um par (ex: usuário já
+        // trocou o idioma que está aprendendo, ou tem frases de testes em
+        // outro par) mostrava frases de um idioma diferente do configurado
+        // como nativo/aprendendo agora. O texto_nativo então não batia com o
+        // idioma nativo real do usuário, e o áudio (que sempre usa a voz do
+        // idioma nativo configurado) saía errado.
         $sql = "
-            SELECT 
+            SELECT
                 f.id,
                 f.texto_nativo,
                 f.texto_traduzido,
                 f.categoria_id
             FROM frases f
             INNER JOIN categorias c ON c.id = f.categoria_id
+            INNER JOIN idioma_referencia ir
+                ON ir.idioma_nativo = f.idioma_nativo
+                AND ir.idioma_aprender = f.idioma_aprendendo
+                AND ir.id_user = f.usuario_id
             WHERE f.categoria_id = :categoria_id
             AND f.usuario_id = :id_user
             AND f.status_id > 0
@@ -136,14 +164,20 @@ class Frases
 
         global $pdo; // 👈 precisa disso
 
+        // Mesmo filtro de par de idioma ATUAL do usuário usado em
+        // listarFrasesAprender - ver comentário lá.
         $sql = "
-            SELECT 
+            SELECT
                 f.id,
                 f.texto_nativo,
                 f.texto_traduzido,
                 f.categoria_id
             FROM frases f
             INNER JOIN categorias c ON c.id = f.categoria_id
+            INNER JOIN idioma_referencia ir
+                ON ir.idioma_nativo = f.idioma_nativo
+                AND ir.idioma_aprender = f.idioma_aprendendo
+                AND ir.id_user = f.usuario_id
             WHERE f.categoria_id = :categoria_id
             AND f.usuario_id = :id_user
             AND f.status_id > 0

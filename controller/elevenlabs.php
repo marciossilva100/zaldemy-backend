@@ -10,7 +10,7 @@ error_reporting(E_ALL);
 require_once __DIR__ . '/../dotenv.php';
 carregarEnv(__DIR__ . '/../.env');
 
-if (!isset($_ENV['ELEVENLABS_API_KEY'])) {
+if (!isset($_ENV['OPEN_AI'])) {
     die(json_encode([
         "erro" => true,
         "mensagem" => "API KEY não configurada"
@@ -48,10 +48,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // =========================
 require_once '../server.php';
 require_once 'authMiddleware.php';
+require_once '../model/Configuracoes.php';
 
-// Voz natural (ElevenLabs) é exclusiva do plano premium, com limite diário
-// pra manter o custo por chamada da API sob controle.
+// Voz natural (ElevenLabs) é liberada pro plano premium (limite diário, pra
+// manter o custo por chamada da API sob controle) e, como amostra grátis,
+// pro plano limitado (limite vitalício único - depois disso só virando
+// premium pra continuar usando voz natural).
 const AUDIO_IA_LIMITE_DIARIO = 50;
+const AUDIO_IA_LIMITE_VITALICIO_LIMITADO = 10;
+
+// O custo do ElevenLabs é por caractere, não por chamada - sem esse teto,
+// o limite de chamadas acima não protege o custo de verdade (uma única
+// chamada com texto gigante custaria muito mais que o previsto). Aplica
+// pra todo mundo que tiver acesso, mesmo cap independente do plano.
+const AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA = 300;
 
 function usoAudioIaHoje(PDO $pdo, int $userId): int
 {
@@ -66,10 +76,45 @@ function usoAudioIaHoje(PDO $pdo, int $userId): int
     return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 }
 
+function usoAudioIaTotal(PDO $pdo, int $userId): int
+{
+    $sql = "SELECT COUNT(*) as total
+            FROM audio_ia_uso
+            WHERE user_id = :user_id";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':user_id' => $userId]);
+
+    return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+}
+
 function registrarUsoAudioIa(PDO $pdo, int $userId): void
 {
     $stmt = $pdo->prepare("INSERT INTO audio_ia_uso (user_id) VALUES (:user_id)");
     $stmt->execute([':user_id' => $userId]);
+}
+
+// Verifica se o plano do usuário pode usar voz natural e, se puder, se ainda
+// está dentro do limite (diário pro premium, vitalício pro limitado).
+// Retorna null se pode prosseguir, ou o array de resposta JSON pra retornar
+// direto (bloqueando o acesso).
+function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano): ?array
+{
+    if ($plano === 1) {
+        if (usoAudioIaHoje($pdo, $userId) >= AUDIO_IA_LIMITE_DIARIO) {
+            return ["erro" => false, "limite_atingido" => true];
+        }
+        return null;
+    }
+
+    if ($plano === 3) {
+        if (usoAudioIaTotal($pdo, $userId) >= AUDIO_IA_LIMITE_VITALICIO_LIMITADO) {
+            return ["erro" => false, "limite_atingido" => true];
+        }
+        return null;
+    }
+
+    return ["erro" => false, "premium_necessario" => true];
 }
 
 // =========================
@@ -83,9 +128,12 @@ $action = $input['action'] ?? null;
 // =========================
 // 📦 CLASS
 // =========================
-require_once __DIR__ . '/../api/ElevenLabs.php';
+// Trocado de ElevenLabs pra OpenAI (TTS) - api/ElevenLabs.php continua
+// intacto e com a mesma interface (gerarAudio), então voltar atrás é só
+// trocar essas duas linhas de novo.
+require_once __DIR__ . '/../api/OpenAiTts.php';
 
-$eleven = new ElevenLabs($_ENV['ELEVENLABS_API_KEY']);
+$eleven = new OpenAiTts($_ENV['OPEN_AI']);
 
 try {
 
@@ -101,31 +149,31 @@ try {
             throw new Exception("Texto não informado");
         }
 
-        if ((int) ($user['plano'] ?? 0) !== 1) {
-            header('Content-Type: application/json');
-            echo json_encode(["erro" => false, "premium_necessario" => true]);
-            exit;
+        if (mb_strlen($texto) > AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA) {
+            throw new Exception("Texto excede o limite de " . AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA . " caracteres por chamada de áudio.");
         }
 
-        $usoHoje = usoAudioIaHoje($pdo, $user_id);
+        $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
 
-        if ($usoHoje >= AUDIO_IA_LIMITE_DIARIO) {
+        if ($bloqueio !== null) {
             header('Content-Type: application/json');
-            echo json_encode(["erro" => false, "limite_atingido" => true]);
+            echo json_encode($bloqueio);
             exit;
         }
 
         // 🔥 agora com cache ativado
-        $result = $eleven->gerarAudio($texto, $idioma, true);
+        $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
+        $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
+        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
 
         if ($result["erro"]) {
             throw new Exception($result["mensagem"]);
         }
 
-        // Só conta contra o limite diário quando de fato chama a API (cache não tem custo)
-        if (empty($result["cache"])) {
-            registrarUsoAudioIa($pdo, $user_id);
-        }
+        // Toda reprodução conta contra o limite, cache ou não - senão o
+        // usuário podia reproduzir a mesma frase infinitas vezes de graça
+        // sem nunca gastar a cota.
+        registrarUsoAudioIa($pdo, $user_id);
 
         if (empty($result["audio"])) {
             throw new Exception("Áudio vazio");
@@ -173,21 +221,24 @@ try {
             throw new Exception("Texto não informado");
         }
 
-        if ((int) ($user['plano'] ?? 0) !== 1) {
-            echo json_encode(["erro" => false, "premium_necessario" => true]);
+        if (mb_strlen($texto) > AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA) {
+            throw new Exception("Texto excede o limite de " . AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA . " caracteres por chamada de áudio.");
+        }
+
+        $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
+
+        if ($bloqueio !== null) {
+            echo json_encode($bloqueio);
             exit;
         }
 
-        $usoHoje = usoAudioIaHoje($pdo, $user_id);
+        $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
+        $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
+        $result = $eleven->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
 
-        if ($usoHoje >= AUDIO_IA_LIMITE_DIARIO) {
-            echo json_encode(["erro" => false, "limite_atingido" => true]);
-            exit;
-        }
-
-        $result = $eleven->gerarAudio($texto, $idioma, true);
-
-        if (empty($result["cache"])) {
+        // Toda reprodução conta contra o limite, cache ou não - mas só se
+        // realmente saiu áudio (erro da API não deveria consumir a cota).
+        if (!$result["erro"]) {
             registrarUsoAudioIa($pdo, $user_id);
         }
 

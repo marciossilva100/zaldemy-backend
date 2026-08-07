@@ -38,6 +38,37 @@ $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? null;
 $frase = new Frases;
 
+// Limite diário de frases criadas - free (2) e limitado (3) ficam no mesmo
+// teto baixo, pra evitar criação em massa. Premium (1) tem um teto bem mais
+// alto (não é sobre uso legítimo, é sobre não deixar a criação de conteúdo
+// sem nenhum limite - a mensagem pro usuário é pedagógica de propósito, não
+// menciona custo/abuso.
+const LIMITE_FRASES_DIARIO = 10;
+const LIMITE_FRASES_DIARIO_PREMIUM = 100;
+
+function verificarLimiteFrasesDiario(PDO $pdo, int $user_id, int $plano): ?array
+{
+    $limite = $plano === 1 ? LIMITE_FRASES_DIARIO_PREMIUM : LIMITE_FRASES_DIARIO;
+
+    if (Frases::contarFrasesCriadasHoje($pdo, $user_id) < $limite) {
+        return null;
+    }
+
+    if ($plano === 1) {
+        return [
+            "success" => false,
+            "limite_atingido" => true,
+            "message" => "Você atingiu o limite de {$limite} frases criadas hoje. Uma pausa agora ajuda a fixar melhor o que você já aprendeu - volte amanhã para continuar!"
+        ];
+    }
+
+    return [
+        "success" => false,
+        "limite_atingido" => true,
+        "message" => "Você atingiu o limite de {$limite} frases criadas hoje. Vire premium para criar até " . LIMITE_FRASES_DIARIO_PREMIUM . " frases por dia."
+    ];
+}
+
 try {
 
     if ($action === 'frases') {
@@ -144,6 +175,13 @@ try {
 
         if (verificarConteudoImproprio($frase->texto_nativo) || verificarConteudoImproprio($frase->texto_traduzido)) {
             echo json_encode(["success" => false, "message" => "Este texto contém conteúdo impróprio."]);
+            exit;
+        }
+
+        $bloqueio = verificarLimiteFrasesDiario($pdo, $user_id, (int) ($user['plano'] ?? 0));
+
+        if ($bloqueio !== null) {
+            echo json_encode($bloqueio);
             exit;
         }
 

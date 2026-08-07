@@ -54,13 +54,15 @@ $token = str_replace("Bearer ", "", $authHeader);
 // $token = str_replace("Bearer ", "", $headers['Authorization']);
 
 require_once '../server.php';
+require_once '../model/CategoriaIA.php';
+require_once '../model/Nivel.php';
 
 try {
 
     $stmt = $pdo->prepare("
-        SELECT id, nome, email, step,plano
-        FROM usuarios 
-        WHERE auth_token = :token 
+        SELECT id, nome, email, foto_perfil, step, plano, nivel, interesses_definidos, assinatura_cancelamento_previsto
+        FROM usuarios
+        WHERE auth_token = :token
         LIMIT 1
     ");
 
@@ -103,14 +105,27 @@ try {
         ];
     }
 
+    // Usado pra decidir, ANTES de abrir o formulário, se mostra a opção
+    // "Criar categoria com IA" normal ou já com a coroa de premium - sem
+    // isso, quem já usou a amostra grátis (limitado) só descobria que não
+    // tinha mais acesso depois de preencher o formulário e tentar enviar.
+    $categoriaIaDisponivel = CategoriaIA::verificarAcesso($pdo, (int) $usuario['id'], (int) ($usuario['plano'] ?? 0)) === null;
+    $nivelSugerido = Nivel::sugestaoPromocao($pdo, (int) $usuario['id']);
+
     echo json_encode([
         "authenticated" => true,
         "user" => [
             "id" => $usuario['id'],
             "name" => $usuario['nome'],
             "email" => $usuario['email'],
+            "foto_perfil" => $usuario['foto_perfil'] ?? null,
             "step" =>  $usuario['step'] ?? null,
             "plano" => $usuario['plano'] ?? null,
+            "nivel" => $usuario['nivel'] ?? null,
+            "nivel_sugerido" => $nivelSugerido,
+            "interesses_definidos" => (bool) ($usuario['interesses_definidos'] ?? false),
+            "categoria_ia_disponivel" => $categoriaIaDisponivel,
+            "assinatura_cancelamento_previsto" => $usuario['assinatura_cancelamento_previsto'] ?? null,
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,
             "learning_language" => $idioma_referencia['idioma_aprender'] ?? null
         ]
