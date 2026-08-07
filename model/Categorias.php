@@ -40,6 +40,7 @@ class Categorias
                 c.id,
                 c.categoria,
                 c.public,
+                c.tipo,
                 COUNT(f.id) AS total_frases,
                 COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
                 COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo
@@ -59,7 +60,7 @@ class Categorias
                 AND ir.idioma_aprender > 0
             WHERE c.id_user = :id_user
             AND c.status_id > 0
-            GROUP BY c.id, c.categoria, c.public, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
+            GROUP BY c.id, c.categoria, c.public, c.tipo, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
             ORDER BY c.id ASC;
         ";
 
