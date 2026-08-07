@@ -73,6 +73,7 @@ require_once '../server.php';
 require_once 'email.php';
 require_once '../model/Auth.php';
 require_once '../model/AcessoUsuario.php';
+require_once '../model/PaisesLiberados.php';
 
 try {
 
@@ -80,6 +81,12 @@ try {
     // REGISTER
     // =====================================================
     if ($action === 'register') {
+
+        if (PaisesLiberados::cadastroBloqueado($pdo)) {
+            http_response_code(403);
+            echo json_encode(["erro" => "O Zaldemy ainda não está disponível no seu país. Em breve!"]);
+            exit;
+        }
 
         $nome     = isset($data['name']) ? trim($data['name']) : '';
         $email    = isset($data['email']) ? trim($data['email']) : '';
