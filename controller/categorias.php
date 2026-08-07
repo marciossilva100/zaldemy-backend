@@ -77,6 +77,12 @@ try {
         exit;
     }
 
+    if ($action === 'dispensar_guia_primeira_categoria') {
+        Categorias::dispensarGuiaPrimeiraCategoria($pdo, $user_id);
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
     if ($action === 'get_all') {
         // Pega a página da requisição (GET ou POST)
         $page = isset($_REQUEST['page']) ? (int) $_REQUEST['page'] : 1;
