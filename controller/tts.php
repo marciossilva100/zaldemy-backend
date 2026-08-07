@@ -35,7 +35,7 @@ if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowed
     header("Access-Control-Allow-Origin: " . $_SERVER['HTTP_ORIGIN']);
 }
 
-header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -121,10 +121,14 @@ function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano): ?array
 // =========================
 // 📥 INPUT
 // =========================
+// stream_audio aceita GET (querystring) além de POST - GET permite o
+// service worker do front cachear a resposta por URL (ver
+// vite.config.js), evitando gerar áudio de novo pra um replay da mesma
+// frase. As outras actions continuam só POST (JSON no corpo).
 $rawInput = file_get_contents('php://input');
 $input = json_decode($rawInput, true) ?? [];
 
-$action = $input['action'] ?? null;
+$action = $_GET['action'] ?? ($input['action'] ?? null);
 
 // =========================
 // 📦 CLASS
@@ -140,8 +144,8 @@ try {
     // =========================
     if ($action === "stream_audio") {
 
-        $texto  = $input['texto'] ?? null;
-        $idioma = $input['idioma'] ?? "pt";
+        $texto  = $_GET['texto'] ?? ($input['texto'] ?? null);
+        $idioma = $_GET['idioma'] ?? ($input['idioma'] ?? "pt");
 
         if (!$texto) {
             throw new Exception("Texto não informado");
