@@ -2,26 +2,16 @@
 
 // "Melhorar com IA": diferente do botão gratuito de sugestão (Google Translate,
 // tradução literal instantânea), esse usa o modelo de linguagem pra sugerir uma
-// tradução mais natural/idiomática, como um nativo diria - por isso fica
-// reservado a premium/limitado (mesmo padrão de amostra vitalícia já usado em
-// FraseDoDia/DailyQuestionOpenAI/CategoriaIA).
+// tradução mais natural/idiomática, como um nativo diria - recurso exclusivo
+// do plano Premium (Limitado não tem mais amostra grátis disso).
 class TraducaoIA
 {
     const LIMITE_DIARIO_PREMIUM = 20;
-    const LIMITE_VITALICIO_LIMITADO = 3;
 
     public static function contarHoje(PDO $pdo, int $user_id): int
     {
         $sql = "SELECT COUNT(*) as total FROM traducao_ia_uso
                 WHERE user_id = :user_id AND DATE(data_criacao) = CURDATE()";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([':user_id' => $user_id]);
-        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-    }
-
-    public static function contarTotal(PDO $pdo, int $user_id): int
-    {
-        $sql = "SELECT COUNT(*) as total FROM traducao_ia_uso WHERE user_id = :user_id";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
@@ -42,14 +32,7 @@ class TraducaoIA
             return null;
         }
 
-        if ($plano === 3) {
-            if (self::contarTotal($pdo, $user_id) >= self::LIMITE_VITALICIO_LIMITADO) {
-                return ["success" => false, "limite_atingido" => true, "message" => "Você já usou suas " . self::LIMITE_VITALICIO_LIMITADO . " melhorias grátis de tradução com IA. Vire premium para ter acesso diário."];
-            }
-            return null;
-        }
-
-        return ["success" => false, "premium_necessario" => true, "message" => "Melhorar a tradução com IA é um recurso exclusivo dos planos Premium e Limitado."];
+        return ["success" => false, "premium_necessario" => true, "message" => "Melhorar a tradução com IA é um recurso exclusivo do plano Premium."];
     }
 
     private static function nomeIdioma(PDO $pdo, string $sigla): string
