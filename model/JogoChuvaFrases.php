@@ -7,13 +7,15 @@
 class JogoChuvaFrases
 {
     // Premium (1) joga sem limite - o jogo não usa nenhuma API paga (a voz é
-    // sempre a padrão gratuita, nunca a natural). Limitado (3) ganha uma
-    // amostra vitalícia, mesmo padrão dos outros recursos em PlanoLimitado.
-    const LIMITE_VITALICIO_LIMITADO = 5;
+    // sempre a padrão gratuita, nunca a natural). Limitado (3) ganha um teto
+    // diário (não vitalício) - renova todo dia, em vez de acabar de vez uma
+    // única vez.
+    const LIMITE_DIARIO_LIMITADO = 2;
 
-    public static function contarTotal(PDO $pdo, int $user_id): int
+    public static function contarHoje(PDO $pdo, int $user_id): int
     {
-        $sql = "SELECT COUNT(*) as total FROM jogo_chuva_uso WHERE user_id = :user_id";
+        $sql = "SELECT COUNT(*) as total FROM jogo_chuva_uso
+                WHERE user_id = :user_id AND DATE(data_criacao) = CURDATE()";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
 
@@ -26,7 +28,7 @@ class JogoChuvaFrases
         $stmt->execute([':user_id' => $user_id]);
     }
 
-    // premium (1): sem limite. limitado (3): amostra vitalícia. free (2):
+    // premium (1): sem limite. limitado (3): teto diário. free (2):
     // bloqueado - jogo é recurso exclusivo dos planos Premium e Limitado.
     public static function verificarAcesso(PDO $pdo, int $user_id, int $plano): ?array
     {
@@ -35,11 +37,11 @@ class JogoChuvaFrases
         }
 
         if ($plano === 3) {
-            if (self::contarTotal($pdo, $user_id) >= self::LIMITE_VITALICIO_LIMITADO) {
+            if (self::contarHoje($pdo, $user_id) >= self::LIMITE_DIARIO_LIMITADO) {
                 return [
                     "success" => false,
                     "limite_atingido" => true,
-                    "message" => "Você já jogou suas " . self::LIMITE_VITALICIO_LIMITADO . " partidas grátis do jogo Chuva de Frases. Vire premium para jogar sem limite.",
+                    "message" => "Você já jogou suas " . self::LIMITE_DIARIO_LIMITADO . " partidas de hoje do jogo Chuva de Frases. Volte amanhã ou vire premium para jogar sem limite.",
                 ];
             }
             return null;
