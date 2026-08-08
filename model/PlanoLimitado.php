@@ -1,17 +1,19 @@
 <?php
 
 // O plano limitado dá uma amostra vitalícia de cada recurso de IA (voz
-// natural, Frase do Dia, Categoria com IA, Melhorar tradução). Quando o
-// usuário esgota todas as amostras que efetivamente experimentou, não sobra
-// mais nenhuma amostra grátis das ferramentas que ele usa - a partir daí ele
-// é, na prática, um usuário free (plano 2), então o próprio sistema faz esse
-// rebaixamento automático em vez de deixar o usuário "preso" num plano que
-// não libera mais nada mas também não é tratado como free em nenhuma outra
-// parte do app.
+// natural, Frase do Dia, Categoria com IA). Quando o usuário esgota todas as
+// amostras que efetivamente experimentou, não sobra mais nenhuma amostra
+// grátis das ferramentas que ele usa - a partir daí ele é, na prática, um
+// usuário free (plano 2), então o próprio sistema faz esse rebaixamento
+// automático em vez de deixar o usuário "preso" num plano que não libera
+// mais nada mas também não é tratado como free em nenhuma outra parte do
+// app.
 //
 // Perguntas e o jogo Chuva de Frases NÃO entram aqui - viraram teto diário
 // (não vitalício, ver DailyQuestionOpenAI/JogoChuvaFrases), então nunca
-// "esgotam de vez" e não devem contar pra esse rebaixamento.
+// "esgotam de vez" e não devem contar pra esse rebaixamento. Melhorar
+// tradução com IA também não entra - virou recurso exclusivo do Premium,
+// Limitado nunca teve acesso a ela (ver TraducaoIA::verificarAcesso).
 //
 // Ferramenta nunca tentada (uso = 0) não conta contra o usuário - só entra
 // na conta quem ele já usou pelo menos uma vez. Ferramenta tentada mas com
@@ -27,7 +29,6 @@ class PlanoLimitado
     const LIMITE_AUDIO_VITALICIO = 10;
     const LIMITE_FRASE_DIA_VITALICIO = 1;
     const LIMITE_CATEGORIA_IA_VITALICIO = 1;
-    const LIMITE_TRADUCAO_IA_VITALICIO = 3;
     const MIN_FERRAMENTAS_TENTADAS = 3;
 
     private static function contar(PDO $pdo, string $tabela, int $user_id): int
@@ -50,7 +51,6 @@ class PlanoLimitado
             [self::contar($pdo, 'audio_ia_uso', $user_id), self::LIMITE_AUDIO_VITALICIO],
             [self::contarComStatus($pdo, 'frase_dia_ia', $user_id), self::LIMITE_FRASE_DIA_VITALICIO],
             [self::contar($pdo, 'categoria_ia_uso', $user_id), self::LIMITE_CATEGORIA_IA_VITALICIO],
-            [self::contar($pdo, 'traducao_ia_uso', $user_id), self::LIMITE_TRADUCAO_IA_VITALICIO],
         ];
 
         $ferramentasTentadas = 0;
