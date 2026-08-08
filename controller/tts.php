@@ -118,6 +118,61 @@ function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano): ?array
     return ["erro" => false, "premium_necessario" => true];
 }
 
+// Verifica o limite e já registra o uso, tudo dentro de um lock nomeado do
+// MySQL (GET_LOCK/RELEASE_LOCK) por usuário - sem isso, "verificar se ainda
+// tem cota" e "registrar o uso" eram dois passos separados sem trava
+// nenhuma, e várias requisições simultâneas (ex: clicando em várias frases
+// rapidamente numa lista, cada uma abrindo sua própria chamada) podiam todas
+// "ver" a cota livre ao mesmo tempo, antes de qualquer uma delas registrar a
+// sua - passando todas juntas e estourando o limite de verdade. O lock é
+// liberado logo depois de reservar a linha (rápido, só banco), ANTES da
+// chamada de verdade pra API de voz (lenta) - se a geração falhar depois,
+// a reserva é desfeita (removida) pra não gastar cota por um erro.
+// Retorna null se conseguiu reservar (já registrado - chame
+// desfazerReservaAudioIa se a geração falhar), ou o array de bloqueio.
+function reservarUsoAudioIa(PDO $pdo, int $userId, int $plano): ?array
+{
+    $chaveLock = "audio_ia_uso_{$userId}";
+
+    $stmt = $pdo->prepare("SELECT GET_LOCK(:chave, 5)");
+    $stmt->execute([':chave' => $chaveLock]);
+    $conseguiuLock = (bool) $stmt->fetchColumn();
+
+    if (!$conseguiuLock) {
+        // Não deveria acontecer (timeout de 5s é folgado pra uma operação
+        // rápida) - trata como bloqueio genérico em vez de deixar passar.
+        return ["erro" => true, "mensagem" => "Não foi possível processar a solicitação, tente novamente."];
+    }
+
+    try {
+        $bloqueio = verificarAcessoAudioIa($pdo, $userId, $plano);
+
+        if ($bloqueio !== null) {
+            return $bloqueio;
+        }
+
+        registrarUsoAudioIa($pdo, $userId);
+        return null;
+    } finally {
+        $stmt = $pdo->prepare("SELECT RELEASE_LOCK(:chave)");
+        $stmt->execute([':chave' => $chaveLock]);
+    }
+}
+
+function desfazerReservaAudioIa(PDO $pdo, int $userId): void
+{
+    // Remove a reserva mais recente desse usuário - a única criada pela
+    // chamada de reservarUsoAudioIa que acabou de falhar na geração.
+    $stmt = $pdo->prepare(
+        "DELETE FROM audio_ia_uso WHERE id = (
+            SELECT id FROM (
+                SELECT id FROM audio_ia_uso WHERE user_id = :user_id ORDER BY id DESC LIMIT 1
+            ) AS ultima
+        )"
+    );
+    $stmt->execute([':user_id' => $userId]);
+}
+
 // =========================
 // 📥 INPUT
 // =========================
@@ -168,7 +223,13 @@ try {
             throw new Exception("Texto excede o limite de " . AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA . " caracteres por chamada de áudio.");
         }
 
-        $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
+        $plano = (int) ($user['plano'] ?? 0);
+
+        // Verifica E já registra o uso, atomicamente (ver comentário em
+        // reservarUsoAudioIa) - antes de chamar a API de voz de verdade, pra
+        // nenhuma requisição concorrente conseguir passar pela checagem
+        // antes de outra registrar a sua.
+        $bloqueio = reservarUsoAudioIa($pdo, $user_id, $plano);
 
         if ($bloqueio !== null) {
             header('Content-Type: application/json');
@@ -182,16 +243,14 @@ try {
         $result = $tts->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
 
         if ($result["erro"]) {
+            desfazerReservaAudioIa($pdo, $user_id);
             throw new Exception($result["mensagem"]);
         }
 
-        // Toda reprodução conta contra o limite, cache ou não - senão o
-        // usuário podia reproduzir a mesma frase infinitas vezes de graça
-        // sem nunca gastar a cota.
-        registrarUsoAudioIa($pdo, $user_id);
-        PlanoLimitado::verificarEDowngradear($pdo, $user_id, (int) ($user['plano'] ?? 0));
+        PlanoLimitado::verificarEDowngradear($pdo, $user_id, $plano);
 
         if (empty($result["audio"])) {
+            desfazerReservaAudioIa($pdo, $user_id);
             throw new Exception("Áudio vazio");
         }
 
@@ -241,7 +300,8 @@ try {
             throw new Exception("Texto excede o limite de " . AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA . " caracteres por chamada de áudio.");
         }
 
-        $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
+        $plano = (int) ($user['plano'] ?? 0);
+        $bloqueio = reservarUsoAudioIa($pdo, $user_id, $plano);
 
         if ($bloqueio !== null) {
             echo json_encode($bloqueio);
@@ -252,11 +312,10 @@ try {
         $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
         $result = $tts->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
 
-        // Toda reprodução conta contra o limite, cache ou não - mas só se
-        // realmente saiu áudio (erro da API não deveria consumir a cota).
-        if (!$result["erro"]) {
-            registrarUsoAudioIa($pdo, $user_id);
-            PlanoLimitado::verificarEDowngradear($pdo, $user_id, (int) ($user['plano'] ?? 0));
+        if ($result["erro"]) {
+            desfazerReservaAudioIa($pdo, $user_id);
+        } else {
+            PlanoLimitado::verificarEDowngradear($pdo, $user_id, $plano);
         }
 
         echo json_encode([
