@@ -140,6 +140,19 @@ $tts = new OpenAiTts($_ENV['OPEN_AI']);
 try {
 
     // =========================
+    // 🔍 VERIFICAR LIMITE (sem gastar cota) - checagem leve pro front
+    // sincronizar o estado ANTES de tentar tocar qualquer áudio, evitando
+    // que o cache do navegador (service worker) sirva uma voz natural já
+    // baixada antes sem nunca descobrir que a cota acabou nesse meio tempo.
+    // =========================
+    if ($action === "verificar_limite") {
+        header('Content-Type: application/json');
+        $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
+        echo json_encode(["limite_atingido" => $bloqueio !== null && !empty($bloqueio['limite_atingido'])]);
+        exit;
+    }
+
+    // =========================
     // 🔊 STREAM (MP3)
     // =========================
     if ($action === "stream_audio") {
