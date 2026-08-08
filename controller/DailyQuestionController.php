@@ -131,8 +131,8 @@ class DailyQuestionController
                     $resultado['numero'] = DailyQuestionOpenAI::contarHoje($this->pdo, $user_id) + 1;
                     $resultado['total'] = DailyQuestionOpenAI::LIMITE_DIARIO_PREMIUM;
                 } else {
-                    $resultado['numero'] = DailyQuestionOpenAI::contarTotal($this->pdo, $user_id) + 1;
-                    $resultado['total'] = DailyQuestionOpenAI::LIMITE_VITALICIO_LIMITADO;
+                    $resultado['numero'] = DailyQuestionOpenAI::contarHoje($this->pdo, $user_id) + 1;
+                    $resultado['total'] = DailyQuestionOpenAI::LIMITE_DIARIO_LIMITADO;
                 }
             }
 

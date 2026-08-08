@@ -4,12 +4,12 @@
 // model/DailyQuestionIA.php (Groq) no fluxo ativo, mas não o exclui (mesmo
 // padrão de api/ElevenLabs.php: fica intocado, só sem uso).
 // Diferença principal: resposta agora é por voz (gravada, transcrita) em vez
-// de texto digitado, e o limite passa a ser diário (premium) / vitalício
-// (limitado) em vez de um número fixo pra todo mundo.
+// de texto digitado, e o limite é diário pros dois planos (maior pro
+// premium) em vez de um número fixo pra todo mundo.
 class DailyQuestionOpenAI
 {
     const LIMITE_DIARIO_PREMIUM = 5;
-    const LIMITE_VITALICIO_LIMITADO = 3;
+    const LIMITE_DIARIO_LIMITADO = 1;
     const MAX_TENTATIVAS_POR_PERGUNTA = 3;
     const MAX_TENTATIVAS_GERACAO = 5;
 
@@ -77,30 +77,6 @@ class DailyQuestionOpenAI
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     }
 
-    public static function contarTotal(PDO $pdo, int $user_id): int
-    {
-        $sql = "SELECT COUNT(*) as total FROM perguntas_ia
-                WHERE user_id = :user_id AND status_id = 1";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([':user_id' => $user_id]);
-        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-    }
-
-    // O limitado pode continuar vendo/respondendo a pergunta pendente no
-    // mesmo dia em que ela foi gerada (a amostra vitalícia só é "gasta" de
-    // verdade quando ele responde), mas se voltar em outro dia sem ter
-    // respondido, essa amostra é considerada perdida - senão as perguntas
-    // grátis ficariam disponíveis pra sempre, bastando nunca responder.
-    private static function temPendenteExpirada(PDO $pdo, int $user_id): bool
-    {
-        $sql = "SELECT COUNT(*) as total FROM perguntas_ia
-                WHERE user_id = :user_id AND status_id = 0
-                  AND DATE(data_criacao) < CURDATE()";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([':user_id' => $user_id]);
-        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'] > 0;
-    }
-
     public static function verificarAcesso(PDO $pdo, int $user_id, int $plano): ?array
     {
         if ($plano === 1) {
@@ -111,8 +87,8 @@ class DailyQuestionOpenAI
         }
 
         if ($plano === 3) {
-            if (self::contarTotal($pdo, $user_id) >= self::LIMITE_VITALICIO_LIMITADO || self::temPendenteExpirada($pdo, $user_id)) {
-                return ["success" => false, "limite_atingido" => true, "message" => "Você já usou suas " . self::LIMITE_VITALICIO_LIMITADO . " perguntas grátis. Vire premium para ter acesso diário."];
+            if (self::contarHoje($pdo, $user_id) >= self::LIMITE_DIARIO_LIMITADO) {
+                return ["success" => false, "limite_atingido" => true, "message" => "Você já respondeu " . self::LIMITE_DIARIO_LIMITADO . " pergunta hoje. Volte amanhã ou vire premium para mais perguntas por dia."];
             }
             return null;
         }
