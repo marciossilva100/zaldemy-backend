@@ -140,9 +140,15 @@ try {
 
         $token = bin2hex(random_bytes(32));
 
+        // apelido_definido_pelo_usuario só fica 1 se ele mesmo digitou um
+        // apelido no cadastro - hoje a tela de cadastro não pede isso (fica
+        // pra tela dedicada logo no início do onboarding), mas a API
+        // continua aceitando pra quem quiser prover na hora.
+        $apelidoDefinidoPeloUsuario = $apelidoDesejado !== '' ? 1 : 0;
+
         $stmt = $pdo->prepare("
-            INSERT INTO usuarios (nome, email, password, email_token, plano, apelido)
-            VALUES (:nome, :email, :password, :token, 3, :apelido)
+            INSERT INTO usuarios (nome, email, password, email_token, plano, apelido, apelido_definido_pelo_usuario)
+            VALUES (:nome, :email, :password, :token, 3, :apelido, :apelido_definido)
         ");
 
         $stmt->bindParam(":nome", $nome, PDO::PARAM_STR);
@@ -150,6 +156,7 @@ try {
         $stmt->bindParam(":password", $hash, PDO::PARAM_STR);
         $stmt->bindParam(":token", $token, PDO::PARAM_STR);
         $stmt->bindParam(":apelido", $apelido, PDO::PARAM_STR);
+        $stmt->bindParam(":apelido_definido", $apelidoDefinidoPeloUsuario, PDO::PARAM_INT);
         $stmt->execute();
 
         $user_id = $pdo->lastInsertId();

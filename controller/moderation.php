@@ -131,3 +131,34 @@ function verificarConteudoImproprio(string $texto): bool
 
     return false;
 }
+
+/**
+ * Mesma blocklist de verificarConteudoImproprio, mas por SUBSTRING - sem
+ * limite de palavra. Pra frases/texto livre, limite de palavra evita falso
+ * positivo (ex: "classic" não deveria acusar "ass"). Mas um identificador
+ * compacto sem espaço (apelido, nome de usuário) pode burlar o limite de
+ * palavra só colando números/letras direto na palavra ofensiva (ex:
+ * "merda123" não seria pego pelo limite de palavra, já que "123" depois de
+ * "merda" conta como "mais texto colado"). Aqui isso não importa - qualquer
+ * ocorrência da palavra dentro do identificador já é motivo pra barrar.
+ */
+function identificadorContemPalavraImpropria(string $texto): bool
+{
+    $texto = trim($texto);
+
+    if ($texto === '') {
+        return false;
+    }
+
+    $normalizado = zaldemyNormalizarTexto($texto);
+
+    foreach (BLOCKED_WORDS as $palavras) {
+        foreach ($palavras as $palavra) {
+            if (mb_strpos($normalizado, zaldemyNormalizarTexto($palavra)) !== false) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}

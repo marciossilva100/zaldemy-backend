@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../controller/moderation.php';
+
 // Apelido público do usuário - diferente de "nome" (privado, nunca exibido
 // pra outros usuários). É o que aparece quando uma categoria é marcada como
 // pública/compartilhada, como identificação de quem disponibilizou aquele
@@ -11,7 +13,9 @@ class Apelido
     const REGEX_VALIDO = '/^[a-zA-Z0-9_]+$/';
 
     // Retorna mensagem de erro, ou null se o formato é válido (não checa
-    // unicidade aqui - ver estaDisponivel).
+    // unicidade aqui - ver estaDisponivel). verificarConteudoImproprio (de
+    // moderation.php) checa contra os 15 idiomas cadastrados na base, não só
+    // o idioma do usuário - um apelido ofensivo em qualquer idioma é barrado.
     public static function validarFormato(string $apelido): ?string
     {
         $tamanho = mb_strlen($apelido);
@@ -22,6 +26,10 @@ class Apelido
 
         if (!preg_match(self::REGEX_VALIDO, $apelido)) {
             return "O apelido só pode ter letras, números e underscore, sem espaços.";
+        }
+
+        if (identificadorContemPalavraImpropria($apelido)) {
+            return "Esse apelido não é permitido.";
         }
 
         return null;
