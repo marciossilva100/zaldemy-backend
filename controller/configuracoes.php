@@ -31,6 +31,7 @@ require_once 'authMiddleware.php';
 require_once '../model/Configuracoes.php';
 require_once '../model/Auth.php';
 require_once '../model/AcessoUsuario.php';
+require_once '../model/Apelido.php';
 
 
 // lê JSON do body
@@ -102,6 +103,30 @@ try {
         }
 
         echo json_encode($dados);
+        exit;
+    }
+
+    if ($action === 'atualizar_apelido') {
+        $apelidoDesejado = trim((string) ($input['apelido'] ?? ''));
+
+        if ($apelidoDesejado === '') {
+            http_response_code(400);
+            echo json_encode(["success" => false, "message" => "Informe um apelido."]);
+            exit;
+        }
+
+        $resultado = Apelido::normalizarOuGerar($pdo, $apelidoDesejado, $user_id);
+
+        if (!$resultado['sucesso']) {
+            http_response_code(400);
+            echo json_encode(["success" => false, "message" => $resultado['erro']]);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("UPDATE usuarios SET apelido = :apelido WHERE id = :id");
+        $stmt->execute([':apelido' => $resultado['apelido'], ':id' => $user_id]);
+
+        echo json_encode(["success" => true, "apelido" => $resultado['apelido']]);
         exit;
     }
 

@@ -60,7 +60,7 @@ require_once '../model/Nivel.php';
 try {
 
     $stmt = $pdo->prepare("
-        SELECT id, nome, email, foto_perfil, step, plano, nivel, interesses_definidos, guia_categoria_dispensado, assinatura_cancelamento_previsto
+        SELECT id, nome, email, apelido, foto_perfil, step, plano, nivel, interesses_definidos, guia_categoria_dispensado, assinatura_cancelamento_previsto
         FROM usuarios
         WHERE auth_token = :token
         LIMIT 1
@@ -118,6 +118,7 @@ try {
             "id" => $usuario['id'],
             "name" => $usuario['nome'],
             "email" => $usuario['email'],
+            "apelido" => $usuario['apelido'],
             "foto_perfil" => $usuario['foto_perfil'] ?? null,
             "step" =>  $usuario['step'] ?? null,
             "plano" => $usuario['plano'] ?? null,

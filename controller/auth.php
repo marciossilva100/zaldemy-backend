@@ -74,6 +74,7 @@ require_once 'email.php';
 require_once '../model/Auth.php';
 require_once '../model/AcessoUsuario.php';
 require_once '../model/PaisesLiberados.php';
+require_once '../model/Apelido.php';
 
 try {
 
@@ -92,6 +93,7 @@ try {
         $email    = isset($data['email']) ? trim($data['email']) : '';
         $password = isset($data['password']) ? $data['password'] : '';
         $confirm_password = isset($data['confirm_password']) ? $data['confirm_password'] : '';
+        $apelidoDesejado = isset($data['apelido']) ? trim($data['apelido']) : '';
 
         $erros = [];
 
@@ -111,11 +113,18 @@ try {
             $erros[] = "As senhas não coincidem";
         }
 
+        $resultadoApelido = Apelido::normalizarOuGerar($pdo, $apelidoDesejado);
+        if (!$resultadoApelido['sucesso']) {
+            $erros[] = $resultadoApelido['erro'];
+        }
+
         if (!empty($erros)) {
             http_response_code(422);
             echo json_encode(["erro" => $erros]);
             exit;
         }
+
+        $apelido = $resultadoApelido['apelido'];
 
         $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE email = :email LIMIT 1");
         $stmt->bindParam(":email", $email, PDO::PARAM_STR);
@@ -132,14 +141,15 @@ try {
         $token = bin2hex(random_bytes(32));
 
         $stmt = $pdo->prepare("
-            INSERT INTO usuarios (nome, email, password, email_token, plano)
-            VALUES (:nome, :email, :password, :token, 3)
+            INSERT INTO usuarios (nome, email, password, email_token, plano, apelido)
+            VALUES (:nome, :email, :password, :token, 3, :apelido)
         ");
 
         $stmt->bindParam(":nome", $nome, PDO::PARAM_STR);
         $stmt->bindParam(":email", $email, PDO::PARAM_STR);
         $stmt->bindParam(":password", $hash, PDO::PARAM_STR);
         $stmt->bindParam(":token", $token, PDO::PARAM_STR);
+        $stmt->bindParam(":apelido", $apelido, PDO::PARAM_STR);
         $stmt->execute();
 
         $user_id = $pdo->lastInsertId();

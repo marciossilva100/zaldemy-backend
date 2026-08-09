@@ -2,6 +2,7 @@
 date_default_timezone_set('America/Sao_Paulo');
 require_once 'Categorias.php';
 require_once 'PaisesLiberados.php';
+require_once 'Apelido.php';
 
 class Auth {
 
@@ -82,15 +83,20 @@ class Auth {
                 ];
             }
 
-            // cria usuário automaticamente
+            // cria usuário automaticamente - Google não fornece apelido,
+            // então sempre gera um automático (editável depois em
+            // Configurações > Perfil).
+            $apelido = Apelido::gerarAutomatico($this->pdo);
+
             $stmt = $this->pdo->prepare(
                 "INSERT INTO usuarios
-                (nome, email, email_verified, plano)
-                VALUES (:nome, :email, 1, 3)"
+                (nome, email, email_verified, plano, apelido)
+                VALUES (:nome, :email, 1, 3, :apelido)"
             );
 
             $stmt->bindParam(":nome", $nome);
             $stmt->bindParam(":email", $email);
+            $stmt->bindParam(":apelido", $apelido);
             $stmt->execute();
 
             $userId = $this->pdo->lastInsertId();
