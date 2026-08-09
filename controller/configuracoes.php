@@ -123,7 +123,7 @@ try {
             exit;
         }
 
-        $stmt = $pdo->prepare("UPDATE usuarios SET apelido = :apelido WHERE id = :id");
+        $stmt = $pdo->prepare("UPDATE usuarios SET apelido = :apelido, apelido_definido_pelo_usuario = 1 WHERE id = :id");
         $stmt->execute([':apelido' => $resultado['apelido'], ':id' => $user_id]);
 
         echo json_encode(["success" => true, "apelido" => $resultado['apelido']]);
