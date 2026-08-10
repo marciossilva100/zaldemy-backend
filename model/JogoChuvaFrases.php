@@ -92,4 +92,30 @@ class JogoChuvaFrases
 
         return self::buscarRecorde($pdo, $user_id, $categoriaId);
     }
+
+    // Resumo pro termômetro de progresso da Home - jogo_chuva_uso conta toda
+    // partida (mesmo sem bater recorde), diferente de jogo_chuva_recorde
+    // (só a melhor pontuação por categoria).
+    public static function resumoGeral(PDO $pdo, int $user_id): array
+    {
+        $stmtPartidas = $pdo->prepare("SELECT COUNT(*) as total FROM jogo_chuva_uso WHERE user_id = :user_id");
+        $stmtPartidas->execute([':user_id' => $user_id]);
+        $partidas = (int) $stmtPartidas->fetch(PDO::FETCH_ASSOC)['total'];
+
+        // Só de categorias que ainda existem (status_id > 0) - categoria
+        // excluída não deve contar recorde no resumo.
+        $stmtRecorde = $pdo->prepare(
+            "SELECT MAX(r.melhor_pontuacao) as melhor
+             FROM jogo_chuva_recorde r
+             INNER JOIN categorias c ON c.id = r.categoria_id AND c.status_id > 0
+             WHERE r.user_id = :user_id"
+        );
+        $stmtRecorde->execute([':user_id' => $user_id]);
+        $melhor = $stmtRecorde->fetch(PDO::FETCH_ASSOC)['melhor'];
+
+        return [
+            'partidas_jogadas' => $partidas,
+            'melhor_pontuacao' => $melhor !== null ? (int) $melhor : 0,
+        ];
+    }
 }

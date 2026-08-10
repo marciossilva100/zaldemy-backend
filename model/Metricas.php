@@ -291,6 +291,20 @@ class Metricas {
         return $result['streak'] ?? 0;
     }
 
+    // Total de dias distintos (não precisam ser seguidos, diferente do
+    // streak) em que o usuário acessou o app - baseado em acessos_usuario,
+    // registrado a cada login bem-sucedido (ver model/AcessoUsuario.php).
+    public function getDiasAcesso($user_id) {
+        $sql = "SELECT COUNT(DISTINCT DATE(data_acesso)) as total FROM acessos_usuario WHERE user_id = :user_id";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int) ($result['total'] ?? 0);
+    }
+
     // Maior sequência de dias seguidos estudando já alcançada (não só a atual).
     public function getMelhorStreak($user_id, $idioma_nativo = null, $idioma_aprendendo = null) {
         $filtroIdioma = $this->filtroIdiomaSql('f', $idioma_nativo, $idioma_aprendendo);
