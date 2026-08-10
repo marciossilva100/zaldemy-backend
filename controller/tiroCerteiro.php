@@ -43,10 +43,13 @@ $plano = (int) ($user['plano'] ?? 0);
 
 try {
 
-    // Checagem de plano/cota diária - registra uso. Só chamar quando o
-    // usuário está de fato iniciando uma partida. Pra só CONSULTAR se está
-    // bloqueado sem gastar cota (ex: mostrar coroa no hub de jogos), usar
-    // a action 'status_acesso' abaixo. Mesmo padrão de jogoChuvaFrases.php.
+    // Checagem de plano/cota diária/cooldown - só CONSULTA, não registra uso.
+    // Antes registrava uso aqui, mas isso gastava cota E cooldown mesmo
+    // quando a tentativa nunca chegava a virar uma partida de verdade (ex:
+    // 'obter_rodadas' bloqueando logo em seguida por conteúdo insuficiente) -
+    // um usuário limitado podia estourar o teto diário de partidas sem ter
+    // jogado nenhuma vez. Agora quem registra é 'obter_rodadas', e só depois
+    // de confirmar que dá pra gerar a partida de fato.
     if ($action === 'verificar_acesso') {
         $bloqueio = TiroCerteiro::verificarAcesso($pdo, $user_id, $plano);
 
@@ -54,9 +57,6 @@ try {
             echo json_encode($bloqueio);
             exit;
         }
-
-        TiroCerteiro::registrarUso($pdo, $user_id);
-        PlanoLimitado::verificarEDowngradear($pdo, $user_id, $plano);
 
         echo json_encode(["success" => true]);
         exit;
@@ -76,9 +76,18 @@ try {
 
     // Gera o lote de rodadas da partida - chama a IA uma vez só (custo e
     // latência de uma chamada por tiro seriam inviáveis pro ritmo do jogo).
-    // Não registra uso nem consome cota aqui - isso já foi feito por
-    // 'verificar_acesso' antes do jogo começar de fato.
+    // Reconfere o bloqueio de plano/cota/cooldown aqui (chamada separada de
+    // 'verificar_acesso', pode ter mudado entre uma e outra) e só registra
+    // uso quando o conteúdo é suficiente e a geração de fato vai ser
+    // tentada - ver comentário em 'verificar_acesso' acima.
     if ($action === 'obter_rodadas') {
+        $bloqueio = TiroCerteiro::verificarAcesso($pdo, $user_id, $plano);
+
+        if ($bloqueio !== null) {
+            echo json_encode($bloqueio);
+            exit;
+        }
+
         if (TiroCerteiro::contarFrasesEstudadas($pdo, $user_id) < 3) {
             echo json_encode([
                 "success" => false,
@@ -87,6 +96,9 @@ try {
             ]);
             exit;
         }
+
+        TiroCerteiro::registrarUso($pdo, $user_id);
+        PlanoLimitado::verificarEDowngradear($pdo, $user_id, $plano);
 
         // gpt-5-mini (não o nano padrão) - mesmo motivo da Frase do Dia e
         // Perguntas: nano mistura fragmentos sem relação ao compor várias
