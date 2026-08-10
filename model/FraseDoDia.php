@@ -3,10 +3,13 @@
 class FraseDoDia
 {
     // Premium: 1 frase nova por dia. Limitado: 1 vitalícia (amostra grátis,
-    // mesmo padrão do audio_ia_uso). Free: bloqueado.
+    // mesmo padrão do audio_ia_uso). Free: bloqueado. Em ambos os planos, a
+    // MESMA frase pode ser respondida até MAX_TENTATIVAS_POR_FRASE vezes
+    // antes de contar pro limite (ver responder()) - só esgota de verdade
+    // (e passa a valer pro histórico/limite) depois da última tentativa.
     const LIMITE_DIARIO_PREMIUM = 1;
     const LIMITE_VITALICIO_LIMITADO = 1;
-    const MAX_TENTATIVAS_POR_FRASE = 3;
+    const MAX_TENTATIVAS_POR_FRASE = 2;
     const MAX_TENTATIVAS_GERACAO = 5;
 
     // Limite de frases enviadas pro prompt da IA - mandar tudo que o usuário
@@ -137,10 +140,16 @@ class FraseDoDia
         return ["success" => false, "premium_necessario" => true, "message" => "A frase do dia é um recurso exclusivo do plano Premium."];
     }
 
+    // Só considera pendente de HOJE - uma pendência esquecida de um dia
+    // anterior (ex: usuário nunca voltou pra usar a 2ª tentativa) não pode
+    // ficar bloqueando a geração da frase nova do premium pra sempre. Pro
+    // limitado isso nunca chega a importar aqui: uma pendência de dia
+    // anterior já é barrada antes, em verificarAcesso() (temPendenteExpirada).
     private static function getPendente(PDO $pdo, int $user_id): ?array
     {
         $sql = "SELECT id, frase, frase_traducao FROM frase_dia_ia
                 WHERE user_id = :user_id AND status_id = 0
+                  AND DATE(data_criacao) = CURDATE()
                 ORDER BY id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
@@ -795,13 +804,21 @@ class FraseDoDia
         $fbPronuncia = mb_substr((string) ($correcao['feedback_pronuncia'] ?? ''), 0, 250);
         $fbFluencia = mb_substr((string) ($correcao['feedback_fluencia'] ?? ''), 0, 250);
 
+        // Mesmo padrão do Perguntas (avaliarESalvarResposta): só fecha a
+        // frase (status_id=1, passa a valer pro histórico/limite diário ou
+        // vitalício) quando a tentativa atual esgota o total permitido -
+        // antes disso, status_id continua 0 e getPendente() devolve essa
+        // mesma frase de novo, deixando o usuário tentar melhorar a nota.
+        $esgotouTentativas = $tentativaAtual >= self::MAX_TENTATIVAS_POR_FRASE;
+
         $stmt = $pdo->prepare("
             UPDATE frase_dia_ia
-            SET status_id = 1, tentativas = :tentativas, transcricao = :transcricao, nota = :nota,
+            SET status_id = :status_id, tentativas = :tentativas, transcricao = :transcricao, nota = :nota,
                 feedback_gramatica = :fg, feedback_pronuncia = :fp, feedback_fluencia = :ff
             WHERE id = :id
         ");
         $stmt->execute([
+            ':status_id' => $esgotouTentativas ? 1 : 0,
             ':tentativas' => $tentativaAtual,
             ':transcricao' => $transcricao,
             ':nota' => $nota,
@@ -818,6 +835,7 @@ class FraseDoDia
             "feedback_gramatica" => $fbGramatica,
             "feedback_pronuncia" => $fbPronuncia,
             "feedback_fluencia" => $fbFluencia,
+            "pode_tentar_novamente" => !$esgotouTentativas,
         ];
     }
 
