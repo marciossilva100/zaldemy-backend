@@ -18,6 +18,14 @@ class TiroCerteiro
     const MAX_TENTATIVAS_GERACAO = 5;
     const QTD_RODADAS = 15;
 
+    // Premium não tem teto diário (ver verificarAcesso), então esse cooldown
+    // é o único freio contra alguém automatizar "jogar de novo" repetidas
+    // vezes só pra gerar chamadas de IA - cada partida nova custa 1 chamada
+    // ao gerar as rodadas. 5s é imperceptível pra quem está jogando de
+    // verdade (nenhuma partida termina em menos tempo que isso), mas
+    // inviabiliza um script disparando a cada poucos milissegundos.
+    const COOLDOWN_SEGUNDOS = 5;
+
     public static function contarHoje(PDO $pdo, int $user_id): int
     {
         $sql = "SELECT COUNT(*) as total FROM tiro_certeiro_uso
@@ -26,6 +34,17 @@ class TiroCerteiro
         $stmt->execute([':user_id' => $user_id]);
 
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    }
+
+    public static function segundosDesdeUltimoUso(PDO $pdo, int $user_id): ?int
+    {
+        $sql = "SELECT TIMESTAMPDIFF(SECOND, MAX(data_criacao), NOW()) as segundos
+                FROM tiro_certeiro_uso WHERE user_id = :user_id";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        $segundos = $stmt->fetch(PDO::FETCH_ASSOC)['segundos'] ?? null;
+
+        return $segundos === null ? null : (int) $segundos;
     }
 
     public static function registrarUso(PDO $pdo, int $user_id): void
@@ -38,6 +57,15 @@ class TiroCerteiro
     // bloqueado - jogo é recurso exclusivo dos planos Premium e Limitado.
     public static function verificarAcesso(PDO $pdo, int $user_id, int $plano): ?array
     {
+        $segundosDesdeUltimoUso = self::segundosDesdeUltimoUso($pdo, $user_id);
+        if ($segundosDesdeUltimoUso !== null && $segundosDesdeUltimoUso < self::COOLDOWN_SEGUNDOS) {
+            return [
+                "success" => false,
+                "cooldown" => true,
+                "message" => "Aguarde alguns segundos antes de começar outra partida.",
+            ];
+        }
+
         if ($plano === 1) {
             return null;
         }
