@@ -162,16 +162,17 @@ class TiroCerteiro
             . "elas só como inspiração de vocabulário e tema (nunca copie uma frase inteira, nunca repita um trecho "
             . "grande literalmente). "
             . "Gere exatamente " . self::QTD_RODADAS . " rodadas independentes. Cada rodada tem: uma palavra ou "
-            . "expressão CURTA (1 a 3 palavras) em {$idiomaNativoNome} ('alvo'), a tradução certa dela em "
-            . "{$idiomaNome} ('certa'), e exatamente 2 traduções erradas mas plausíveis em {$idiomaNome} "
-            . "('erradas') - parecidas o bastante pra exigir atenção real (mesmo campo semântico, palavra parecida "
-            . "ou erro comum de aluno), nunca absurdamente diferentes nem óbvias demais. "
+            . "expressão CURTA (no máximo 2 palavras) em {$idiomaNativoNome} ('alvo'), a tradução certa dela em "
+            . "{$idiomaNome} ('certa', também no máximo 2 palavras), e exatamente 1 tradução errada mas plausível "
+            . "em {$idiomaNome} ('errada', também no máximo 2 palavras) - parecida o bastante pra exigir atenção "
+            . "real (mesmo campo semântico, palavra parecida ou erro comum de aluno), nunca absurdamente diferente "
+            . "nem óbvia demais. "
             . "REQUISITOS OBRIGATÓRIOS: (1) as " . self::QTD_RODADAS . " rodadas precisam ser todas diferentes "
-            . "entre si, sem repetir a mesma palavra-alvo nem a mesma tradução certa duas vezes; (2) 'alvo' e "
-            . "'certa' e as duas 'erradas' de uma rodada precisam ser 4 textos DIFERENTES entre si; (3) ajuste a "
+            . "entre si, sem repetir a mesma palavra-alvo nem a mesma tradução certa duas vezes; (2) 'alvo', "
+            . "'certa' e 'errada' de uma rodada precisam ser 3 textos DIFERENTES entre si; (3) ajuste a "
             . "dificuldade do vocabulário ao nível do aluno (iniciante: palavras básicas do dia a dia; avançado: "
             . "vocabulário menos óbvio, expressões idiomáticas). "
-            . 'Responda em JSON: {"rodadas": [{"alvo": "...", "certa": "...", "erradas": ["...", "..."]}, ...]}';
+            . 'Responda em JSON: {"rodadas": [{"alvo": "...", "certa": "...", "errada": "..."}, ...]}';
 
         $userContent = "Frases que o aluno já estuda:\n" . $frasesText;
 
@@ -234,18 +235,15 @@ class TiroCerteiro
 
             $alvo = trim((string) ($rodada['alvo'] ?? ''));
             $certa = trim((string) ($rodada['certa'] ?? ''));
-            $erradas = array_values(array_filter(array_map(
-                fn($e) => trim((string) $e),
-                is_array($rodada['erradas'] ?? null) ? $rodada['erradas'] : []
-            )));
+            $errada = trim((string) ($rodada['errada'] ?? ''));
 
-            if ($alvo === '' || $certa === '' || count($erradas) !== 2) {
+            if ($alvo === '' || $certa === '' || $errada === '') {
                 continue;
             }
 
-            $textos = array_merge([$alvo, $certa], $erradas);
+            $textos = [$alvo, $certa, $errada];
             if (count(array_unique(array_map('mb_strtolower', $textos))) !== count($textos)) {
-                continue; // algum dos 4 textos repetido dentro da própria rodada
+                continue; // algum dos 3 textos repetido dentro da própria rodada
             }
 
             $chaveCerta = mb_strtolower($certa);
@@ -254,12 +252,12 @@ class TiroCerteiro
             }
 
             if (verificarConteudoImproprio($alvo) || verificarConteudoImproprio($certa)
-                || verificarConteudoImproprio($erradas[0]) || verificarConteudoImproprio($erradas[1])) {
+                || verificarConteudoImproprio($errada)) {
                 continue;
             }
 
             $certasUsadas[$chaveCerta] = true;
-            $validas[] = ["alvo" => $alvo, "certa" => $certa, "erradas" => $erradas];
+            $validas[] = ["alvo" => $alvo, "certa" => $certa, "errada" => $errada];
         }
 
         return $validas;
