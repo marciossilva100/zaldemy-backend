@@ -194,7 +194,7 @@ class DailyQuestionOpenAI
         }
 
         if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
-            return ["success" => false, "message" => "Adicione mais frases aos flashcards para gerar perguntas melhores."];
+            return ["success" => false, "conteudo_insuficiente" => true, "message" => "Adicione mais frases aos flashcards para gerar perguntas melhores."];
         }
 
         $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
