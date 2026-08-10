@@ -67,6 +67,11 @@ try {
             "success" => true,
             "bloqueado" => $bloqueio !== null,
             "message" => $bloqueio['message'] ?? null,
+            // Repassa o motivo (limite_atingido vs premium_necessario) pro
+            // front decidir entre o modal enxuto de cota diária e o modal
+            // completo de venda do premium.
+            "limite_atingido" => $bloqueio['limite_atingido'] ?? false,
+            "premium_necessario" => $bloqueio['premium_necessario'] ?? false,
         ]);
         exit;
     }
