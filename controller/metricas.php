@@ -122,7 +122,8 @@ try {
     // ========== STREAK ==========
     elseif ($action === 'streak') {
         $response = [
-            'streak' => $metricasModel->getStreak($user_id, $idioma_nativo, $idioma_aprendendo)
+            'streak' => $metricasModel->getStreak($user_id, $idioma_nativo, $idioma_aprendendo),
+            'dias_acesso' => $metricasModel->getDiasAcesso($user_id)
         ];
     }
 

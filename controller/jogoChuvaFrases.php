@@ -71,6 +71,13 @@ try {
         exit;
     }
 
+    // Resumo geral (partidas jogadas + melhor pontuação entre todas as
+    // categorias) - usado no popover do termômetro de progresso da Home.
+    if ($action === 'resumo') {
+        echo json_encode(["success" => true] + JogoChuvaFrases::resumoGeral($pdo, $user_id));
+        exit;
+    }
+
     if (!$categoriaId) {
         http_response_code(400);
         echo json_encode(["success" => false, "message" => "category_id obrigatório"]);
