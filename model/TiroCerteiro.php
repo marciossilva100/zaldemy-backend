@@ -88,28 +88,6 @@ class TiroCerteiro
         ];
     }
 
-    // Só conta como "estudada" a frase que já passou pelo menos uma vez
-    // pelo treino 2 (memorizando) - mesma checagem usada em
-    // FraseDoDia/DailyQuestionOpenAI.
-    public static function contarFrasesEstudadas(PDO $pdo, int $user_id): int
-    {
-        $sql = "SELECT COUNT(DISTINCT f.id) as total
-                FROM frases f
-                INNER JOIN idioma_referencia ir
-                    ON ir.idioma_nativo = f.idioma_nativo
-                    AND ir.idioma_aprender = f.idioma_aprendendo
-                    AND ir.id_user = :user_id
-                INNER JOIN treino_data_atualizacao t
-                    ON t.id_frase = f.id
-                    AND t.id_treino >= 2
-                WHERE f.usuario_id = :user_id
-                AND f.status_id > 0";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([':user_id' => $user_id]);
-
-        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-    }
-
     // Vocabulário do usuário no par de idioma atual, pra alimentar o
     // prompt de geração - mesmo padrão de FraseDoDia::getFrasesDoUsuario.
     public static function getFrasesDoUsuario(PDO $pdo, int $user_id): array

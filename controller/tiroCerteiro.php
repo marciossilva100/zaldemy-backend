@@ -88,11 +88,18 @@ try {
             exit;
         }
 
-        if (TiroCerteiro::contarFrasesEstudadas($pdo, $user_id) < 3) {
+        // Diferente da Frase do Dia/Perguntas, aqui não exige frase já
+        // "estudada" - getFrasesDoUsuario() já prioriza as estudadas mas cai
+        // pra qualquer frase cadastrada quando não há 3 estudadas (ver
+        // model/TiroCerteiro.php), então o bloqueio só faz sentido quando
+        // não sobra frase nenhuma pra IA usar como base.
+        $frases = TiroCerteiro::getFrasesDoUsuario($pdo, $user_id);
+
+        if (empty($frases)) {
             echo json_encode([
                 "success" => false,
                 "conteudo_insuficiente" => true,
-                "message" => "Adicione mais frases aos flashcards para jogar o Tiro Certeiro.",
+                "message" => "Adicione frases aos flashcards para jogar o Tiro Certeiro.",
             ]);
             exit;
         }
@@ -104,7 +111,6 @@ try {
         // Perguntas: nano mistura fragmentos sem relação ao compor várias
         // rodadas novas a partir do corpus de frases do usuário.
         $chat = new OpenAiChat($_ENV['OPEN_AI'], "gpt-5-mini");
-        $frases = TiroCerteiro::getFrasesDoUsuario($pdo, $user_id);
         $idioma = TiroCerteiro::getIdiomaAprendendo($pdo, $user_id);
         $idiomaNativo = TiroCerteiro::getIdiomaNativo($pdo, $user_id);
         $nivel = Nivel::obterNomeDoUsuario($pdo, $user_id);
