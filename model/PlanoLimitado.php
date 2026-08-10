@@ -9,11 +9,12 @@
 // mais nada mas também não é tratado como free em nenhuma outra parte do
 // app.
 //
-// Perguntas e o jogo Chuva de Frases NÃO entram aqui - viraram teto diário
-// (não vitalício, ver DailyQuestionOpenAI/JogoChuvaFrases), então nunca
-// "esgotam de vez" e não devem contar pra esse rebaixamento. Melhorar
-// tradução com IA também não entra - virou recurso exclusivo do Premium,
-// Limitado nunca teve acesso a ela (ver TraducaoIA::verificarAcesso).
+// Perguntas e os jogos Chuva de Frases e Tiro Certeiro NÃO entram aqui -
+// viraram teto diário (não vitalício, ver DailyQuestionOpenAI/
+// JogoChuvaFrases/TiroCerteiro), então nunca "esgotam de vez" e não devem
+// contar pra esse rebaixamento. Melhorar tradução com IA também não entra -
+// virou recurso exclusivo do Premium, Limitado nunca teve acesso a ela
+// (ver TraducaoIA::verificarAcesso).
 //
 // Ferramenta nunca tentada (uso = 0) não conta contra o usuário - só entra
 // na conta quem ele já usou pelo menos uma vez. Ferramenta tentada mas com
