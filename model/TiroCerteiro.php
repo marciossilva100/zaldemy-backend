@@ -16,7 +16,12 @@ class TiroCerteiro
 
     const MAX_FRASES_PROMPT = 50;
     const MAX_TENTATIVAS_GERACAO = 5;
-    const QTD_RODADAS = 15;
+    // Igual à munição inicial do front (MUNICAO_INICIAL em TiroCerteiro.jsx) -
+    // cada rodada avançada consome 1 bala, então nenhuma partida consegue
+    // chegar além da 12ª rodada. Gerar mais que isso é trabalho da IA que
+    // nunca chega a ser visto, só deixa a tela de carregamento mais lenta.
+    // Se MUNICAO_INICIAL mudar no front, mude aqui também.
+    const QTD_RODADAS = 12;
 
     // Premium não tem teto diário (ver verificarAcesso), então esse cooldown
     // é o único freio contra alguém automatizar "jogar de novo" repetidas
