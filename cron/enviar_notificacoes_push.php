@@ -113,6 +113,6 @@ if ($tipo === 'reengajamento') {
 echo "[{$tipo}] {$enviados} notificação(ões) enviada(s).\n";
 
 // Crontab (ajustar horário se quiser, caminho já é o real de produção):
-// 0 10 * * * php /domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php treino_disponivel >> /domains/zaldemy.com/public_html/api/cron/push.log 2>&1
-// 0 20 * * * php /domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php streak_risco     >> /domains/zaldemy.com/public_html/api/cron/push.log 2>&1
-// 0 9  * * * php /domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php reengajamento    >> /domains/zaldemy.com/public_html/api/cron/push.log 2>&1
+// 0 10 * * * php /home/u712858045/domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php treino_disponivel >> /home/u712858045/domains/zaldemy.com/public_html/api/cron/push.log 2>&1
+// 0 20 * * * php /home/u712858045/domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php streak_risco     >> /home/u712858045/domains/zaldemy.com/public_html/api/cron/push.log 2>&1
+// 0 9  * * * php /home/u712858045/domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php reengajamento    >> /home/u712858045/domains/zaldemy.com/public_html/api/cron/push.log 2>&1
