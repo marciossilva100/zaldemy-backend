@@ -54,9 +54,20 @@ class CanalAquisicao
 
         $existe = $stmt->fetch(PDO::FETCH_ASSOC);
 
+        // Idempotente: uma segunda chamada (clique duplo, retry de rede) não
+        // é erro - o canal já foi registrado da primeira vez, só garante que
+        // o step continua em dia (o front sempre avança de tela depois dessa
+        // chamada, então devolver erro aqui deixava o usuário preso vendo
+        // uma mensagem de erro por algo que, do ponto de vista dele, já
+        // tinha dado certo).
         if (!empty($existe['id'])) {
+            $sql = 'UPDATE usuarios SET step = 3 WHERE id = :id AND step < 3 LIMIT 1';
+            $stmt = $pdo->prepare($sql);
+            $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
+            $stmt->execute();
+
             return [
-                'success' => false,
+                'success' => true,
                 'message' => 'Canal de aquisição já registrado.'
             ];
         }
@@ -72,7 +83,7 @@ class CanalAquisicao
         $stmt->bindValue(':rede_social_id', $rede_social_id, PDO::PARAM_INT);
         $stmt->execute();
 
-        $sql = 'UPDATE usuarios SET step = 3 WHERE id = :id LIMIT 1';
+        $sql = 'UPDATE usuarios SET step = 3 WHERE id = :id AND step < 3 LIMIT 1';
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
         $stmt->execute();
