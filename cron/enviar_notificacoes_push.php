@@ -6,6 +6,12 @@
 // Configurar 3 entradas de crontab, uma por tipo, nos horários certos (ver
 // README/comentário no fim do arquivo).
 
+// model/Metricas.php usa require_once relativo ('../server.php'), resolvido
+// contra o diretório de trabalho do processo PHP - garante que funciona
+// mesmo chamado direto pelo caminho completo no crontab (sem precisar de um
+// "cd" antes).
+chdir(__DIR__);
+
 require_once __DIR__ . '/../server.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../model/PushNotification.php';
@@ -106,7 +112,7 @@ if ($tipo === 'reengajamento') {
 
 echo "[{$tipo}] {$enviados} notificação(ões) enviada(s).\n";
 
-// Crontab sugerido (ajustar caminho e horário conforme o servidor):
-// 0 10 * * * php /caminho/cron/enviar_notificacoes_push.php treino_disponivel >> /caminho/logs/push.log 2>&1
-// 0 20 * * * php /caminho/cron/enviar_notificacoes_push.php streak_risco     >> /caminho/logs/push.log 2>&1
-// 0 9  * * * php /caminho/cron/enviar_notificacoes_push.php reengajamento    >> /caminho/logs/push.log 2>&1
+// Crontab (ajustar horário se quiser, caminho já é o real de produção):
+// 0 10 * * * php /domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php treino_disponivel >> /domains/zaldemy.com/public_html/api/cron/push.log 2>&1
+// 0 20 * * * php /domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php streak_risco     >> /domains/zaldemy.com/public_html/api/cron/push.log 2>&1
+// 0 9  * * * php /domains/zaldemy.com/public_html/api/cron/enviar_notificacoes_push.php reengajamento    >> /domains/zaldemy.com/public_html/api/cron/push.log 2>&1
