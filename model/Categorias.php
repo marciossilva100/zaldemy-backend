@@ -42,6 +42,7 @@ class Categorias
                 c.public,
                 c.tipo,
                 COUNT(f.id) AS total_frases,
+                COUNT(CASE WHEN f.id_treino >= 2 THEN 1 END) AS total_treinadas,
                 COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
                 COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo
             FROM categorias c
