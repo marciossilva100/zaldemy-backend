@@ -171,6 +171,13 @@ class FraseDoDia
     // lá, então não contam pra liberar o recurso - só existir a frase não
     // significa que o aluno já estudou aquele conteúdo. Mesma checagem usada
     // em DailyQuestionOpenAI::contarFrasesEstudadas.
+    //
+    // Checa f.id_treino >= 2 TAMBÉM (não só o histórico) - treino_data_atualizacao
+    // pode dessincronizar do campo atual da frase (updateRepeat só avança o
+    // histórico se achar uma linha com o valor antigo exato, então uma
+    // dessincronia antiga nunca se corrige sozinha) - sem esse OR, um usuário
+    // com frases genuinamente treinadas (id_treino >= 2 na tabela frases)
+    // ficava travado no gate pra sempre, reportado mais de uma vez.
     private static function contarFrasesEstudadas(PDO $pdo, int $user_id): int
     {
         $sql = "SELECT COUNT(DISTINCT f.id) as total
@@ -179,11 +186,12 @@ class FraseDoDia
                     ON ir.idioma_nativo = f.idioma_nativo
                     AND ir.idioma_aprender = f.idioma_aprendendo
                     AND ir.id_user = :user_id
-                INNER JOIN treino_data_atualizacao t
+                LEFT JOIN treino_data_atualizacao t
                     ON t.id_frase = f.id
                     AND t.id_treino >= 2
                 WHERE f.usuario_id = :user_id
-                AND f.status_id > 0";
+                AND f.status_id > 0
+                AND (f.id_treino >= 2 OR t.id IS NOT NULL)";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
