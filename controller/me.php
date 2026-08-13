@@ -60,7 +60,7 @@ require_once '../model/Nivel.php';
 try {
 
     $stmt = $pdo->prepare("
-        SELECT id, nome, email, apelido, apelido_definido_pelo_usuario, foto_perfil, step, plano, nivel, interesses_definidos, guia_categoria_dispensado, assinatura_cancelamento_previsto
+        SELECT id, nome, email, apelido, apelido_definido_pelo_usuario, foto_perfil, step, plano, nivel, interesses_definidos, guia_categoria_dispensado, guia_treino_dispensado, assinatura_cancelamento_previsto
         FROM usuarios
         WHERE auth_token = :token
         LIMIT 1
@@ -127,6 +127,7 @@ try {
             "nivel_sugerido" => $nivelSugerido,
             "interesses_definidos" => (bool) ($usuario['interesses_definidos'] ?? false),
             "guia_categoria_dispensado" => (bool) ($usuario['guia_categoria_dispensado'] ?? false),
+            "guia_treino_dispensado" => (bool) ($usuario['guia_treino_dispensado'] ?? false),
             "categoria_ia_disponivel" => $categoriaIaDisponivel,
             "assinatura_cancelamento_previsto" => $usuario['assinatura_cancelamento_previsto'] ?? null,
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,

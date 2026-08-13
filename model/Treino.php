@@ -469,4 +469,13 @@ class Treino {
 
         return $agora >= $data;
     }
+
+    // Guarda que o usuário já dispensou o guia "toque em Treinar" na Home
+    // (mesmo padrão de Categorias::dispensarGuiaPrimeiraCategoria) - não
+    // volta a aparecer depois disso.
+    public static function dispensarGuiaTreino(PDO $pdo, int $user_id): void
+    {
+        $stmt = $pdo->prepare("UPDATE usuarios SET guia_treino_dispensado = 1 WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+    }
 }
