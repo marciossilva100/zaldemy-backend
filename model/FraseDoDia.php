@@ -25,15 +25,21 @@ class FraseDoDia
     // alto em frases muito longas.
     const MAX_TAMANHO_TRECHO = 10;
 
-    // Trecho mínimo de 2 palavras, mas com regra mais rígida pra bigramas
-    // (ver trechoValidoPorPalavra): um bigrama só vale se AMBAS as palavras
-    // forem "de conteúdo" (ver TAMANHO_MIN_PALAVRA_CONTEUDO), senão pares
-    // puramente gramaticais ("and I", "on the", "because the") batem com
-    // praticamente qualquer frase por coincidência - mas um bigrama de duas
-    // palavras de conteúdo de verdade ("stay calm", "make sense") é um
-    // reaproveitamento genuíno e não deveria ficar de fora só por ter 2
-    // palavras. Trechos de 3+ palavras já bastam ter uma palavra de conteúdo.
-    const MIN_TAMANHO_TRECHO_PALAVRAS = 2;
+    // Trecho mínimo de 1 palavra - uma frase do aluno pode ser uma única
+    // palavra (ex: "Trip"), e essa palavra sozinha ainda é vocabulário real
+    // dele; excluir tamanho 1 do destaque deixava esse tipo de frase
+    // estruturalmente impossível de ser reconhecida, não importa o que a IA
+    // escrevesse. trechoValidoPorPalavra já filtra o tamanho 1 pela regra de
+    // "palavra de conteúdo" (TAMANHO_MIN_PALAVRA_CONTEUDO) - só uma palavra
+    // isolada longa o bastante conta, palavras gramaticais curtas ("it",
+    // "on") continuam de fora. Bigramas têm regra mais rígida (ver
+    // trechoValidoPorPalavra): só valem se AMBAS as palavras forem "de
+    // conteúdo", senão pares puramente gramaticais ("and I", "on the")
+    // bateriam com praticamente qualquer frase por coincidência - mas um
+    // bigrama de duas palavras de conteúdo de verdade ("stay calm", "make
+    // sense") é um reaproveitamento genuíno. Trechos de 3+ palavras já
+    // bastam ter uma palavra de conteúdo.
+    const MIN_TAMANHO_TRECHO_PALAVRAS = 1;
     const TAMANHO_MIN_PALAVRA_CONTEUDO = 4;
 
     // Chinês, japonês e coreano usam caracteres muito mais densos em
