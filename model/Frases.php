@@ -14,14 +14,22 @@ class Frases
     public $response = array();
 
     // Conta frases criadas hoje pelo usuário, usada pro limite diário de
-    // criação (planos free/limitado) - premium não tem esse teto.
+    // criação (planos free/limitado) - premium não tem esse teto. Exclui
+    // categorias tipo=3 (categorias de interesse geradas por IA no
+    // onboarding, ver CategoriaIA::criarParaOnboarding - 8 frases por
+    // interesse escolhido, inseridas com a data de hoje) - sem essa
+    // exclusão, quem escolhe 2+ interesses no cadastro já chega na tela de
+    // Frases com o limite diário estourado, sem ter criado nada sozinho.
+    // Mesma exclusão já usada em Categorias::contarCategoriasAtivas.
     public static function contarFrasesCriadasHoje(PDO $pdo, int $user_id): int
     {
         $sql = "SELECT COUNT(*) as total
-                FROM frases
-                WHERE usuario_id = :user_id
-                  AND status_id > 0
-                  AND DATE(data_criacao) = CURDATE()";
+                FROM frases f
+                INNER JOIN categorias c ON c.id = f.categoria_id
+                WHERE f.usuario_id = :user_id
+                  AND f.status_id > 0
+                  AND DATE(f.data_criacao) = CURDATE()
+                  AND (c.tipo IS NULL OR c.tipo <> 3)";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
