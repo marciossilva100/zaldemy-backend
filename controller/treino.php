@@ -87,6 +87,12 @@ try {
     //     exit;
     // }
 
+    if ($action === 'dispensar_guia_treino') {
+        Treino::dispensarGuiaTreino($pdo, $user_id);
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
     if ($action === 'review' || $action === 'trainee_finish' || $action === 'learn') {
 
         $treino->acerto = $input['statusCorrectPhrase'];
