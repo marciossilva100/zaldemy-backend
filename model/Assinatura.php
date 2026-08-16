@@ -169,10 +169,14 @@ class Assinatura
         ]);
     }
 
+    // Cancelamento de premium cai pra limitado (3), não free (2) - free é
+    // reservado pra outros casos, não é o destino padrão de quem já foi
+    // assinante. Limitado ainda dá acesso (com cota) aos recursos de IA,
+    // jogos etc., em vez de cortar tudo de uma vez.
     private static function desativarAssinatura(PDO $pdo, string $customerId): void
     {
         $stmt = $pdo->prepare(
-            "UPDATE usuarios SET plano = 2, assinatura_status = 'canceled', assinatura_cancelamento_previsto = NULL WHERE stripe_customer_id = :cid"
+            "UPDATE usuarios SET plano = 3, assinatura_status = 'canceled', assinatura_cancelamento_previsto = NULL WHERE stripe_customer_id = :cid"
         );
         $stmt->execute([':cid' => $customerId]);
     }
