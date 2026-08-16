@@ -202,14 +202,19 @@ class DailyQuestionOpenAI
         }
 
         if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
-            return ["success" => false, "conteudo_insuficiente" => true, "message" => "Adicione mais frases aos flashcards para gerar perguntas melhores."];
+            return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine pelo menos 3 frases nos flashcards para desbloquear as perguntas faladas com IA."];
         }
 
         $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
         $phrases = array_values($phrases);
 
+        // Mensagem diferente da checagem acima de propósito - aqui o usuário
+        // já treinou frases suficientes, só que curtas demais (ex: só
+        // palavras soltas como "Trip"). Dizer só "adicione mais frases" (a
+        // mesma mensagem da checagem de cima) some a causa real: ele
+        // precisa treinar frases mais completas, não só cadastrar mais.
         if (count($phrases) < 3) {
-            return ["success" => false, "message" => "Adicione mais frases aos flashcards para gerar perguntas melhores."];
+            return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine frases mais completas nos flashcards (não só palavras soltas) para gerar perguntas melhores."];
         }
 
         // $phrases já vem limitado (getUserPhrases) e ordenado por prioridade

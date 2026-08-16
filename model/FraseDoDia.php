@@ -228,7 +228,7 @@ class FraseDoDia
         }
 
         if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
-            return ["success" => false, "conteudo_insuficiente" => true, "message" => "Adicione mais frases aos flashcards para gerar sua frase do dia."];
+            return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine pelo menos 3 frases nos flashcards para desbloquear a frase do dia."];
         }
 
         // Só filtra frases vazias - NÃO exige mais de 1 palavra nem um total
