@@ -208,13 +208,14 @@ class DailyQuestionOpenAI
         $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
         $phrases = array_values($phrases);
 
-        // Mensagem diferente da checagem acima de propósito - aqui o usuário
-        // já treinou frases suficientes, só que curtas demais (ex: só
-        // palavras soltas como "Trip"). Dizer só "adicione mais frases" (a
-        // mesma mensagem da checagem de cima) some a causa real: ele
-        // precisa treinar frases mais completas, não só cadastrar mais.
+        // Motivo diferente da checagem acima de propósito - aqui o usuário já
+        // treinou frases suficientes, só que curtas demais (ex: só palavras
+        // soltas como "Trip"). "message" é só texto de log/debug em
+        // português - o front NUNCA deve exibir esse texto direto pro
+        // usuário (quebraria os outros 14 idiomas do app); "frases_curtas"
+        // é o campo que o front usa pra escolher a tradução certa.
         if (count($phrases) < 3) {
-            return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine frases mais completas nos flashcards (não só palavras soltas) para gerar perguntas melhores."];
+            return ["success" => false, "conteudo_insuficiente" => true, "frases_curtas" => true, "message" => "Treine frases mais completas nos flashcards (não só palavras soltas) para gerar perguntas melhores."];
         }
 
         // $phrases já vem limitado (getUserPhrases) e ordenado por prioridade
