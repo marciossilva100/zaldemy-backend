@@ -95,19 +95,39 @@ class TiroCerteiro
 
     // Vocabulário do usuário no par de idioma atual, pra alimentar o
     // prompt de geração - mesmo padrão de FraseDoDia::getFrasesDoUsuario.
-    public static function getFrasesDoUsuario(PDO $pdo, int $user_id): array
+    // $categoryIds vazio/null = todas as categorias do usuário (comportamento
+    // original, antes do picker de categorias existir).
+    public static function getFrasesDoUsuario(PDO $pdo, int $user_id, ?array $categoryIds = null): array
     {
-        $frases = self::buscarFrasesPorEstagio($pdo, $user_id, true);
+        $frases = self::buscarFrasesPorEstagio($pdo, $user_id, true, $categoryIds);
 
         if (count($frases) < 3) {
-            $frases = self::buscarFrasesPorEstagio($pdo, $user_id, false);
+            $frases = self::buscarFrasesPorEstagio($pdo, $user_id, false, $categoryIds);
         }
 
         return $frases;
     }
 
-    private static function buscarFrasesPorEstagio(PDO $pdo, int $user_id, bool $exigirTreinoMinimo): array
+    private static function buscarFrasesPorEstagio(PDO $pdo, int $user_id, bool $exigirTreinoMinimo, ?array $categoryIds = null): array
     {
+        $categoryIds = array_values(array_filter(array_map('intval', $categoryIds ?? [])));
+
+        $params = [':user_id' => $user_id];
+        $filtroCategoria = '';
+
+        // IN (...) com placeholders nomeados - f.categoria_id já é escopado
+        // por f.usuario_id na mesma query, então mesmo um id de categoria de
+        // outro usuário aqui não vazaria frase nenhuma, só devolveria vazio.
+        if (!empty($categoryIds)) {
+            $placeholders = [];
+            foreach ($categoryIds as $i => $categoriaId) {
+                $chave = ":categoria_{$i}";
+                $placeholders[] = $chave;
+                $params[$chave] = $categoriaId;
+            }
+            $filtroCategoria = " AND f.categoria_id IN (" . implode(',', $placeholders) . ")";
+        }
+
         $sql = "SELECT f.texto_traduzido
                 FROM frases f
                 INNER JOIN idioma_referencia ir
@@ -118,12 +138,13 @@ class TiroCerteiro
                 AND f.usuario_id = :user_id
                 AND TRIM(f.texto_nativo) <> ''
                 AND f.status_id > 0"
-                . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "") . "
+                . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "")
+                . $filtroCategoria . "
                 ORDER BY f.id_treino DESC, RAND()
                 LIMIT " . self::MAX_FRASES_PROMPT;
 
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([':user_id' => $user_id]);
+        $stmt->execute($params);
 
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }

@@ -70,6 +70,12 @@ try {
             "success" => true,
             "bloqueado" => $bloqueio !== null,
             "message" => $bloqueio['message'] ?? null,
+            // Repassa o motivo (limite_atingido vs premium_necessario) pro
+            // front decidir entre o modal enxuto de cota diária e o modal
+            // completo de venda do premium - mesmo padrão de
+            // jogoChuvaFrases.php.
+            "limite_atingido" => $bloqueio['limite_atingido'] ?? false,
+            "premium_necessario" => $bloqueio['premium_necessario'] ?? false,
         ]);
         exit;
     }
@@ -88,12 +94,17 @@ try {
             exit;
         }
 
+        // category_ids opcional - mesmo padrão do picker da Chuva de Frases
+        // (JogoChuvaFrases). Vazio/ausente = todas as categorias do usuário,
+        // igual ao comportamento de antes do picker existir.
+        $categoryIds = $input['category_ids'] ?? [];
+
         // Diferente da Frase do Dia/Perguntas, aqui não exige frase já
         // "estudada" - getFrasesDoUsuario() já prioriza as estudadas mas cai
         // pra qualquer frase cadastrada quando não há 3 estudadas (ver
         // model/TiroCerteiro.php), então o bloqueio só faz sentido quando
         // não sobra frase nenhuma pra IA usar como base.
-        $frases = TiroCerteiro::getFrasesDoUsuario($pdo, $user_id);
+        $frases = TiroCerteiro::getFrasesDoUsuario($pdo, $user_id, $categoryIds);
 
         if (empty($frases)) {
             echo json_encode([
