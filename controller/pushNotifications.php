@@ -94,7 +94,7 @@ try {
             ],
         ]);
 
-        PushNotification::enviarParaUsuario(
+        $resultados = PushNotification::enviarParaUsuarioComDiagnostico(
             $pdo,
             $webPush,
             $user_id,
@@ -103,7 +103,13 @@ try {
             '/home'
         );
 
-        echo json_encode(["success" => true]);
+        $algumSucesso = array_reduce($resultados, fn($carry, $r) => $carry || $r['sucesso'], false);
+
+        echo json_encode([
+            "success" => $algumSucesso,
+            "resultados" => $resultados,
+            "message" => $algumSucesso ? null : "Nenhum envio teve sucesso - veja 'resultados' pro motivo exato.",
+        ]);
         exit;
     }
 

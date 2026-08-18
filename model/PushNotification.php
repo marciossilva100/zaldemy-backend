@@ -97,6 +97,53 @@ class PushNotification
         }
     }
 
+    // Mesmo envio de enviarParaUsuario, mas devolve o resultado real de
+    // cada subscription (sucesso/motivo da falha) em vez de engolir tudo
+    // silenciosamente - usado só pela action de teste (enviar_teste), pra
+    // dar um diagnóstico de verdade em vez de sempre dizer "enviado" mesmo
+    // quando o envio falhou.
+    public static function enviarParaUsuarioComDiagnostico(PDO $pdo, WebPush $webPush, int $user_id, string $titulo, string $corpo, string $url): array
+    {
+        $subscriptions = self::listarSubscriptions($pdo, $user_id);
+
+        if (empty($subscriptions)) {
+            return [];
+        }
+
+        $payload = json_encode(['titulo' => $titulo, 'corpo' => $corpo, 'url' => $url]);
+        $resultados = [];
+
+        foreach ($subscriptions as $sub) {
+            $subscription = Subscription::create([
+                'endpoint' => $sub['endpoint'],
+                'keys' => ['p256dh' => $sub['p256dh'], 'auth' => $sub['auth_key']],
+            ]);
+
+            try {
+                $report = $webPush->sendOneNotification($subscription, $payload);
+
+                if ($report->isSubscriptionExpired()) {
+                    self::removerSubscriptionPorId($pdo, (int) $sub['id']);
+                }
+
+                $resultados[] = [
+                    'sucesso' => $report->isSuccess(),
+                    'motivo' => $report->getReason(),
+                    'expirada' => $report->isSubscriptionExpired(),
+                ];
+            } catch (\Throwable $e) {
+                self::removerSubscriptionPorId($pdo, (int) $sub['id']);
+                $resultados[] = [
+                    'sucesso' => false,
+                    'motivo' => $e->getMessage(),
+                    'expirada' => false,
+                ];
+            }
+        }
+
+        return $resultados;
+    }
+
     public static function jaFoiNotificadoHoje(PDO $pdo, int $user_id, string $tipo): bool
     {
         $stmt = $pdo->prepare(
