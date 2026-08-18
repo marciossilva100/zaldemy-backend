@@ -70,7 +70,15 @@ class Assinatura
         $stripe = self::client();
         $subscription = $stripe->subscriptions->update($subscriptionId, ['cancel_at_period_end' => true]);
 
-        $previsto = date('Y-m-d H:i:s', $subscription->current_period_end);
+        // subscription->current_period_end foi descontinuado pelo Stripe
+        // (API Basil, desde 2025-03-31) pra contas em Flexible Billing Mode
+        // (a nossa) - agora cada item da assinatura tem seu próprio período,
+        // não a assinatura como um todo. O campo antigo vem sempre null;
+        // date('Y-m-d H:i:s', null) cai no padrão "agora" do PHP, por isso
+        // a data de cancelamento sempre aparecia como hoje, nunca o fim de
+        // período real. Zaldemy só tem 1 item por assinatura (1 price).
+        $periodoFim = $subscription->items->data[0]->current_period_end ?? $subscription->current_period_end;
+        $previsto = date('Y-m-d H:i:s', $periodoFim);
 
         // Marca assinatura_webhook_processado_em com o agora (não um
         // event->created, essa ação é direta via API, não um webhook) -
@@ -133,8 +141,12 @@ class Assinatura
 
             case 'customer.subscription.updated':
                 $subscription = $event->data->object;
+                // Mesmo motivo de cancelarAssinatura() - current_period_end
+                // não existe mais no nível da assinatura (Flexible Billing
+                // Mode), só no item.
+                $periodoFim = $subscription->items->data[0]->current_period_end ?? $subscription->current_period_end;
                 $previsto = $subscription->cancel_at_period_end
-                    ? date('Y-m-d H:i:s', $subscription->current_period_end)
+                    ? date('Y-m-d H:i:s', $periodoFim)
                     : null;
                 self::atualizarStatusPorCustomer($pdo, $subscription->customer, $subscription->id, $subscription->status, $previsto, $eventoEm);
                 break;
