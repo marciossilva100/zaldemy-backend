@@ -45,12 +45,27 @@ if ($tipo === 'treino_disponivel') {
             continue;
         }
 
+        // Com uma frase real "em treino" (id_treino=3) disponível, a
+        // notificação mostra ela em vez do texto genérico - desperta mais
+        // curiosidade que só "você tem conteúdo disponível" (decisão de
+        // produto, ver conversa com o usuário). Sem frase nesse estágio
+        // ainda, cai pro texto genérico de sempre.
+        $frase = PushNotification::fraseEmTreinoMaisAtrasada($pdo, $userId);
+        $corpo = 'Você ainda tem conteúdo disponível hoje. Que tal praticar um pouco?';
+
+        if ($frase) {
+            $texto = mb_strlen($frase['texto_nativo']) > 60
+                ? mb_substr($frase['texto_nativo'], 0, 60) . '...'
+                : $frase['texto_nativo'];
+            $corpo = "Lembra como se diz \"{$texto}\"? Pratique hoje!";
+        }
+
         PushNotification::enviarParaUsuario(
             $pdo,
             $webPush,
             $userId,
             'Seu treino de hoje está esperando!',
-            'Você ainda tem conteúdo disponível hoje. Que tal praticar um pouco?',
+            $corpo,
             '/home'
         );
         PushNotification::registrarNotificacaoEnviada($pdo, $userId, $tipo);
