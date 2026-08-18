@@ -185,6 +185,35 @@ class PushNotification
         $stmt->execute([':user_id' => $user_id, ':tipo' => $tipo]);
     }
 
+    // Frase "em treino" (id_treino=3, o estágio antes de "memorizado") há
+    // mais tempo sem ser revisada - ordena por data_atualizacao ASC (só
+    // muda quando a frase é revisada/avança de estágio), então a mais
+    // antiga é a mais "atrasada". Só do par de idioma ATUAL do usuário
+    // (mesmo filtro de idioma_referencia usado nos outros models), senão
+    // alguém que já trocou de idioma via frase de um idioma que nem está
+    // estudando mais. Null quando o usuário não tem nenhuma frase nesse
+    // estágio ainda (cai pra mensagem genérica no cron).
+    public static function fraseEmTreinoMaisAtrasada(PDO $pdo, int $user_id): ?array
+    {
+        $stmt = $pdo->prepare(
+            "SELECT f.texto_nativo, f.texto_traduzido
+             FROM frases f
+             INNER JOIN idioma_referencia ir
+                 ON ir.idioma_nativo = f.idioma_nativo
+                 AND ir.idioma_aprender = f.idioma_aprendendo
+                 AND ir.id_user = :user_id
+             WHERE f.usuario_id = :user_id
+               AND f.status_id > 0
+               AND f.id_treino = 3
+             ORDER BY f.data_atualizacao ASC
+             LIMIT 1"
+        );
+        $stmt->execute([':user_id' => $user_id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
     // Usuários (premium ou limitado, com subscription ativa) que ainda não
     // usaram hoje pelo menos 1 dos 4 recursos diários - mesmas tabelas já
     // usadas pelos respectivos contarHoje() de cada model.
