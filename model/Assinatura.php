@@ -127,7 +127,7 @@ class Assinatura
 
             case 'customer.subscription.deleted':
                 $subscription = $event->data->object;
-                self::desativarAssinatura($pdo, $subscription->customer);
+                self::desativarAssinatura($pdo, $subscription->customer, $subscription->id);
                 break;
         }
 
@@ -158,14 +158,26 @@ class Assinatura
         // encerrada, seja por cancelamento ou esgotamento das tentativas).
         // Sincroniza o cancelamento agendado mesmo se ele tiver sido feito
         // direto pelo painel do Stripe (não só pelo app).
+        //
+        // AND stripe_subscription_id = :sid - o Stripe não garante ordem de
+        // entrega dos webhooks. Um cliente que cancelou uma assinatura e
+        // assinou de novo (ex: durante testes) tem duas subscriptions
+        // diferentes ao longo do tempo; sem essa checagem, um evento
+        // atrasado/reentregue da assinatura ANTIGA (já substituída por
+        // ativarAssinatura() numa assinatura nova) sobrescrevia o estado
+        // correto da assinatura atual com dados desatualizados da antiga -
+        // reproduzido de verdade: campo de data de cancelamento voltou pro
+        // valor de uma assinatura de teste já cancelada, escondendo que a
+        // assinatura atual (nova) tinha uma data de cancelamento diferente.
         $stmt = $pdo->prepare(
-            "UPDATE usuarios SET assinatura_status = :status, stripe_subscription_id = :sid, assinatura_cancelamento_previsto = :previsto WHERE stripe_customer_id = :cid"
+            "UPDATE usuarios SET assinatura_status = :status, assinatura_cancelamento_previsto = :previsto
+             WHERE stripe_customer_id = :cid AND stripe_subscription_id = :sid"
         );
         $stmt->execute([
             ':status' => $status,
-            ':sid' => $subscriptionId,
             ':previsto' => $cancelamentoPrevisto,
             ':cid' => $customerId,
+            ':sid' => $subscriptionId,
         ]);
     }
 
@@ -173,11 +185,20 @@ class Assinatura
     // reservado pra outros casos, não é o destino padrão de quem já foi
     // assinante. Limitado ainda dá acesso (com cota) aos recursos de IA,
     // jogos etc., em vez de cortar tudo de uma vez.
-    private static function desativarAssinatura(PDO $pdo, string $customerId): void
+    //
+    // AND stripe_subscription_id = :sid - mesmo motivo de
+    // atualizarStatusPorCustomer: sem essa checagem, um subscription.deleted
+    // atrasado de uma assinatura ANTIGA (já substituída por uma nova, ex:
+    // cliente cancelou e assinou de novo) rebaixava um cliente que já tinha
+    // uma assinatura nova e válida ativa - o pior caso dos dois, porque
+    // cortaria acesso premium pago de verdade por causa de um evento de uma
+    // assinatura que não existe mais.
+    private static function desativarAssinatura(PDO $pdo, string $customerId, string $subscriptionId): void
     {
         $stmt = $pdo->prepare(
-            "UPDATE usuarios SET plano = 3, assinatura_status = 'canceled', assinatura_cancelamento_previsto = NULL WHERE stripe_customer_id = :cid"
+            "UPDATE usuarios SET plano = 3, assinatura_status = 'canceled', assinatura_cancelamento_previsto = NULL
+             WHERE stripe_customer_id = :cid AND stripe_subscription_id = :sid"
         );
-        $stmt->execute([':cid' => $customerId]);
+        $stmt->execute([':cid' => $customerId, ':sid' => $subscriptionId]);
     }
 }
