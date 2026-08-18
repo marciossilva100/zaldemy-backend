@@ -25,7 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once '../server.php';
 require_once 'authMiddleware.php';
+require_once '../vendor/autoload.php';
 require_once '../model/PushNotification.php';
+
+use Minishlink\WebPush\WebPush;
 
 header('Content-Type: application/json');
 
@@ -66,6 +69,39 @@ try {
         }
 
         PushNotification::removerSubscription($pdo, $user_id, $endpoint);
+
+        echo json_encode(["success" => true]);
+        exit;
+    }
+
+    // Manda uma notificação de teste só pro próprio usuário autenticado -
+    // pra confirmar que a cadeia inteira funciona (subscription salva,
+    // chaves VAPID certas, service worker recebendo) sem precisar de
+    // acesso ao terminal do servidor pra rodar o cron manualmente.
+    if ($action === 'enviar_teste') {
+        $subscriptions = PushNotification::listarSubscriptions($pdo, $user_id);
+
+        if (empty($subscriptions)) {
+            echo json_encode(["success" => false, "message" => "Nenhuma notificação ativada nesse dispositivo/conta ainda."]);
+            exit;
+        }
+
+        $webPush = new WebPush([
+            'VAPID' => [
+                'subject' => $_ENV['VAPID_SUBJECT'],
+                'publicKey' => $_ENV['VAPID_PUBLIC_KEY'],
+                'privateKey' => $_ENV['VAPID_PRIVATE_KEY'],
+            ],
+        ]);
+
+        PushNotification::enviarParaUsuario(
+            $pdo,
+            $webPush,
+            $user_id,
+            'Notificação de teste',
+            'Se você está vendo isso, as notificações do Zaldemy estão funcionando!',
+            '/home'
+        );
 
         echo json_encode(["success" => true]);
         exit;
