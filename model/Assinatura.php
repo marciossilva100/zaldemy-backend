@@ -72,8 +72,14 @@ class Assinatura
 
         $previsto = date('Y-m-d H:i:s', $subscription->current_period_end);
 
-        $stmt = $pdo->prepare("UPDATE usuarios SET assinatura_cancelamento_previsto = :previsto WHERE id = :id");
-        $stmt->execute([':previsto' => $previsto, ':id' => $user_id]);
+        // Marca assinatura_webhook_processado_em com o agora (não um
+        // event->created, essa ação é direta via API, não um webhook) -
+        // sem isso, um webhook atrasado de ANTES dessa ação (campo ainda
+        // NULL ou com timestamp velho) passava pela trava de ordenação em
+        // atualizarStatusPorCustomer/desativarAssinatura e sobrescrevia
+        // esse valor que acabamos de confirmar direto com o Stripe.
+        $stmt = $pdo->prepare("UPDATE usuarios SET assinatura_cancelamento_previsto = :previsto, assinatura_webhook_processado_em = :agora WHERE id = :id");
+        $stmt->execute([':previsto' => $previsto, ':agora' => time(), ':id' => $user_id]);
 
         return ['success' => true, 'cancelamento_previsto' => $previsto];
     }
@@ -93,8 +99,10 @@ class Assinatura
         $stripe = self::client();
         $stripe->subscriptions->update($subscriptionId, ['cancel_at_period_end' => false]);
 
-        $stmt = $pdo->prepare("UPDATE usuarios SET assinatura_cancelamento_previsto = NULL WHERE id = :id");
-        $stmt->execute([':id' => $user_id]);
+        // Mesmo motivo do timestamp em cancelarAssinatura() - marca o agora
+        // pra travar contra webhook atrasado de antes dessa ação.
+        $stmt = $pdo->prepare("UPDATE usuarios SET assinatura_cancelamento_previsto = NULL, assinatura_webhook_processado_em = :agora WHERE id = :id");
+        $stmt->execute([':agora' => time(), ':id' => $user_id]);
 
         return ['success' => true];
     }
@@ -111,10 +119,16 @@ class Assinatura
             return ['success' => false, 'message' => 'Payload inválido.'];
         }
 
+        // event->created (Unix, quando o Stripe gerou o evento - não quando
+        // chegou aqui) grava em assinatura_webhook_processado_em e serve de
+        // trava contra entrega fora de ordem em TODOS os handlers abaixo -
+        // ver comentário detalhado em atualizarStatusPorCustomer().
+        $eventoEm = (int) $event->created;
+
         switch ($event->type) {
             case 'checkout.session.completed':
                 $session = $event->data->object;
-                self::ativarAssinatura($pdo, $session->client_reference_id, $session->customer, $session->subscription);
+                self::ativarAssinatura($pdo, $session->client_reference_id, $session->customer, $session->subscription, $eventoEm);
                 break;
 
             case 'customer.subscription.updated':
@@ -122,35 +136,45 @@ class Assinatura
                 $previsto = $subscription->cancel_at_period_end
                     ? date('Y-m-d H:i:s', $subscription->current_period_end)
                     : null;
-                self::atualizarStatusPorCustomer($pdo, $subscription->customer, $subscription->id, $subscription->status, $previsto);
+                self::atualizarStatusPorCustomer($pdo, $subscription->customer, $subscription->id, $subscription->status, $previsto, $eventoEm);
                 break;
 
             case 'customer.subscription.deleted':
                 $subscription = $event->data->object;
-                self::desativarAssinatura($pdo, $subscription->customer, $subscription->id);
+                self::desativarAssinatura($pdo, $subscription->customer, $subscription->id, $eventoEm);
                 break;
         }
 
         return ['success' => true];
     }
 
-    private static function ativarAssinatura(PDO $pdo, ?string $userId, string $customerId, string $subscriptionId): void
+    // $eventoEm (Unix, event.created do Stripe) grava em
+    // assinatura_webhook_processado_em e é checado nos 3 handlers - o
+    // Stripe não garante ordem de entrega dos webhooks e reenvia eventos
+    // que falharam por até alguns dias, então um evento atrasado sempre
+    // pode chegar DEPOIS de um mais novo já ter sido aplicado. Sem essa
+    // trava por timestamp, o estado da assinatura podia "voltar no tempo" -
+    // reproduzido de verdade: reativar e cancelar de novo trouxe de volta
+    // a data de cancelamento de um evento antigo, atrasado, da mesma
+    // assinatura. IS NULL cobre a 1ª vez (usuário nunca teve um evento
+    // processado ainda).
+    private static function ativarAssinatura(PDO $pdo, ?string $userId, string $customerId, string $subscriptionId, int $eventoEm): void
     {
         // Limpa qualquer cancelamento agendado de uma assinatura anterior -
         // esse é um checkout novo.
         $sql = $userId
-            ? "UPDATE usuarios SET plano = 1, assinatura_status = 'active', assinatura_cancelamento_previsto = NULL, stripe_customer_id = :cid, stripe_subscription_id = :sid WHERE id = :id"
-            : "UPDATE usuarios SET plano = 1, assinatura_status = 'active', assinatura_cancelamento_previsto = NULL, stripe_subscription_id = :sid WHERE stripe_customer_id = :cid";
+            ? "UPDATE usuarios SET plano = 1, assinatura_status = 'active', assinatura_cancelamento_previsto = NULL, stripe_customer_id = :cid, stripe_subscription_id = :sid, assinatura_webhook_processado_em = :evt WHERE id = :id AND (assinatura_webhook_processado_em IS NULL OR assinatura_webhook_processado_em < :evt2)"
+            : "UPDATE usuarios SET plano = 1, assinatura_status = 'active', assinatura_cancelamento_previsto = NULL, stripe_subscription_id = :sid, assinatura_webhook_processado_em = :evt WHERE stripe_customer_id = :cid AND (assinatura_webhook_processado_em IS NULL OR assinatura_webhook_processado_em < :evt2)";
 
         $stmt = $pdo->prepare($sql);
-        $params = [':cid' => $customerId, ':sid' => $subscriptionId];
+        $params = [':cid' => $customerId, ':sid' => $subscriptionId, ':evt' => $eventoEm, ':evt2' => $eventoEm];
         if ($userId) {
             $params[':id'] = (int) $userId;
         }
         $stmt->execute($params);
     }
 
-    private static function atualizarStatusPorCustomer(PDO $pdo, string $customerId, string $subscriptionId, string $status, ?string $cancelamentoPrevisto): void
+    private static function atualizarStatusPorCustomer(PDO $pdo, string $customerId, string $subscriptionId, string $status, ?string $cancelamentoPrevisto, int $eventoEm): void
     {
         // Enquanto o Stripe ainda está tentando cobrar (past_due) ou a
         // assinatura está ativa/em trial, mantém o plano premium - só rebaixa
@@ -159,23 +183,22 @@ class Assinatura
         // Sincroniza o cancelamento agendado mesmo se ele tiver sido feito
         // direto pelo painel do Stripe (não só pelo app).
         //
-        // AND stripe_subscription_id = :sid - o Stripe não garante ordem de
-        // entrega dos webhooks. Um cliente que cancelou uma assinatura e
-        // assinou de novo (ex: durante testes) tem duas subscriptions
-        // diferentes ao longo do tempo; sem essa checagem, um evento
-        // atrasado/reentregue da assinatura ANTIGA (já substituída por
-        // ativarAssinatura() numa assinatura nova) sobrescrevia o estado
-        // correto da assinatura atual com dados desatualizados da antiga -
-        // reproduzido de verdade: campo de data de cancelamento voltou pro
-        // valor de uma assinatura de teste já cancelada, escondendo que a
-        // assinatura atual (nova) tinha uma data de cancelamento diferente.
+        // AND stripe_subscription_id = :sid - protege contra evento de uma
+        // assinatura ANTIGA já substituída por uma nova (cliente cancelou e
+        // assinou de novo). AND assinatura_webhook_processado_em < :evt
+        // protege contra entrega fora de ordem da MESMA assinatura (ver
+        // comentário em ativarAssinatura) - as duas checagens são
+        // necessárias, cobrem casos diferentes.
         $stmt = $pdo->prepare(
-            "UPDATE usuarios SET assinatura_status = :status, assinatura_cancelamento_previsto = :previsto
-             WHERE stripe_customer_id = :cid AND stripe_subscription_id = :sid"
+            "UPDATE usuarios SET assinatura_status = :status, assinatura_cancelamento_previsto = :previsto, assinatura_webhook_processado_em = :evt
+             WHERE stripe_customer_id = :cid AND stripe_subscription_id = :sid
+             AND (assinatura_webhook_processado_em IS NULL OR assinatura_webhook_processado_em < :evt2)"
         );
         $stmt->execute([
             ':status' => $status,
             ':previsto' => $cancelamentoPrevisto,
+            ':evt' => $eventoEm,
+            ':evt2' => $eventoEm,
             ':cid' => $customerId,
             ':sid' => $subscriptionId,
         ]);
@@ -192,13 +215,15 @@ class Assinatura
     // cliente cancelou e assinou de novo) rebaixava um cliente que já tinha
     // uma assinatura nova e válida ativa - o pior caso dos dois, porque
     // cortaria acesso premium pago de verdade por causa de um evento de uma
-    // assinatura que não existe mais.
-    private static function desativarAssinatura(PDO $pdo, string $customerId, string $subscriptionId): void
+    // assinatura que não existe mais. AND assinatura_webhook_processado_em
+    // < :evt protege contra entrega fora de ordem da MESMA assinatura.
+    private static function desativarAssinatura(PDO $pdo, string $customerId, string $subscriptionId, int $eventoEm): void
     {
         $stmt = $pdo->prepare(
-            "UPDATE usuarios SET plano = 3, assinatura_status = 'canceled', assinatura_cancelamento_previsto = NULL
-             WHERE stripe_customer_id = :cid AND stripe_subscription_id = :sid"
+            "UPDATE usuarios SET plano = 3, assinatura_status = 'canceled', assinatura_cancelamento_previsto = NULL, assinatura_webhook_processado_em = :evt
+             WHERE stripe_customer_id = :cid AND stripe_subscription_id = :sid
+             AND (assinatura_webhook_processado_em IS NULL OR assinatura_webhook_processado_em < :evt2)"
         );
-        $stmt->execute([':cid' => $customerId, ':sid' => $subscriptionId]);
+        $stmt->execute([':cid' => $customerId, ':sid' => $subscriptionId, ':evt' => $eventoEm, ':evt2' => $eventoEm]);
     }
 }
