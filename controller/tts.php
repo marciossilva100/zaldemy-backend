@@ -202,6 +202,11 @@ try {
     // =========================
     if ($action === "verificar_limite") {
         header('Content-Type: application/json');
+        // Resposta por usuário, muda a qualquer momento (upgrade de plano) -
+        // nunca pode ficar em cache de proxy/CDN/navegador (diferente do
+        // stream_audio abaixo, que É pra ficar em cache no service worker).
+        header("Cache-Control: no-store, no-cache, must-revalidate");
+        header("Pragma: no-cache");
         $bloqueio = verificarAcessoAudioIa($pdo, $user_id, (int) ($user['plano'] ?? 0));
         echo json_encode(["limite_atingido" => $bloqueio !== null && !empty($bloqueio['limite_atingido'])]);
         exit;
