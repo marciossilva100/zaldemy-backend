@@ -237,6 +237,14 @@ try {
         $bloqueio = reservarUsoAudioIa($pdo, $user_id, $plano);
 
         if ($bloqueio !== null) {
+            // Sem isso, essa resposta (limite atingido) volta com HTTP 200 -
+            // o service worker cacheia QUALQUER 200 pra essa URL pra sempre
+            // (CacheFirst, 1 ano, ver src/sw.js), então essa frase específica
+            // ficava travada nesse resultado de rejeição indefinidamente,
+            // mesmo depois do limite deixar de se aplicar (upgrade de plano,
+            // virada de dia) - o navegador nunca mais chegava a tentar de
+            // novo pela rede.
+            http_response_code(429);
             header('Content-Type: application/json');
             echo json_encode($bloqueio);
             exit;
