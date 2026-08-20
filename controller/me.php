@@ -20,6 +20,11 @@ if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowed
 
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
+// Hospedagem (LiteSpeed/Hostinger) pode cachear GET sem Cache-Control - essa
+// resposta é por usuário autenticado e muda a qualquer momento (ex: plano
+// virando premium), nunca pode ser servida em cache por proxy/CDN/navegador.
+header("Cache-Control: no-store, no-cache, must-revalidate");
+header("Pragma: no-cache");
 
 // ======================
 // Pegar token do header
