@@ -25,6 +25,18 @@ class Assinatura
         $stmt->execute([':id' => $user_id]);
         $customerId = $stmt->fetch(PDO::FETCH_ASSOC)['stripe_customer_id'] ?? null;
 
+        // O customer salvo pode ter ficado órfão (ex: apagado direto no
+        // dashboard da Stripe, ou salvo sob outra chave/modo de API) - sem
+        // validar antes de reaproveitar, checkout->sessions->create() abaixo
+        // falha com "No such customer" e derruba o checkout inteiro.
+        if ($customerId) {
+            try {
+                $stripe->customers->retrieve($customerId);
+            } catch (\Stripe\Exception\InvalidRequestException $e) {
+                $customerId = null;
+            }
+        }
+
         if (!$customerId) {
             $customer = $stripe->customers->create([
                 'email' => $email,
