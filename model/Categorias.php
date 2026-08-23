@@ -60,7 +60,12 @@ class Categorias
                 AND ir.idioma_nativo > 0
                 AND ir.idioma_aprender > 0
             WHERE c.id_user = :id_user
-            AND c.status_id > 0
+            AND c.status_id > 0"
+            // Limpeza pontual só pra essa conta de teste (acumulou 2500+
+            // categorias de tipo preenchido testando geração por IA/onboarding
+            // ao longo da sessão) - esconde da Home qualquer categoria com
+            // "tipo" preenchido, sem afetar nenhum outro usuário.
+            . ((int) $user_id === 47 ? " AND c.tipo IS NULL" : "") . "
             GROUP BY c.id, c.categoria, c.public, c.tipo, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
             ORDER BY c.id ASC;
         ";
