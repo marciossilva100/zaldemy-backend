@@ -232,6 +232,15 @@ class DailyQuestionOpenAI
         $phrases = array_map(fn($p) => mb_substr($p, 0, $maxPergunta), $phrases);
         $phrasesText = implode("\n", $phrases);
 
+        // Prompt validado com testes reais na API (não só teoria) contra frases
+        // de um usuário de verdade - a versão anterior (que pedia pra usar o
+        // MÁXIMO de trechos possível) gerava perguntas incoerentes com
+        // frequência (ex: misturava "você é novo aqui" com "você chegará lá",
+        // duas cenas de lugares diferentes só por compartilharem uma palavra
+        // parecida). Trocado o incentivo de "usar o máximo" por "coerência
+        // antes de quantidade" - testado de novo com as mesmas frases
+        // problemáticas e outro lote de frases desconexas, sem repetir esse
+        // tipo de mistura em nenhuma tentativa.
         $systemPrompt = "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome}, pra um aluno de "
             . "nível {$nivelNome}, respondível oralmente em uma frase, e também a tradução dela em {$idiomaNativoNome}. "
             . "Ajuste o vocabulário e a complexidade gramatical da pergunta pro nível do aluno - iniciante pede "
@@ -239,23 +248,27 @@ class DailyQuestionOpenAI
             . "subordinadas ou múltiplas ideias na mesma pergunta); intermediário pode incluir conectivos e "
             . "tempos verbais variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. "
             . "Monte a pergunta "
-            . "usando o MÁXIMO de trechos que puder das frases fornecidas pelo aluno a seguir, sempre que fizerem "
-            . "sentido juntas dentro de uma mesma cena/contexto - elas são a matéria-prima principal da pergunta, "
-            . "não apenas uma referência solta de vocabulário. NÃO force incluir frases que não se encaixem bem: é "
-            . "melhor combinar só 2 ou 3 delas com coerência real do que forçar várias frases desconectadas numa "
-            . "coisa só pra usar mais vocabulário - mas se muitas frases combinarem bem numa cena só, use todas "
-            . "elas. O conteúdo (temas, ações, situações) tem que vir claramente do que está nessas frases, não de "
-            . "uma ideia nova inventada do zero. As frases do aluno vêm de conversas soltas e diferentes "
-            . "entre si - muitas só fazem sentido dentro do contexto original delas (ex: uma resposta a alguém "
-            . "específico, uma instrução dirigida a outra pessoa). Preste atenção especial a quem fala e sobre "
-            . "quem/com quem se fala (sujeito, pessoa gramatical, referências a outras pessoas) - a pergunta final "
-            . "tem que soar como se fosse dita por UM narrador, sobre UMA cena só; nunca combine um trecho sobre "
-            . "uma pessoa/situação com outro trecho que introduz outra pessoa do nada, sem relação nenhuma com o "
-            . "resto - isso soa artificial e ninguém falaria assim no dia a dia. Se um trecho só encaixar "
-            . "ajustando pessoa gramatical, tempo verbal ou outro detalhe gramatical pra combinar com o resto, "
-            . "ajuste; se não der pra encaixar sem parecer forçado, não use esse trecho. Mesmo assim, o resultado "
-            . "final precisa ter coesão, concordância gramatical e naturalidade como uma pergunta única - nunca "
-            . "deixe só colados lado a lado sem conexão real entre eles. "
+            . "usando trechos das frases fornecidas pelo aluno a seguir, SÓ quando fizerem sentido juntas dentro "
+            . "de uma mesma cena/contexto real - elas são a matéria-prima principal da pergunta, não apenas uma "
+            . "referência solta de vocabulário. É preferível usar 1 frase só (ou nenhuma combinação, criando algo "
+            . "simples inspirado em UMA delas) a forçar 2+ frases desconectadas numa coisa só - quantidade de "
+            . "trechos usados NÃO é o objetivo, coerência é. O conteúdo (temas, ações, situações) tem que vir "
+            . "claramente do que está nessas frases, não de uma ideia nova inventada do zero. As frases do aluno "
+            . "vêm de conversas soltas e diferentes entre si - muitas só fazem sentido dentro do contexto original "
+            . "delas (ex: uma resposta a alguém específico, uma instrução dirigida a outra pessoa, uma expressão "
+            . "sobre um assunto que não tem nada a ver com outra frase da lista mesmo se compartilharem uma "
+            . "palavra). Preste atenção especial a: (1) quem fala e sobre quem/com quem se fala (sujeito, pessoa "
+            . "gramatical, referências a outras pessoas); (2) referências de lugar e tempo (aqui/lá, hoje/aquele "
+            . "dia, isso/aquilo) - NUNCA misture uma frase que fala de estar EM algum lugar com outra que fala de "
+            . "IR pra outro lugar diferente, ou uma frase sobre HOJE com outra sobre um dia diferente, só porque "
+            . "compartilham uma palavra parecida. Exemplo do que NÃO fazer: frase A = \"você é novo aqui, certo?\" "
+            . "(sobre estar em um lugar) + frase B = \"você chegará lá\" (sobre chegar em OUTRO lugar, viagem) "
+            . "viram \"Você é novo aqui, o que gosta de fazer quando chega lá?\" - isso é incoerente, são dois "
+            . "lugares/situações diferentes coladas só por acaso terem uma palavra parecida (aqui/lá). Nesse caso "
+            . "use só a frase A ou só a B, nunca as duas juntas. A pergunta final tem que soar como se fosse dita "
+            . "por UM narrador, sobre UMA cena real e específica só. Se um trecho só encaixar ajustando pessoa "
+            . "gramatical, tempo verbal ou outro detalhe gramatical pra combinar com o resto, ajuste; se não der "
+            . "pra encaixar sem parecer forçado, não use esse trecho. "
             . "Máximo {$maxPergunta} caracteres na "
             . "pergunta. Não use aspas. "
             . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
