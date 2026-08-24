@@ -36,7 +36,7 @@ if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowed
 }
 
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Tts-Preload');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -55,8 +55,16 @@ require_once '../model/PlanoLimitado.php';
 // manter o custo por chamada da API sob controle) e, como amostra grátis,
 // pro plano limitado (limite vitalício único - depois disso só virando
 // premium pra continuar usando voz natural).
-const AUDIO_IA_LIMITE_DIARIO = 50;
+const AUDIO_IA_LIMITE_DIARIO = 120;
 const AUDIO_IA_LIMITE_VITALICIO_LIMITADO = 10;
+
+// Preload (Flashcards/DigitarTexto/TiroCerteiro) busca o áudio antes do
+// usuário pedir, sem saber se ele vai chegar a ouvir - perto do fim da cota
+// diária, reserva essa quantidade de gerações só pra quando o usuário
+// realmente clicar em ouvir, pra não gastar os últimos slots do dia em
+// áudio que talvez nunca seja escutado. Não se aplica ao limitado (cota
+// vitalícia de amostra, não diária).
+const AUDIO_IA_RESERVA_PRELOAD_PREMIUM = 5;
 
 // O custo é por caractere, não por chamada - sem esse teto, o limite de
 // chamadas acima não protege o custo de verdade (uma única chamada com
@@ -98,13 +106,26 @@ function registrarUsoAudioIa(PDO $pdo, int $userId): void
 // Verifica se o plano do usuário pode usar voz natural e, se puder, se ainda
 // está dentro do limite (diário pro premium, vitalício pro limitado).
 // Retorna null se pode prosseguir, ou o array de resposta JSON pra retornar
-// direto (bloqueando o acesso).
-function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano): ?array
+// direto (bloqueando o acesso). $isPreload distingue uma busca antecipada
+// (sem garantia de que o áudio será ouvido) de uma reprodução pedida de
+// verdade - só a segunda pode consumir os últimos slots reservados do dia.
+function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload = false): ?array
 {
     if ($plano === 1) {
-        if (usoAudioIaHoje($pdo, $userId) >= AUDIO_IA_LIMITE_DIARIO) {
+        $usoHoje = usoAudioIaHoje($pdo, $userId);
+
+        if ($usoHoje >= AUDIO_IA_LIMITE_DIARIO) {
             return ["erro" => false, "limite_atingido" => true];
         }
+
+        if ($isPreload && (AUDIO_IA_LIMITE_DIARIO - $usoHoje) <= AUDIO_IA_RESERVA_PRELOAD_PREMIUM) {
+            // Não é o limite de verdade (por isso não usa "limite_atingido",
+            // que marcaria a cota como esgotada no cliente) - só recusa essa
+            // busca antecipada específica pra sobrar cota pra um clique real
+            // em "ouvir" mais tarde hoje.
+            return ["erro" => false, "preload_reservado" => true];
+        }
+
         return null;
     }
 
@@ -130,7 +151,7 @@ function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano): ?array
 // a reserva é desfeita (removida) pra não gastar cota por um erro.
 // Retorna null se conseguiu reservar (já registrado - chame
 // desfazerReservaAudioIa se a geração falhar), ou o array de bloqueio.
-function reservarUsoAudioIa(PDO $pdo, int $userId, int $plano): ?array
+function reservarUsoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload = false): ?array
 {
     $chaveLock = "audio_ia_uso_{$userId}";
 
@@ -145,7 +166,7 @@ function reservarUsoAudioIa(PDO $pdo, int $userId, int $plano): ?array
     }
 
     try {
-        $bloqueio = verificarAcessoAudioIa($pdo, $userId, $plano);
+        $bloqueio = verificarAcessoAudioIa($pdo, $userId, $plano, $isPreload);
 
         if ($bloqueio !== null) {
             return $bloqueio;
@@ -230,11 +251,19 @@ try {
 
         $plano = (int) ($user['plano'] ?? 0);
 
+        // Cabeçalho (não querystring) de propósito - a querystring é a
+        // chave de cache do service worker (ver comentário acima em
+        // gerarAudio/vite.config.js); se "preload" entrasse na URL, o
+        // preload e o play explícito da MESMA frase virariam URLs
+        // diferentes e nunca reaproveitariam o cache um do outro.
+        $headers = getallheaders();
+        $isPreload = ($headers['X-Tts-Preload'] ?? $headers['x-tts-preload'] ?? '') === '1';
+
         // Verifica E já registra o uso, atomicamente (ver comentário em
         // reservarUsoAudioIa) - antes de chamar a API de voz de verdade, pra
         // nenhuma requisição concorrente conseguir passar pela checagem
         // antes de outra registrar a sua.
-        $bloqueio = reservarUsoAudioIa($pdo, $user_id, $plano);
+        $bloqueio = reservarUsoAudioIa($pdo, $user_id, $plano, $isPreload);
 
         if ($bloqueio !== null) {
             // Sem isso, essa resposta (limite atingido) volta com HTTP 200 -
