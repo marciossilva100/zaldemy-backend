@@ -85,6 +85,10 @@ class CategoriaIA
             . "Frases naturais, do dia a dia, variadas entre si (não repita a mesma estrutura), máximo 80 caracteres cada. "
             . "IMPORTANTE: todas as frases têm que ser afirmações (declarativas) - nunca perguntas. Não gere nenhuma "
             . "frase terminando com \"?\" nem em {$idiomaNativoNome} nem em {$idiomaAprendendoNome}. "
+            . "As frases em {$idiomaNativoNome} precisam seguir rigorosamente as regras gramaticais corretas desse "
+            . "idioma - concordância de gênero e número (ex: em português, artigo e substantivo precisam concordar: "
+            . "\"a salada\" e não \"o salada\"), conjugação verbal e regência corretas. Revise mentalmente cada frase "
+            . "gerada antes de responder, como um falante nativo culto revisaria. "
             . 'Responda em JSON: {"frases": [{"nativo": "...", "traduzido": "..."}, ...]}';
 
         $resultado = $chat->completar([
