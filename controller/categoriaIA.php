@@ -62,7 +62,7 @@ try {
             exit;
         }
 
-        $chat = new OpenAiChat($_ENV['OPEN_AI']);
+        $chat = new OpenAiChat($_ENV['OPEN_AI'], "gpt-5-mini");
 
         $resultado = CategoriaIA::criarComIA($pdo, $chat, $user_id, $plano, $topico, $categoriaPublica);
 
@@ -83,7 +83,7 @@ try {
             exit;
         }
 
-        $chat = new OpenAiChat($_ENV['OPEN_AI']);
+        $chat = new OpenAiChat($_ENV['OPEN_AI'], "gpt-5-mini");
 
         $resultado = CategoriaIA::criarParaOnboarding($pdo, $chat, $user_id, $topico);
 
