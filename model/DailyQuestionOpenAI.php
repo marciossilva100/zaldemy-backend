@@ -777,13 +777,24 @@ class DailyQuestionOpenAI
                 . "de escrita mais importantes de forma específica.";
         }
 
+        // Testado direto na API: gpt-5-nano confundia resposta curta/incompleta
+        // com idioma errado (ex: pergunta "How old are you?", resposta "25" -
+        // vinha "não está em inglês", mesmo sem nenhuma palavra em outro
+        // idioma). A exceção de números/nomes próprios abaixo existe só pra
+        // corrigir esse falso positivo - testado várias vezes que sem ela o
+        // nano reincide, e que a exceção sozinha (sem manter "automaticamente
+        // incorreta" pra palavras de outro idioma) deixava passar respostas
+        // realmente em português.
         $systemPrompt = "Você é um professor de idiomas avaliando a resposta {$tipoResposta} de um aluno. Vai receber a "
             . "pergunta e a resposta do aluno. "
             . "REQUISITO OBRIGATÓRIO: o aluno precisa responder em {$idiomaNome} (o mesmo idioma da pergunta) - se a "
-            . "resposta estiver em outro idioma (incluindo o idioma nativo do aluno), a resposta é automaticamente "
-            . "incorreta (nota baixa, no máximo 3, correto=false), mesmo que o conteúdo em si responda bem à pergunta. "
-            . "Nesse caso, o feedback deve deixar claro que a resposta precisa ser em {$idiomaNome}. Se estiver no "
-            . "idioma certo, avalie se responde à pergunta e sua qualidade. {$focoAvaliacao} Dê nota de 0 "
+            . "resposta tiver palavras de outro idioma (verbos, artigos, conectivos, substantivos etc, incluindo do "
+            . "idioma nativo do aluno), ela é automaticamente incorreta (nota baixa, no máximo 3, correto=false), "
+            . "mesmo que o conteúdo em si responda bem à pergunta, e o feedback deve deixar claro que a resposta "
+            . "precisa ser em {$idiomaNome}. EXCEÇÃO: números, nomes próprios e datas sozinhos (ex: \"25\", \"John\", "
+            . "\"3 pm\") não têm idioma - nesse caso NÃO conte como idioma errado nem penalize por estar "
+            . "\"incompleta\"/sem frase completa, avalie normalmente o conteúdo. Se estiver no idioma certo, avalie "
+            . "se responde à pergunta e sua qualidade. {$focoAvaliacao} Dê nota de 0 "
             . "a 10, se está correto, e explique os principais erros em {$idiomaNativoNome} (máx 200 caracteres). "
             . 'Responda em JSON: {"nota": 0-10, "correto": true ou false, "feedback": "..."}';
 
