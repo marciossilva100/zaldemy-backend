@@ -235,9 +235,12 @@ class TraducaoReversaController
         try {
             $user_id = $this->getUserId();
 
+            // Mesmo raciocínio de DailyQuestionController::getHistorico() -
+            // status_id=1 sem nota é um texto pulado ou que esgotou tentativas
+            // sem nunca ter sido avaliado, não deve sumir do histórico.
             $sql = "SELECT texto_nativo, resposta, nota, feedback, texto_traduzido_gabarito, data_criacao
                     FROM traducao_reversa_ia
-                    WHERE user_id = :user_id AND status_id = 1 AND nota IS NOT NULL
+                    WHERE user_id = :user_id AND status_id = 1
                     ORDER BY id DESC
                     LIMIT 30";
 

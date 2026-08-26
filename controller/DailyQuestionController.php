@@ -239,9 +239,14 @@ class DailyQuestionController
         try {
             $user_id = $this->getUserId();
 
+            // status_id=1 sem nota é uma pergunta que foi gerada mas nunca
+            // chegou a ter nota (pulada, ou áudio vazio/conteúdo impróprio
+            // esgotando as tentativas) - antes ficava invisível no histórico,
+            // como se a pergunta nunca tivesse existido. Mostra também,
+            // o front trata nota null como "não respondida".
             $sql = "SELECT question, transcricao, nota, feedback, data_criacao
                     FROM perguntas_ia
-                    WHERE user_id = :user_id AND status_id = 1 AND nota IS NOT NULL
+                    WHERE user_id = :user_id AND status_id = 1
                     ORDER BY id DESC
                     LIMIT 30";
 

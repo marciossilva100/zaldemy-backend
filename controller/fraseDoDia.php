@@ -142,9 +142,13 @@ try {
         // um recurso recorrente como o do premium, que mantém tudo pra sempre).
         $filtroLimitado = $plano === 3 ? " AND DATE(data_criacao) = CURDATE()" : "";
 
+        // Mesmo raciocínio de DailyQuestionController::getHistorico() -
+        // status_id=1 sem nota é uma frase que esgotou as tentativas sem
+        // nunca ter sido avaliada (áudio vazio/conteúdo impróprio repetidos),
+        // não deve sumir do histórico.
         $sql = "SELECT frase, transcricao, nota, feedback_gramatica, feedback_pronuncia, feedback_fluencia, data_criacao
                 FROM frase_dia_ia
-                WHERE user_id = :user_id AND status_id = 1 AND nota IS NOT NULL{$filtroLimitado}
+                WHERE user_id = :user_id AND status_id = 1{$filtroLimitado}
                 ORDER BY id DESC
                 LIMIT 30";
 
