@@ -303,15 +303,23 @@ class Treino {
         global $pdo;
 
 
-        $sql = "SELECT  
+        // O JOIN com treino_data_atualizacao pega só a última linha de cada
+        // frase (subquery correlacionada) - sem isso, uma frase que já
+        // passou por esse nível antes (linha antiga sobrando no histórico,
+        // já que a tabela só acumula) fazia o MIN() pegar a data errada,
+        // de meses atrás, zerando a contagem regressiva pra frases que
+        // acabaram de chegar nesse nível de novo (mesma causa raiz do bug
+        // já corrigido em updateRepeat(), só que aqui na leitura em vez de
+        // na escrita).
+        $sql = "SELECT
             t.status,
             t.id,
             t.id AS id_treino,
             COUNT(DISTINCT f.id) AS total,
-            MIN(tda.data_atualizacao) AS data_atualizacao
+            MIN(ultima.data_atualizacao) AS data_atualizacao
         FROM treino t
 
-        LEFT JOIN frases f 
+        LEFT JOIN frases f
             ON f.id_treino = t.id
             AND f.categoria_id = ?
             AND f.usuario_id = ?
@@ -321,9 +329,16 @@ class Treino {
             ON c.id = f.categoria_id
             AND c.status_id > 0
 
-        LEFT JOIN treino_data_atualizacao tda
-            ON tda.id_frase = f.id
-            AND tda.id_treino = t.id
+        LEFT JOIN treino_data_atualizacao ultima
+            ON ultima.id_frase = f.id
+            AND ultima.id_treino = t.id
+            AND ultima.id = (
+                SELECT tda.id
+                FROM treino_data_atualizacao tda
+                WHERE tda.id_frase = f.id
+                ORDER BY tda.id DESC
+                LIMIT 1
+            )
 
         WHERE t.id BETWEEN ? AND ?
 
