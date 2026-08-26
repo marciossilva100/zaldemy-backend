@@ -407,32 +407,78 @@ class Treino {
 
             $pdo->beginTransaction();
 
-            $sql = "
-                UPDATE frases f
-                INNER JOIN treino_data_atualizacao tda
-                    ON tda.id_frase = f.id
-                SET 
-                    f.id_treino = ?,
-                    tda.id_treino = ?
-                WHERE tda.id_treino = ?
-                AND f.id_treino = ?
-                AND f.usuario_id = ?
+            // Duas versões anteriores dessa correção usavam JOIN com subquery
+            // (com e sem escopo por usuário/categoria) pra achar a linha mais
+            // recente de treino_data_atualizacao de cada frase - ambas
+            // travaram "Repetir" em produção mesmo passando em teste local
+            // isolado. Suspeita: um UPDATE...JOIN varrendo linhas via
+            // subquery/GROUP BY tende a travar (lock) mais linhas do que o
+            // necessário sob concorrência real (vários usuários estudando ao
+            // mesmo tempo, escrevendo na mesma tabela) - algo que teste local
+            // sem concorrência não reproduz. Trocado por uma estratégia sem
+            // JOIN nenhum: um SELECT simples busca o pequeno conjunto de
+            // frases candidatas (só as dessa categoria/usuário) junto da
+            // ÚLTIMA linha de histórico de cada uma (subquery correlacionada
+            // em SELECT, sem restrição de "mesma tabela"), decide em PHP
+            // quais já esperaram as 2h, e só então faz updates diretos por
+            // lista de IDs (WHERE id IN (...)) - trava só as linhas exatas
+            // que de fato muda, nada além disso.
+            $sqlCandidatas = "
+                SELECT
+                    f.id AS id_frase,
+                    ultima.id AS id_tda,
+                    ultima.data_atualizacao
+                FROM frases f
+                INNER JOIN treino_data_atualizacao ultima
+                    ON ultima.id = (
+                        SELECT tda.id
+                        FROM treino_data_atualizacao tda
+                        WHERE tda.id_frase = f.id
+                        ORDER BY tda.id DESC
+                        LIMIT 1
+                    )
+                WHERE f.usuario_id = ?
                 AND f.categoria_id = ?
-                AND tda.data_atualizacao <= NOW() - INTERVAL 2 HOUR
+                AND f.id_treino = ?
+                AND ultima.id_treino = ?
             ";
 
-            $stmt = $pdo->prepare($sql);
+            $stmtCandidatas = $pdo->prepare($sqlCandidatas);
+            $stmtCandidatas->execute([$user_id, $this->category_id, $id_treino, $id_treino]);
+            $candidatas = $stmtCandidatas->fetchAll(PDO::FETCH_ASSOC);
 
-            $stmt->execute([
-                $set_id_treino,        // novo treino frases
-                $set_id_treino,        // novo treino treino_data_atualizacao
-                $id_treino,            // treino atual em treino_data_atualizacao
-                $id_treino,            // treino atual em frases
-                $user_id,
-                $this->category_id
-            ]);
+            $agora = new DateTime();
+            $idsFrasesElegiveis = [];
+            $idsTdaElegiveis = [];
 
-            $movidos = $stmt->rowCount();
+            foreach ($candidatas as $candidata) {
+                $liberaEm = new DateTime($candidata['data_atualizacao']);
+                $liberaEm->modify('+2 hours');
+
+                if ($liberaEm <= $agora) {
+                    $idsFrasesElegiveis[] = (int) $candidata['id_frase'];
+                    $idsTdaElegiveis[] = (int) $candidata['id_tda'];
+                }
+            }
+
+            if (empty($idsFrasesElegiveis)) {
+                $pdo->commit();
+
+                return [
+                    'sucesso' => true,
+                    'movidos' => 0
+                ];
+            }
+
+            $placeholdersFrases = implode(',', array_fill(0, count($idsFrasesElegiveis), '?'));
+            $stmtUpdateFrases = $pdo->prepare("UPDATE frases SET id_treino = ? WHERE id IN ($placeholdersFrases)");
+            $stmtUpdateFrases->execute(array_merge([$set_id_treino], $idsFrasesElegiveis));
+
+            $movidos = $stmtUpdateFrases->rowCount();
+
+            $placeholdersTda = implode(',', array_fill(0, count($idsTdaElegiveis), '?'));
+            $stmtUpdateTda = $pdo->prepare("UPDATE treino_data_atualizacao SET id_treino = ? WHERE id IN ($placeholdersTda)");
+            $stmtUpdateTda->execute(array_merge([$set_id_treino], $idsTdaElegiveis));
 
             $pdo->commit();
 
