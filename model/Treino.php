@@ -407,11 +407,29 @@ class Treino {
 
             $pdo->beginTransaction();
 
+            // A subquery só considera as linhas de treino_data_atualizacao das
+            // frases do PRÓPRIO usuário/categoria (join com frases antes do
+            // GROUP BY) - uma versão anterior dessa correção agregava a
+            // tabela inteira (todos os usuários) a cada clique em "Repetir" e
+            // travou em produção sob carga real. Restringindo o escopo aqui,
+            // o custo fica proporcional ao tamanho da categoria, não ao
+            // tamanho do sistema inteiro.
             $sql = "
                 UPDATE frases f
                 INNER JOIN treino_data_atualizacao tda
                     ON tda.id_frase = f.id
-                SET 
+                INNER JOIN (
+                    SELECT tda2.id_frase, MAX(tda2.id) AS ultimo_id
+                    FROM treino_data_atualizacao tda2
+                    INNER JOIN frases f2
+                        ON f2.id = tda2.id_frase
+                        AND f2.usuario_id = ?
+                        AND f2.categoria_id = ?
+                    GROUP BY tda2.id_frase
+                ) ultima_tda
+                    ON ultima_tda.id_frase = f.id
+                    AND ultima_tda.ultimo_id = tda.id
+                SET
                     f.id_treino = ?,
                     tda.id_treino = ?
                 WHERE tda.id_treino = ?
@@ -424,6 +442,8 @@ class Treino {
             $stmt = $pdo->prepare($sql);
 
             $stmt->execute([
+                $user_id,              // escopo da subquery (f2.usuario_id)
+                $this->category_id,    // escopo da subquery (f2.categoria_id)
                 $set_id_treino,        // novo treino frases
                 $set_id_treino,        // novo treino treino_data_atualizacao
                 $id_treino,            // treino atual em treino_data_atualizacao
