@@ -411,14 +411,7 @@ class Treino {
                 UPDATE frases f
                 INNER JOIN treino_data_atualizacao tda
                     ON tda.id_frase = f.id
-                INNER JOIN (
-                    SELECT id_frase, MAX(id) AS ultimo_id
-                    FROM treino_data_atualizacao
-                    GROUP BY id_frase
-                ) ultima_tda
-                    ON ultima_tda.id_frase = f.id
-                    AND ultima_tda.ultimo_id = tda.id
-                SET
+                SET 
                     f.id_treino = ?,
                     tda.id_treino = ?
                 WHERE tda.id_treino = ?
