@@ -83,8 +83,12 @@ class CategoriaIA
             . "pede estruturas simples e vocabulário básico do dia a dia; intermediário pode incluir conectivos e tempos "
             . "verbais variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. "
             . "Frases naturais, do dia a dia, variadas entre si (não repita a mesma estrutura), máximo 80 caracteres cada. "
-            . "IMPORTANTE: todas as frases têm que ser afirmações (declarativas) - nunca perguntas. Não gere nenhuma "
-            . "frase terminando com \"?\" nem em {$idiomaNativoNome} nem em {$idiomaAprendendoNome}. "
+            . "IMPORTANTE sobre o tipo de frase: se o tema pedir claramente perguntas de verdade (ex: \"perguntas de "
+            . "entrevista de emprego\", \"perguntas para puxar assunto\", \"perguntas em uma consulta médica\"), as "
+            . "frases DEVEM SER PERGUNTAS REAIS, terminando com \"?\" - é exatamente esse tipo de conteúdo que o "
+            . "aluno quer praticar, não teria sentido nenhum gerar afirmações genéricas sobre o assunto em vez das "
+            . "perguntas em si. Caso contrário (temas do dia a dia que não são sobre perguntas), gere frases "
+            . "afirmativas (declarativas), evitando perguntas desnecessárias. "
             . "As frases em {$idiomaNativoNome} precisam seguir rigorosamente as regras gramaticais corretas desse "
             . "idioma - concordância de gênero e número (ex: em português, artigo e substantivo precisam concordar: "
             . "\"a salada\" e não \"o salada\"), conjugação verbal e regência corretas. Revise mentalmente cada frase "
@@ -107,18 +111,27 @@ class CategoriaIA
             return ["erro" => true, "mensagem" => "A IA não retornou frases válidas."];
         }
 
-        // Segurança além do prompt: a IA às vezes ignora a instrução e gera
-        // alguma pergunta mesmo assim - descarta qualquer frase (nativo ou
-        // traduzido) que termine com "?" em vez de deixar passar.
-        $frases = array_values(array_filter($frases, function ($f) {
+        // O tema pode legitimamente pedir perguntas de verdade (ver prompt
+        // acima) - só descarta pergunta isolada quando ela é uma EXCEÇÃO no
+        // lote (tema do dia a dia onde a IA gerou uma pergunta perdida por
+        // engano), nunca quando o lote inteiro (ou a maioria) já veio como
+        // pergunta de propósito, porque aí é o próprio tema que é assim.
+        $totalPerguntas = count(array_filter($frases, function ($f) {
             $nativo = rtrim((string) ($f['nativo'] ?? ''));
-            $traduzido = rtrim((string) ($f['traduzido'] ?? ''));
-
-            return !str_ends_with($nativo, '?') && !str_ends_with($traduzido, '?');
+            return str_ends_with($nativo, '?');
         }));
 
+        if ($totalPerguntas < count($frases) / 2) {
+            $frases = array_values(array_filter($frases, function ($f) {
+                $nativo = rtrim((string) ($f['nativo'] ?? ''));
+                $traduzido = rtrim((string) ($f['traduzido'] ?? ''));
+
+                return !str_ends_with($nativo, '?') && !str_ends_with($traduzido, '?');
+            }));
+        }
+
         if (count($frases) === 0) {
-            return ["erro" => true, "mensagem" => "A IA só retornou perguntas - tente novamente."];
+            return ["erro" => true, "mensagem" => "A IA não retornou frases válidas para esse tema - tente novamente."];
         }
 
         return ["erro" => false, "frases" => $frases];
