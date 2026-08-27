@@ -111,10 +111,20 @@ try {
     }
 
     // Usado pra decidir, ANTES de abrir o formulário, se mostra a opção
-    // "Criar categoria com IA" normal ou já com a coroa de premium - sem
-    // isso, quem já usou a amostra grátis (limitado) só descobria que não
-    // tinha mais acesso depois de preencher o formulário e tentar enviar.
-    $categoriaIaDisponivel = CategoriaIA::verificarAcesso($pdo, (int) $usuario['id'], (int) ($usuario['plano'] ?? 0)) === null;
+    // "Criar categoria com IA" normal, com a coroa de premium, ou com o
+    // aviso de cota esgotada - sem isso, quem já usou a amostra grátis
+    // (limitado) ou a cota diária (premium) só descobria que não tinha mais
+    // acesso depois de preencher o formulário e tentar enviar.
+    //
+    // $bloqueioCategoriaIA distingue os dois motivos de bloqueio possíveis
+    // (mesmo shape de CategoriaIA::verificarAcesso): "premium_necessario"
+    // (free, nunca teve acesso - mostra a coroa e o PremiumModal completo)
+    // vs "limite_atingido" (premium ou limitado que já usaram a cota de
+    // hoje/a amostra vitalícia - só um aviso enxuto, sem coroa nem
+    // PremiumModal, já que quem já paga não precisa de vitrine de upsell -
+    // reportado pelo usuário premium vendo a coroa indevidamente).
+    $bloqueioCategoriaIA = CategoriaIA::verificarAcesso($pdo, (int) $usuario['id'], (int) ($usuario['plano'] ?? 0));
+    $categoriaIaDisponivel = $bloqueioCategoriaIA === null;
     $nivelSugerido = Nivel::sugestaoPromocao($pdo, (int) $usuario['id']);
 
     echo json_encode([
@@ -134,6 +144,7 @@ try {
             "guia_categoria_dispensado" => (bool) ($usuario['guia_categoria_dispensado'] ?? false),
             "guia_treino_dispensado" => (bool) ($usuario['guia_treino_dispensado'] ?? false),
             "categoria_ia_disponivel" => $categoriaIaDisponivel,
+            "categoria_ia_bloqueio" => $bloqueioCategoriaIA,
             "assinatura_cancelamento_previsto" => $usuario['assinatura_cancelamento_previsto'] ?? null,
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,
             "learning_language" => $idioma_referencia['idioma_aprender'] ?? null
