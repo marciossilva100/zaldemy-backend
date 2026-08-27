@@ -259,6 +259,13 @@ class TiroCerteiro
     {
         $validas = [];
         $certasUsadas = [];
+        // O prompt pede pra IA não repetir a mesma palavra-alvo entre
+        // rodadas, mas nem sempre segue essa instrução à risca (mesmo
+        // gerando uma "certa" diferente pra ela) - reportado pelo usuário
+        // como "a mesma palavra aparece de novo na mesma partida". Só
+        // filtrar por "certa" repetida (como já era feito) não pega esse
+        // caso, então o alvo também precisa ser único entre rodadas.
+        $alvosUsados = [];
 
         foreach ($rodadas as $rodada) {
             if (!is_array($rodada)) {
@@ -278,6 +285,11 @@ class TiroCerteiro
                 continue; // algum dos 3 textos repetido dentro da própria rodada
             }
 
+            $chaveAlvo = mb_strtolower($alvo);
+            if (isset($alvosUsados[$chaveAlvo])) {
+                continue; // "alvo" repetido entre rodadas diferentes
+            }
+
             $chaveCerta = mb_strtolower($certa);
             if (isset($certasUsadas[$chaveCerta])) {
                 continue; // "certa" repetida entre rodadas diferentes
@@ -288,6 +300,7 @@ class TiroCerteiro
                 continue;
             }
 
+            $alvosUsados[$chaveAlvo] = true;
             $certasUsadas[$chaveCerta] = true;
             $validas[] = ["alvo" => $alvo, "certa" => $certa, "errada" => $errada];
         }
