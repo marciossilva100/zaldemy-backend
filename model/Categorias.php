@@ -489,10 +489,10 @@ class Categorias
     {
 
         // limite de caracteres
-        if (mb_strlen($categoria) > 20) {
+        if (mb_strlen($categoria) > 50) {
             return [
                 'success' => false,
-                'message' => 'A categoria deve ter no máximo 20 caracteres'
+                'message' => 'A categoria deve ter no máximo 50 caracteres'
             ];
         }
 
@@ -579,10 +579,10 @@ class Categorias
         }
 
         // limite de caracteres
-        if (mb_strlen($categoria) > 20) {
+        if (mb_strlen($categoria) > 50) {
             return [
                 'success' => false,
-                'message' => 'A categoria deve ter no máximo 20 caracteres'
+                'message' => 'A categoria deve ter no máximo 50 caracteres'
             ];
         }
 
