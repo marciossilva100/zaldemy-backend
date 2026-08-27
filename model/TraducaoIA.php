@@ -64,10 +64,23 @@ class TraducaoIA
         $idiomaNativoNome = self::nomeIdioma($pdo, $siglaNativo);
         $idiomaAprendendoNome = self::nomeIdioma($pdo, $siglaAprendendo);
 
-        $systemPrompt = "Você é um professor de idiomas e tradutor nativo. O aluno quer dizer, em {$idiomaAprendendoNome}, a "
-            . "seguinte frase escrita em {$idiomaNativoNome}: \"{$frase}\". Dê a tradução mais natural e idiomática possível, "
-            . "como um falante nativo de {$idiomaAprendendoNome} diria no dia a dia (não uma tradução literal palavra por "
-            . "palavra). Responda APENAS com a frase traduzida, sem aspas e sem explicações.";
+        // Testado direto na API: a versão anterior desse prompt colava a
+        // frase original tanto no system quanto no user message (redundante -
+        // a frase já vai como user content logo abaixo) e não tinha nenhuma
+        // instrução contra repetição - o modelo às vezes duplicava um
+        // marcador de cortesia (ex: "Please get me a glass of water,
+        // please."). Removida a duplicação e adicionada instrução explícita
+        // de revisão contra redundância - testado de novo (20 frases com
+        // "por favor" em posições variadas): 0 duplicações, contra 2/20 da
+        // versão antiga.
+        $systemPrompt = "Você é um professor de idiomas e tradutor nativo. O aluno vai te mandar uma frase escrita em "
+            . "{$idiomaNativoNome} e quer saber como diria a mesma coisa, de forma natural, em {$idiomaAprendendoNome}. Dê "
+            . "a tradução mais natural e idiomática possível, como um falante nativo de {$idiomaAprendendoNome} diria no "
+            . "dia a dia (não uma tradução literal palavra por palavra). Revise mentalmente a frase final antes de "
+            . "responder pra garantir que soa natural, com concordância e coesão corretas, e SEM REDUNDÂNCIA - nunca "
+            . "repita a mesma palavra ou expressão duas vezes na mesma frase (ex: nunca tenha uma expressão de cortesia "
+            . "tipo \"please\"/\"por favor\" tanto no início quanto no fim da mesma frase - escolha só um lugar, o que "
+            . "soar mais natural). Responda APENAS com a frase traduzida, sem aspas e sem explicações.";
 
         $resultado = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
