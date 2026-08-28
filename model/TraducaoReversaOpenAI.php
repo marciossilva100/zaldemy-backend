@@ -167,19 +167,33 @@ class TraducaoReversaOpenAI
         // DailyQuestionOpenAI::obterPergunta - testado de novo aqui direto
         // na API (frases reais + frases propositalmente desconexas) antes
         // de aceitar o prompt.
+        //
+        // Efeito colateral descoberto depois (usuário reportou só ver
+        // conteúdo de uma categoria específica): "é preferível usar 1 frase
+        // só" fazia a IA ancorar quase sempre num tema só por geração, mesmo
+        // com frases de várias categorias disponíveis - testado com frases
+        // reais de 5 categorias, 8 gerações: só 3 categorias apareceram.
+        // Trocado o padrão pra "combine quando for plausível" (testado de
+        // novo: mais categorias representadas), mantendo as mesmas travas
+        // de coerência (lugar/tempo/interlocutor) como exceção, não regra.
         $systemPrompt = "Você é um professor de idiomas. Crie UM pequeno texto (1 a 2 frases), em {$idiomaNativoNome}, "
             . "pra um aluno de nível {$nivelNome} praticar tradução do {$idiomaNativoNome} para {$idiomaAprendendoNome}. "
             . "Ajuste o vocabulário e a complexidade gramatical do texto pro nível do aluno - iniciante pede frases "
             . "curtas e diretas, com estruturas simples (evite orações subordinadas ou múltiplas ideias na mesma "
             . "frase); intermediário pode incluir conectivos e tempos verbais variados; avançado pode usar "
             . "vocabulário mais rico e estruturas mais elaboradas. Monte o texto usando trechos das frases "
-            . "fornecidas pelo aluno a seguir, SÓ quando fizerem sentido juntas dentro de uma mesma cena/contexto "
-            . "real - elas são a matéria-prima principal do texto, não apenas uma referência solta de vocabulário. "
-            . "É preferível usar 1 frase só (ou nenhuma combinação, criando algo simples inspirado em UMA delas) a "
-            . "forçar 2+ frases desconectadas numa coisa só - quantidade de trechos usados NÃO é o objetivo, "
-            . "coerência é. O conteúdo (temas, ações, situações) tem que vir claramente do que está nessas frases, "
-            . "não de uma ideia nova inventada do zero. Preste atenção especial a: (1) quem fala e sobre quem/com "
-            . "quem se fala; (2) referências de lugar e tempo - NUNCA misture uma frase que fala de estar EM algum "
+            . "fornecidas pelo aluno a seguir - elas são a matéria-prima principal do texto, não apenas uma "
+            . "referência solta de vocabulário. As frases vêm de temas variados do dia a dia do aluno - SEMPRE "
+            . "QUE FOR PLAUSÍVEL, combine trechos de frases de temas DIFERENTES dentro de uma mesma cena real (ex: "
+            . "uma situação sobre compras pode mencionar algo de saúde, tipo comprar remédio numa farmácia) - "
+            . "varie as fontes em vez de girar "
+            . "sempre em torno de uma frase só, desde que a combinação faça sentido como uma cena real e coerente. "
+            . "Só use 1 frase só (ou nenhuma combinação, criando algo simples inspirado em UMA delas) quando as "
+            . "frases disponíveis realmente não combinarem de forma natural - coerência sempre vem antes de "
+            . "quantidade de trechos, mas dentro do que for coerente, misturar mais de uma fonte é melhor que usar "
+            . "sempre só uma. O conteúdo (temas, ações, situações) tem que vir claramente do que está nessas "
+            . "frases, não de uma ideia nova inventada do zero. Preste atenção especial a: (1) quem fala e sobre "
+            . "quem/com quem se fala; (2) referências de lugar e tempo - NUNCA misture uma frase que fala de estar EM algum "
             . "lugar com outra que fala de IR pra outro lugar diferente, ou uma frase sobre HOJE com outra sobre "
             . "um dia diferente, só porque compartilham uma palavra parecida. O texto final tem que soar como se "
             . "fosse dito por UM narrador, sobre UMA cena real e específica só. Se um trecho só encaixar ajustando "
@@ -187,7 +201,10 @@ class TraducaoReversaOpenAI
             . "não der pra encaixar sem parecer forçado, não use esse trecho. Depois de criar o texto em "
             . "{$idiomaNativoNome}, produza também a tradução de referência dele em {$idiomaAprendendoNome} - essa "
             . "tradução deve ser natural e idiomática (como um nativo do idioma-alvo diria), não literal palavra "
-            . "por palavra. Máximo {$maxTexto} caracteres no texto original. Não use aspas. "
+            . "por palavra. O campo \"texto\" tem que conter SÓ o texto final em si, ESCRITO INTEIRAMENTE EM "
+            . "{$idiomaNativoNome} do início ao fim (nunca troque de idioma no meio nem responda em outro idioma) "
+            . "- nunca inclua comentários, explicações ou qualquer menção de como/por que você combinou as frases "
+            . "do aluno. Máximo {$maxTexto} caracteres no texto original. Não use aspas. "
             . 'Responda em JSON: {"texto": "...", "traducao_gabarito": "..."}';
 
         $texto = null;

@@ -276,13 +276,28 @@ class FraseDoDia
             // quantidade" (mesmo princípio já corrigido em
             // DailyQuestionOpenAI.php) - testado de novo com o mesmo lote de
             // frases desconexas, sem repetir esse tipo de mistura.
-            : "Monte a frase usando trechos das frases que o aluno já estuda a seguir, SÓ quando fizerem sentido "
-                . "juntas dentro de uma mesma cena/contexto real - elas são a matéria-prima principal da frase, não "
-                . "apenas uma referência solta de vocabulário. Prefira usar só 1 frase do aluno como base do tema "
-                . "central e elaborar em cima dela (ver instrução de tamanho acima) a forçar 2+ frases de temas de "
-                . "vida diferentes numa coisa só - quantidade de trechos usados NÃO é o objetivo, coerência é. O "
-                . "conteúdo (tema, ação, situação) tem que vir claramente do que está nessas frases, não de uma "
-                . "ideia nova inventada do zero. As frases do aluno vêm de conversas soltas e diferentes entre si - "
+            //
+            // Efeito colateral descoberto depois (usuário reportou só ver
+            // conteúdo de uma categoria específica): "prefira usar só 1
+            // frase como base" fazia a IA ancorar quase sempre num tema só
+            // por geração, mesmo com frases de várias categorias
+            // disponíveis - testado com frases reais de 5 categorias, 8
+            // gerações: só 3 categorias apareceram. Trocado o padrão pra
+            // "combine quando for plausível" (testado de novo: mais
+            // categorias representadas), mantendo as mesmas travas de
+            // coerência (lugar/tempo/interlocutor) como exceção, não regra.
+            : "Monte a frase usando trechos das frases que o aluno já estuda a seguir - elas são a matéria-prima "
+                . "principal da frase, não apenas uma referência solta de vocabulário. As frases vêm de temas "
+                . "variados do dia a dia do aluno - SEMPRE QUE FOR PLAUSÍVEL, combine trechos de frases de temas "
+                . "DIFERENTES dentro de uma mesma cena real (ex: uma situação sobre compras pode mencionar algo de "
+                . "saúde, tipo comprar remédio numa farmácia) - varie as fontes em vez de girar sempre em torno de "
+                . "uma frase só (ver instrução de tamanho "
+                . "acima), desde que a combinação faça sentido como uma cena real e coerente. Só use 1 frase só "
+                . "como base do tema central quando as frases disponíveis realmente não combinarem de forma "
+                . "natural - coerência sempre vem antes de quantidade de trechos, mas dentro do que for coerente, "
+                . "misturar mais de uma fonte é melhor que usar sempre só uma. O conteúdo (tema, ação, situação) "
+                . "tem que vir claramente do que está nessas frases, não de uma ideia nova inventada do zero. As "
+                . "frases do aluno vêm de conversas soltas e diferentes entre si - "
                 . "muitas só fazem sentido dentro do contexto original delas (ex: uma resposta a alguém específico, "
                 . "uma instrução dirigida a outra pessoa, um assunto que não tem nada a ver com outra frase da "
                 . "lista). NÃO encadeie temas/assuntos de vida diferentes (ex: onde nasceu + hobby + academia + "
@@ -313,6 +328,9 @@ class FraseDoDia
             . "retórica ou tag question (tipo 'certo?', 'não é?'); o texto final não pode conter nenhum ponto de "
             . "interrogação. "
             . "{$instrucaoVocabulario} Gramaticalmente correta. Não repita estruturas óbvias como 'My name is'. "
+            . "O campo \"frase\" tem que conter SÓ a frase final em si, ESCRITA INTEIRAMENTE EM {$idiomaNome} do "
+            . "início ao fim (nunca troque de idioma no meio nem responda em outro idioma) - nunca inclua "
+            . "comentários, explicações ou qualquer menção de como/por que você combinou as frases do aluno. "
             . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
 
         $userContent = "Frases que o aluno já estuda:\n" . $phrasesText;
@@ -651,7 +669,8 @@ class FraseDoDia
         $prompt = "A frase a seguir, em {$idiomaNome}, tem {$tamanhoAtual} caracteres e está curta demais. Reescreva "
             . "ela adicionando um detalhe ou uma oração extra (ligada por 'e', 'porque', 'quando', 'mas', 'já que', "
             . "etc.), mantendo o sentido original, até ficar com EXATAMENTE entre {$min} e {$max} caracteres no total. "
-            . "Também gere a tradução em {$idiomaNativoNome}. Frase original: \"{$frase}\". "
+            . "A frase reescrita tem que continuar em {$idiomaNome} (nunca mude de idioma). Também gere a tradução "
+            . "em {$idiomaNativoNome}. Frase original: \"{$frase}\". "
             . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
 
         $resultado = $chat->completar([
@@ -686,7 +705,8 @@ class FraseDoDia
         $prompt = "A frase a seguir, em {$idiomaNome}, tem {$tamanhoAtual} caracteres e está longa demais. Reescreva "
             . "ela removendo um detalhe ou uma oração, mantendo o sentido principal, até ficar com EXATAMENTE entre "
             . "{$min} e {$max} caracteres no total. A frase reescrita precisa terminar de forma completa (nunca "
-            . "cortada no meio de uma oração). Também gere a tradução em {$idiomaNativoNome}. Frase original: "
+            . "cortada no meio de uma oração) e continuar em {$idiomaNome} (nunca mude de idioma). Também gere a "
+            . "tradução em {$idiomaNativoNome}. Frase original: "
             . "\"{$frase}\". "
             . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
 

@@ -247,19 +247,33 @@ class DailyQuestionOpenAI
         // antes de quantidade" - testado de novo com as mesmas frases
         // problemáticas e outro lote de frases desconexas, sem repetir esse
         // tipo de mistura em nenhuma tentativa.
+        //
+        // Efeito colateral descoberto depois (usuário reportou só ver
+        // conteúdo de uma categoria específica): a instrução "é preferível
+        // usar 1 frase só" fazia a IA ancorar quase sempre numa frase/tema só
+        // por geração, mesmo com frases de 5+ categorias diferentes
+        // disponíveis no pool - testado com 54 frases reais de 5 categorias,
+        // 8 gerações: só 3 categorias apareceram. Trocado o padrão pra
+        // "combine quando for plausível" (testado de novo com o mesmo lote:
+        // mais categorias representadas), mantendo as mesmas travas de
+        // coerência (lugar/tempo/interlocutor) como exceção, não como regra.
         $systemPrompt = "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome}, pra um aluno de "
             . "nível {$nivelNome}, respondível oralmente em uma frase, e também a tradução dela em {$idiomaNativoNome}. "
             . "Ajuste o vocabulário e a complexidade gramatical da pergunta pro nível do aluno - iniciante pede "
             . "uma pergunta CURTA e direta, com estruturas simples e vocabulário básico (evite orações "
             . "subordinadas ou múltiplas ideias na mesma pergunta); intermediário pode incluir conectivos e "
             . "tempos verbais variados; avançado pode usar vocabulário mais rico e estruturas mais elaboradas. "
-            . "Monte a pergunta "
-            . "usando trechos das frases fornecidas pelo aluno a seguir, SÓ quando fizerem sentido juntas dentro "
-            . "de uma mesma cena/contexto real - elas são a matéria-prima principal da pergunta, não apenas uma "
-            . "referência solta de vocabulário. É preferível usar 1 frase só (ou nenhuma combinação, criando algo "
-            . "simples inspirado em UMA delas) a forçar 2+ frases desconectadas numa coisa só - quantidade de "
-            . "trechos usados NÃO é o objetivo, coerência é. O conteúdo (temas, ações, situações) tem que vir "
-            . "claramente do que está nessas frases, não de uma ideia nova inventada do zero. As frases do aluno "
+            . "Monte a pergunta usando trechos das frases fornecidas pelo aluno a seguir - elas são a matéria-prima "
+            . "principal da pergunta, não apenas uma referência solta de vocabulário. As frases vêm de temas "
+            . "variados do dia a dia do aluno - SEMPRE QUE FOR PLAUSÍVEL, combine trechos de frases de temas "
+            . "DIFERENTES dentro de uma mesma cena real (ex: uma situação sobre compras pode mencionar algo de "
+            . "saúde, tipo comprar remédio numa farmácia) - varie as fontes em vez de girar sempre em torno de uma "
+            . "frase só, desde que a combinação faça sentido como uma cena real e coerente. Só use 1 frase só (ou "
+            . "nenhuma combinação, criando algo simples inspirado "
+            . "em UMA delas) quando as frases disponíveis realmente não combinarem de forma natural - coerência "
+            . "sempre vem antes de quantidade de trechos, mas dentro do que for coerente, misturar mais de uma "
+            . "fonte é melhor que usar sempre só uma. O conteúdo (temas, ações, situações) tem que vir claramente "
+            . "do que está nessas frases, não de uma ideia nova inventada do zero. As frases do aluno "
             . "vêm de conversas soltas e diferentes entre si - muitas só fazem sentido dentro do contexto original "
             . "delas (ex: uma resposta a alguém específico, uma instrução dirigida a outra pessoa, uma expressão "
             . "sobre um assunto que não tem nada a ver com outra frase da lista mesmo se compartilharem uma "
@@ -274,7 +288,10 @@ class DailyQuestionOpenAI
             . "use só a frase A ou só a B, nunca as duas juntas. A pergunta final tem que soar como se fosse dita "
             . "por UM narrador, sobre UMA cena real e específica só. Se um trecho só encaixar ajustando pessoa "
             . "gramatical, tempo verbal ou outro detalhe gramatical pra combinar com o resto, ajuste; se não der "
-            . "pra encaixar sem parecer forçado, não use esse trecho. "
+            . "pra encaixar sem parecer forçado, não use esse trecho. O campo \"pergunta\" tem que conter SÓ a "
+            . "pergunta final em si, ESCRITA INTEIRAMENTE EM {$idiomaNome} do início ao fim (nunca troque de "
+            . "idioma no meio nem responda em outro idioma) - nunca inclua comentários, explicações ou qualquer "
+            . "menção de como/por que você combinou as frases. "
             . "Máximo {$maxPergunta} caracteres na "
             . "pergunta. Não use aspas. "
             . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
@@ -574,8 +591,8 @@ class DailyQuestionOpenAI
         $prompt = "A pergunta a seguir, em {$idiomaNome}, tem {$tamanhoAtual} caracteres e está longa demais. "
             . "Reescreva ela removendo um detalhe, mantendo o sentido principal, até ficar com no máximo "
             . "{$maxPergunta} caracteres no total. A pergunta reescrita precisa continuar sendo uma pergunta "
-            . "completa, terminando com \"?\" (nunca cortada no meio). Também gere a tradução em "
-            . "{$idiomaNativoNome}. Pergunta original: \"{$pergunta}\". "
+            . "completa, terminando com \"?\" (nunca cortada no meio), e continuar em {$idiomaNome} (nunca mude de "
+            . "idioma). Também gere a tradução em {$idiomaNativoNome}. Pergunta original: \"{$pergunta}\". "
             . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
 
         $resultado = $chat->completar([
