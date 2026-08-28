@@ -375,4 +375,21 @@ class TiroCerteiro
 
         return self::buscarRecorde($pdo, $user_id);
     }
+
+    // Resumo pro termômetro de progresso da Home - mesmo formato de
+    // JogoChuvaFrases::resumoGeral. tiro_certeiro_uso conta toda partida
+    // (mesmo sem bater recorde); tiro_certeiro_recorde é 1 valor só por
+    // usuário (não por categoria, diferente da Chuva de Frases), então não
+    // precisa de MAX/JOIN aqui - já reaproveita buscarRecorde().
+    public static function resumoGeral(PDO $pdo, int $user_id): array
+    {
+        $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM tiro_certeiro_uso WHERE user_id = :user_id");
+        $stmt->execute([':user_id' => $user_id]);
+        $partidas = (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+        return [
+            'partidas_jogadas' => $partidas,
+            'melhor_pontuacao' => self::buscarRecorde($pdo, $user_id),
+        ];
+    }
 }

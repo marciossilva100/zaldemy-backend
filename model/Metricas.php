@@ -123,8 +123,21 @@ class Metricas {
         $stmt2->execute();
         $frases = $stmt2->fetch(PDO::FETCH_ASSOC);
 
-        $totalGeral = (int) $perguntas['total'] + (int) $frases['total'];
-        $acertosGeral = (int) $perguntas['acertos'] + (int) $frases['acertos'];
+        // Tradução Reversa não entrava aqui (feature adicionada depois desse
+        // método já existir) - o termômetro da Home mostrava Perguntas e
+        // Frase do Dia, mas nunca Tradução Reversa.
+        $sqlTraducaoReversa = "
+            SELECT COUNT(*) as total, AVG(nota) as media, SUM(CASE WHEN nota >= 5 THEN 1 ELSE 0 END) as acertos
+            FROM traducao_reversa_ia
+            WHERE user_id = :user_id AND status_id = 1 AND nota IS NOT NULL
+        ";
+        $stmt3 = $this->pdo->prepare($sqlTraducaoReversa);
+        $stmt3->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt3->execute();
+        $traducaoReversa = $stmt3->fetch(PDO::FETCH_ASSOC);
+
+        $totalGeral = (int) $perguntas['total'] + (int) $frases['total'] + (int) $traducaoReversa['total'];
+        $acertosGeral = (int) $perguntas['acertos'] + (int) $frases['acertos'] + (int) $traducaoReversa['acertos'];
 
         return [
             'perguntas' => [
@@ -136,6 +149,11 @@ class Metricas {
                 'total' => (int) $frases['total'],
                 'media_nota' => $frases['media'] !== null ? round((float) $frases['media'], 1) : null,
                 'taxa_acerto' => $frases['total'] > 0 ? round(($frases['acertos'] / $frases['total']) * 100, 2) : null,
+            ],
+            'traducao_reversa' => [
+                'total' => (int) $traducaoReversa['total'],
+                'media_nota' => $traducaoReversa['media'] !== null ? round((float) $traducaoReversa['media'], 1) : null,
+                'taxa_acerto' => $traducaoReversa['total'] > 0 ? round(($traducaoReversa['acertos'] / $traducaoReversa['total']) * 100, 2) : null,
             ],
             'total_geral' => $totalGeral,
             'taxa_acerto_geral' => $totalGeral > 0 ? round(($acertosGeral / $totalGeral) * 100, 2) : null,
