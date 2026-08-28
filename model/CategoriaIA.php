@@ -8,7 +8,7 @@
 // controle de acesso por plano, no mesmo padrão de controller/tts.php.
 class CategoriaIA
 {
-    const LIMITE_DIARIO_PREMIUM = 3;
+    const LIMITE_DIARIO_PREMIUM = 5;
     const LIMITE_VITALICIO_LIMITADO = 1;
     const QUANTIDADE_FRASES = 8;
 
