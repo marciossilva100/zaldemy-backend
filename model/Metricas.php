@@ -276,28 +276,72 @@ class Metricas {
 }
     // ========== MÉTODOS AUXILIARES ==========
     
+    // "Dia de estudo" pra fins de streak - antes contava só flashcards
+    // clássicos (Aprender/Repetir/Revisar, via a tabela metricas). Usuário
+    // reportou o streak zerando/ficando baixo mesmo estudando todo dia -
+    // treinos de IA (Perguntas/Frase do Dia/Tradução Reversa) e os jogos
+    // (Chuva de Frases/Tiro Certeiro) nunca contavam, mesmo sendo uso real
+    // do app. status_id=1 nas tabelas de IA garante que só conta quando a
+    // atividade foi concluída de verdade (respondida ou esgotada), não só
+    // gerada/aberta e abandonada. Os jogos não têm status_id (a tabela
+    // *_uso só registra quando uma partida de verdade começa a ser
+    // gerada), então toda linha já é sinal de uso real.
+    // Sem filtro de idioma nas tabelas de IA/jogos (diferente de metricas)
+    // porque elas não guardam o par de idioma por linha, só o texto -
+    // não dá pra aplicar o mesmo filtro sem essa informação.
+    private function sqlDiasEstudo($filtroIdioma) {
+        return "
+            SELECT DISTINCT DATE(m.created_at) as data_estudo
+            FROM metricas m
+            INNER JOIN frases f ON m.frase_id = f.id
+            WHERE m.user_id = :user_id
+                $filtroIdioma
+            UNION
+            SELECT DATE(data_criacao) FROM perguntas_ia WHERE user_id = :user_id AND status_id = 1
+            UNION
+            SELECT DATE(data_criacao) FROM frase_dia_ia WHERE user_id = :user_id AND status_id = 1
+            UNION
+            SELECT DATE(data_criacao) FROM traducao_reversa_ia WHERE user_id = :user_id AND status_id = 1
+            UNION
+            SELECT DATE(data_criacao) FROM jogo_chuva_uso WHERE user_id = :user_id
+            UNION
+            SELECT DATE(data_criacao) FROM tiro_certeiro_uso WHERE user_id = :user_id
+        ";
+    }
+
     public function getStreak($user_id, $idioma_nativo = null, $idioma_aprendendo = null) {
         $filtroIdioma = $this->filtroIdiomaSql('f', $idioma_nativo, $idioma_aprendendo);
 
         $sql = "
             WITH RECURSIVE dias_estudo AS (
-                SELECT DISTINCT DATE(m.created_at) as data_estudo
-                FROM metricas m
-                INNER JOIN frases f ON m.frase_id = f.id
-                WHERE m.user_id = :user_id
-                    $filtroIdioma
+                {$this->sqlDiasEstudo($filtroIdioma)}
             ),
             streak_atual AS (
-                SELECT 
+                -- Mesmo cálculo (comprovado correto) de getMelhorStreak:
+                -- varre em ordem ASCENDENTE, comparando cada dia com o
+                -- anterior (data_estudo - 1). A versão antiga tentava
+                -- calcular a sequência ATUAL varrendo em ordem DESCENDENTE
+                -- e pegando só a primeira linha (LIMIT 1) - mas a primeira
+                -- linha processada NUNCA tem um @prev_data anterior pra
+                -- comparar (começa NULL), então o streak dessa linha É
+                -- SEMPRE 1, não importa quantos dias seguidos o usuário
+                -- realmente tivesse estudado (bug reportado pelo usuário:
+                -- sequência sempre aparecendo como 1 dia). Em vez disso,
+                -- varre ASC (construindo a sequência corretamente, dia a
+                -- dia) e só DEPOIS pega o valor do dia mais recente - que é
+                -- a sequência que está valendo até agora.
+                SELECT
                     data_estudo,
                     @streak := IF(@prev_data = data_estudo - INTERVAL 1 DAY, @streak + 1, 1) as streak,
                     @prev_data := data_estudo
                 FROM dias_estudo
                 CROSS JOIN (SELECT @prev_data := NULL, @streak := 0) r
-                ORDER BY data_estudo DESC
-                LIMIT 1
+                ORDER BY data_estudo ASC
             )
-            SELECT COALESCE(streak, 0) as streak FROM streak_atual
+            SELECT COALESCE(streak, 0) as streak
+            FROM streak_atual
+            ORDER BY data_estudo DESC
+            LIMIT 1
         ";
 
         $stmt = $this->pdo->prepare($sql);
@@ -329,11 +373,7 @@ class Metricas {
 
         $sql = "
             WITH RECURSIVE dias_estudo AS (
-                SELECT DISTINCT DATE(m.created_at) as data_estudo
-                FROM metricas m
-                INNER JOIN frases f ON m.frase_id = f.id
-                WHERE m.user_id = :user_id
-                    $filtroIdioma
+                {$this->sqlDiasEstudo($filtroIdioma)}
             ),
             streaks AS (
                 SELECT
