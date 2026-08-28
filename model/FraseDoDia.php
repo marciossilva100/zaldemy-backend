@@ -265,25 +265,33 @@ class FraseDoDia
                 . "tem liberdade de completar com palavras comuns do idioma pra formar uma frase natural e completa - "
                 . "não force repetir sempre as mesmas palavras só pra bater um percentual; priorize soar natural e "
                 . "ficar no tamanho certo."
-            : "Monte a frase usando o MÁXIMO de trechos que puder das frases que o aluno já estuda a seguir, sempre "
-                . "que fizerem sentido juntas dentro de uma mesma cena/contexto - elas são a matéria-prima "
-                . "principal da frase, não apenas uma referência solta de vocabulário. NÃO force incluir frases "
-                . "que não se encaixem bem: é melhor combinar só 2 ou 3 delas com coerência real do que forçar "
-                . "várias frases desconectadas numa coisa só pra usar mais vocabulário - mas se muitas frases "
-                . "combinarem bem numa cena só, use todas elas. O conteúdo (temas, ações, situações) tem que vir "
-                . "claramente do que está nessas frases, não de uma ideia nova inventada do zero. As frases do "
-                . "aluno vêm de "
-                . "conversas soltas e diferentes entre si - muitas só fazem sentido dentro do contexto original "
-                . "delas (ex: uma resposta a alguém específico, uma instrução dirigida a outra pessoa). Preste "
-                . "atenção especial a quem fala e sobre quem/com quem se fala (sujeito, pessoa gramatical, "
-                . "referências a outras pessoas) - a frase final tem que soar como se fosse dita por UM narrador, "
-                . "sobre UMA cena só; nunca combine um trecho sobre uma pessoa/situação com outro trecho que "
-                . "introduz outra pessoa do nada, sem relação nenhuma com o resto - isso soa artificial e ninguém "
-                . "falaria assim no dia a dia. Se um trecho só encaixar ajustando pessoa gramatical, tempo verbal "
-                . "ou outro detalhe gramatical pra combinar com o resto, ajuste; se não der pra encaixar sem "
-                . "parecer forçado, não use esse trecho. Mesmo assim, o resultado final precisa ter coesão, "
-                . "concordância gramatical e naturalidade como uma frase única - nunca deixe só colados lado a "
-                . "lado sem conexão real entre eles.";
+            // Testado direto na API: a versão anterior pedia pra usar o
+            // MÁXIMO de trechos possível, e mesmo com os avisos de coerência
+            // logo depois, a IA continuava colando frases de temas de vida
+            // totalmente diferentes (ex: "nasci no Brasil" + "amo
+            // computadores" + "vou pra academia toda manhã" + "preciso de
+            // motivação" numa lista só de fatos soltos ligados por "e"/
+            // "então" - reportado pelo usuário como falta de sentido/coesão).
+            // Trocado o incentivo de "usar o máximo" por "coerência antes de
+            // quantidade" (mesmo princípio já corrigido em
+            // DailyQuestionOpenAI.php) - testado de novo com o mesmo lote de
+            // frases desconexas, sem repetir esse tipo de mistura.
+            : "Monte a frase usando trechos das frases que o aluno já estuda a seguir, SÓ quando fizerem sentido "
+                . "juntas dentro de uma mesma cena/contexto real - elas são a matéria-prima principal da frase, não "
+                . "apenas uma referência solta de vocabulário. Prefira usar só 1 frase do aluno como base do tema "
+                . "central e elaborar em cima dela (ver instrução de tamanho acima) a forçar 2+ frases de temas de "
+                . "vida diferentes numa coisa só - quantidade de trechos usados NÃO é o objetivo, coerência é. O "
+                . "conteúdo (tema, ação, situação) tem que vir claramente do que está nessas frases, não de uma "
+                . "ideia nova inventada do zero. As frases do aluno vêm de conversas soltas e diferentes entre si - "
+                . "muitas só fazem sentido dentro do contexto original delas (ex: uma resposta a alguém específico, "
+                . "uma instrução dirigida a outra pessoa, um assunto que não tem nada a ver com outra frase da "
+                . "lista). NÃO encadeie temas/assuntos de vida diferentes (ex: onde nasceu + hobby + academia + "
+                . "objetivo de aprendizado + motivação + sonho futuro) numa lista de fatos colados por "
+                . "'e'/'porque'/'então' só pra somar caracteres - isso vira uma lista de fatos soltos sem lógica "
+                . "entre si, não uma frase natural. A frase final tem que soar como se fosse dita por UM narrador, "
+                . "sobre UMA única coisa que ele quer contar. Se um trecho só encaixar ajustando pessoa gramatical "
+                . "ou tempo verbal pra combinar com o resto, ajuste; se não der pra encaixar sem parecer forçado, "
+                . "não use esse trecho.";
 
         $systemPrompt = "Você é um professor de idiomas escrevendo uma frase de exemplo em {$idiomaNome} pra um aluno "
             . "de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical da frase pro nível dele - "
@@ -295,9 +303,11 @@ class FraseDoDia
             . "REQUISITO MAIS IMPORTANTE: a frase precisa ter entre {$min} e {$max} caracteres, contando espaços e "
             . "pontuação - conte os caracteres mentalmente antes de responder e, se estiver fora dessa faixa, "
             . "reescreva até acertar. Frases curtas de uma oração só (tipo 'I like coffee.') SEMPRE ficam curtas "
-            . "demais - por isso a frase precisa ter pelo menos duas orações ligadas por conectivos (e, mas, porque, "
-            . "quando, embora, já que, etc.) ou uma oração com detalhes extras (tempo, lugar, motivo), pra "
-            . "naturalmente ocupar esse espaço. A frase deve ser natural e do dia a dia, adequada pra um aluno ler em "
+            . "demais. IMPORTANTE: pra chegar no tamanho certo, elabore com MAIS DETALHE sobre a MESMA ideia central "
+            . "(quando, onde, por quê, como a pessoa se sente, o que ela pretende fazer a respeito) - nunca "
+            . "acrescente um segundo assunto de vida sem relação nenhuma com o primeiro só pra ganhar caracteres. "
+            . "Uma frase mais longa mas sobre UMA coisa só é sempre melhor que uma frase no tamanho certo que "
+            . "mistura vários assuntos. A frase deve ser natural e do dia a dia, adequada pra um aluno ler em "
             . "voz alta como exercício de pronúncia, e tem que ser inteiramente uma afirmação (declarativa) do "
             . "início ao fim - nenhuma oração dentro da frase pode ser uma pergunta, nem mesmo uma pergunta "
             . "retórica ou tag question (tipo 'certo?', 'não é?'); o texto final não pode conter nenhum ponto de "

@@ -38,13 +38,18 @@ class Frases
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     }
 
-    public function listarFrases($user_id): array
+    // $somenteEstudadas=true restringe a frases que já passaram por
+    // id_treino >= 2 - usado pelos jogos (Chuva de Frases), que devem
+    // praticar só conteúdo que o aluno já demonstrou conhecer, nunca
+    // vocabulário ainda não estudado (ver ModaTreino/Frases.jsx normal, que
+    // continua chamando com o padrão false pra listar tudo).
+    public function listarFrases($user_id, bool $somenteEstudadas = false): array
     {
 
         global $pdo; // 👈 precisa disso
 
         $sql = "
-           SELECT 
+           SELECT
             f.id,
             f.texto_nativo,
             f.texto_traduzido,
@@ -54,7 +59,8 @@ class Frases
         WHERE f.categoria_id = :categoria_id
         AND f.usuario_id = :id_user
         AND f.status_id <> 0
-        AND c.status_id > 0
+        AND c.status_id > 0"
+        . ($somenteEstudadas ? " AND f.id_treino >= 2" : "") . "
         ORDER BY f.id DESC
         ";
 
