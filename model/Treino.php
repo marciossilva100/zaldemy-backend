@@ -3,6 +3,10 @@ require_once '../server.php';
 session_start();
 
 class Treino {
+    // Usados em retornarTreino() - ver comentário lá.
+    const MAX_TENTATIVAS_RECENTES_RETORNO = 5;
+    const MIN_TENTATIVAS_PARA_EXTREMOS = 2;
+
     public $category_id;
     public $id_frase = array(); // array de ids
     public $data;
@@ -104,28 +108,27 @@ class Treino {
         $pdo->beginTransaction();
 
         // =========================
-        // 1️⃣ SELECT com métricas
-        // =========================
+        // 1️⃣ Candidatas: já paradas há pelo menos 3 dias (o menor prazo
+        // possível dos três níveis abaixo) - filtro barato em SQL, mesmo
+        // formato/agregação de antes. A decisão fina de qual prazo cada
+        // frase precisa (3, 7 ou 15 dias) é feita depois, em PHP, olhando
+        // só as tentativas recentes de cada uma - ver bloco 2 abaixo.
+        //
         // Filtra direto por f.id_treino (o campo real/atual da frase), não
         // pelo último registro em treino_data_atualizacao - esse histórico
         // pode ficar dessincronizado do campo atual (ex: frase em id_treino=4
         // cujo último log ainda mostra um estágio anterior), o que fazia essa
         // consulta não encontrar quase nenhuma frase vencida na prática.
-        $sqlSelect = "
+        $sqlCandidatas = "
             SELECT
                 f.id AS id_frase,
                 f.categoria_id,
-                COALESCE(AVG(m.acertou), 0) as media_acertos,
                 MAX(tda.data_atualizacao) as ultima_data
 
             FROM frases f
 
             LEFT JOIN treino_data_atualizacao tda
                 ON tda.id_frase = f.id
-
-            LEFT JOIN metricas m
-                ON m.frase_id = f.id
-                AND m.user_id = ?
 
             WHERE
                 f.id_treino = ?
@@ -134,24 +137,64 @@ class Treino {
 
             GROUP BY f.id, f.categoria_id
 
-            -- Prazo pra voltar pra revisão depois de memorizada varia com a
-            -- taxa de acerto histórica da frase (média de TODAS as respostas
-            -- já registradas, não só as recentes): quem acerta bem (>=70%)
-            -- pode esperar mais (15 dias); quem acerta mal (<30%) claramente
-            -- ainda não fixou o conteúdo e precisa revisar logo (3 dias);
-            -- os demais casos ficam no meio-termo padrão (7 dias).
-            HAVING ultima_data <= NOW() - INTERVAL
-                CASE
-                    WHEN media_acertos >= 0.7 THEN 15
-                    WHEN media_acertos < 0.3 THEN 3
-                    ELSE 7
-                END DAY
+            HAVING ultima_data <= NOW() - INTERVAL 3 DAY
         ";
 
-        $stmtSelect = $pdo->prepare($sqlSelect);
-        $stmtSelect->execute([$user_id, $idTreino, $user_id]);
+        $stmtCandidatas = $pdo->prepare($sqlCandidatas);
+        $stmtCandidatas->execute([$idTreino, $user_id]);
 
-        $dados = $stmtSelect->fetchAll(PDO::FETCH_ASSOC);
+        $candidatas = $stmtCandidatas->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($candidatas)) {
+            $pdo->rollBack();
+            return [
+                'success' => false,
+                'message' => 'Nenhuma frase encontrada'
+            ];
+        }
+
+        // =========================
+        // 2️⃣ Prazo real de cada candidata, com base só nas últimas
+        // tentativas (não o histórico vitalício inteiro) - uma frase que
+        // errava muito há meses mas vem acertando agora não deve continuar
+        // sendo tratada como "difícil" pra sempre. Exige também um mínimo
+        // de tentativas antes de confiar nos extremos (>=70%/<30%) - uma
+        // única resposta (certa ou errada) não deveria travar a frase num
+        // prazo extremo por acaso.
+        $stmtUltimasTentativas = $pdo->prepare("
+            SELECT acertou FROM metricas
+            WHERE frase_id = ? AND user_id = ?
+            ORDER BY id DESC
+            LIMIT " . self::MAX_TENTATIVAS_RECENTES_RETORNO . "
+        ");
+
+        $agora = new DateTime();
+        $dados = [];
+
+        foreach ($candidatas as $candidata) {
+            $stmtUltimasTentativas->execute([$candidata['id_frase'], $user_id]);
+            $tentativas = $stmtUltimasTentativas->fetchAll(PDO::FETCH_COLUMN);
+
+            $totalTentativas = count($tentativas);
+            $mediaAcertos = $totalTentativas > 0 ? array_sum($tentativas) / $totalTentativas : 0;
+
+            if ($totalTentativas < self::MIN_TENTATIVAS_PARA_EXTREMOS) {
+                $prazoDias = 7;
+            } elseif ($mediaAcertos >= 0.7) {
+                $prazoDias = 15;
+            } elseif ($mediaAcertos < 0.3) {
+                $prazoDias = 3;
+            } else {
+                $prazoDias = 7;
+            }
+
+            $vence = new DateTime($candidata['ultima_data']);
+            $vence->modify("+{$prazoDias} days");
+
+            if ($vence <= $agora) {
+                $dados[] = $candidata;
+            }
+        }
 
         if (empty($dados)) {
             $pdo->rollBack();
