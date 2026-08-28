@@ -98,7 +98,8 @@ class DailyQuestionOpenAI
 
     private static function getPendente(PDO $pdo, int $user_id): ?array
     {
-        $sql = "SELECT id, question, question_traducao FROM perguntas_ia
+        $sql = "SELECT id, question, question_traducao, DATE(data_criacao) = CURDATE() AS eh_de_hoje
+                FROM perguntas_ia
                 WHERE user_id = :user_id AND status_id = 0
                 ORDER BY id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
@@ -183,7 +184,7 @@ class DailyQuestionOpenAI
         $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
 
-        if ($pendente && !empty($pendente['question_traducao'])) {
+        if ($pendente && !empty($pendente['question_traducao']) && !empty($pendente['eh_de_hoje'])) {
             $todasFrases = self::getTodasFrasesElegiveis($pdo, $user_id);
 
             return [
@@ -195,8 +196,13 @@ class DailyQuestionOpenAI
             ];
         }
 
-        // Pendência órfã (gerada antes da coluna question_traducao existir) - descarta
-        // e gera uma nova em vez de mostrar um flashcard sem verso.
+        // Pendência órfã (gerada antes da coluna question_traducao existir,
+        // OU abandonada de um dia anterior - usuário gerou a pergunta e
+        // nunca respondeu nem pulou) - descarta e gera uma nova em vez de
+        // reaproveitar. Sem o filtro de data, uma pergunta de dias atrás
+        // "ressuscitava" como se fosse a de hoje, e como a data de criação
+        // dela continuava antiga, respondê-la não contava pro contador
+        // diário (numero ficava travado em 1, reportado pelo usuário).
         if ($pendente) {
             $pdo->prepare("DELETE FROM perguntas_ia WHERE id = :id")->execute([':id' => $pendente['id']]);
         }
