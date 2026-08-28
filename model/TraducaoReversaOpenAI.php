@@ -75,7 +75,8 @@ class TraducaoReversaOpenAI
 
     private static function getPendente(PDO $pdo, int $user_id): ?array
     {
-        $sql = "SELECT id, texto_nativo, texto_traduzido_gabarito FROM traducao_reversa_ia
+        $sql = "SELECT id, texto_nativo, texto_traduzido_gabarito, DATE(data_criacao) = CURDATE() AS eh_de_hoje
+                FROM traducao_reversa_ia
                 WHERE user_id = :user_id AND status_id = 0
                 ORDER BY id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
@@ -125,12 +126,23 @@ class TraducaoReversaOpenAI
         $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
 
-        if ($pendente) {
+        if ($pendente && !empty($pendente['eh_de_hoje'])) {
             return [
                 "success" => true,
                 "id" => (int) $pendente['id'],
                 "texto" => $pendente['texto_nativo'],
             ];
+        }
+
+        // Pendência abandonada de um dia anterior (usuário gerou o texto e
+        // nunca respondeu nem pulou) - descarta e gera um novo em vez de
+        // reaproveitar. Sem esse filtro, um texto de dias atrás "ressuscita"
+        // como se fosse o de hoje, e como a data de criação dele continua
+        // antiga, respondê-lo não conta pro contador diário (mesmo bug já
+        // corrigido em DailyQuestionOpenAI.php, replicado aqui por engano ao
+        // copiar a estrutura).
+        if ($pendente) {
+            $pdo->prepare("DELETE FROM traducao_reversa_ia WHERE id = :id")->execute([':id' => $pendente['id']]);
         }
 
         if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
