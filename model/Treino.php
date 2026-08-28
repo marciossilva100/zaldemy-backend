@@ -134,9 +134,16 @@ class Treino {
 
             GROUP BY f.id, f.categoria_id
 
+            -- Prazo pra voltar pra revisão depois de memorizada varia com a
+            -- taxa de acerto histórica da frase (média de TODAS as respostas
+            -- já registradas, não só as recentes): quem acerta bem (>=70%)
+            -- pode esperar mais (15 dias); quem acerta mal (<30%) claramente
+            -- ainda não fixou o conteúdo e precisa revisar logo (3 dias);
+            -- os demais casos ficam no meio-termo padrão (7 dias).
             HAVING ultima_data <= NOW() - INTERVAL
                 CASE
                     WHEN media_acertos >= 0.7 THEN 15
+                    WHEN media_acertos < 0.3 THEN 3
                     ELSE 7
                 END DAY
         ";
