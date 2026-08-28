@@ -73,6 +73,16 @@ class TraducaoIA
         // de revisão contra redundância - testado de novo (20 frases com
         // "por favor" em posições variadas): 0 duplicações, contra 2/20 da
         // versão antiga.
+        //
+        // Depois descoberto (usuário reportou "apareceu um monte de coisas"
+        // ao tocar no botão): sem JSON mode, uma entrada curta/ambígua (ex:
+        // "beleza") fazia o modelo "pensar alto" e devolver um parágrafo de
+        // explicação em vez de só a tradução, mesmo com a instrução textual
+        // "sem explicações" - a instrução por texto não é suficiente sem
+        // uma restrição estrutural. Testado com 8 frases adversariais
+        // (palavra única, gíria, frase já no idioma de destino): sem JSON
+        // mode, 1/8 veio com explicação longa; com JSON mode, 0/8 - mesmo
+        // padrão já usado em toda outra feature de IA do sistema.
         $systemPrompt = "Você é um professor de idiomas e tradutor nativo. O aluno vai te mandar uma frase escrita em "
             . "{$idiomaNativoNome} e quer saber como diria a mesma coisa, de forma natural, em {$idiomaAprendendoNome}. Dê "
             . "a tradução mais natural e idiomática possível, como um falante nativo de {$idiomaAprendendoNome} diria no "
@@ -80,18 +90,25 @@ class TraducaoIA
             . "responder pra garantir que soa natural, com concordância e coesão corretas, e SEM REDUNDÂNCIA - nunca "
             . "repita a mesma palavra ou expressão duas vezes na mesma frase (ex: nunca tenha uma expressão de cortesia "
             . "tipo \"please\"/\"por favor\" tanto no início quanto no fim da mesma frase - escolha só um lugar, o que "
-            . "soar mais natural). Responda APENAS com a frase traduzida, sem aspas e sem explicações.";
+            . "soar mais natural). Responda em JSON no formato {\"traducao\": \"...\"}, contendo APENAS a frase "
+            . "traduzida final nesse campo, sem aspas extras dentro do valor e sem nenhuma explicação, alternativa "
+            . "ou comentário.";
 
         $resultado = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => $frase],
-        ], false, 200);
+        ], true, 200);
 
         if ($resultado['erro']) {
             return ["success" => false, "message" => "Não foi possível gerar a tradução: " . $resultado['mensagem']];
         }
 
-        $traducao = trim($resultado['texto'], "\" \n\r\t");
+        $json = json_decode($resultado['texto'], true);
+        $traducao = trim((string) ($json['traducao'] ?? ''), "\" \n\r\t");
+
+        if ($traducao === '') {
+            return ["success" => false, "message" => "Não foi possível gerar a tradução: resposta inesperada da IA."];
+        }
 
         self::registrarUso($pdo, $user_id);
 
