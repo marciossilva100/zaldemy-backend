@@ -150,6 +150,11 @@ try {
         exit;
     }
 
+    if ($action === 'resumo') {
+        echo json_encode(["success" => true] + TiroCerteiro::resumoGeral($pdo, $user_id));
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(["success" => false, "message" => "Action inválida"]);
 
