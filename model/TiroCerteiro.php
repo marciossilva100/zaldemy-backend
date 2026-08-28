@@ -94,18 +94,18 @@ class TiroCerteiro
     }
 
     // Vocabulário do usuário no par de idioma atual, pra alimentar o
-    // prompt de geração - mesmo padrão de FraseDoDia::getFrasesDoUsuario.
+    // prompt de geração. Sempre exige id_treino >= 2 (frase já estudada de
+    // verdade), sem fallback pra vocabulário nunca treinado - pedido
+    // explícito do usuário: o jogo só deve praticar conteúdo que o aluno já
+    // demonstrou conhecer. O picker de categorias (front) já esconde/
+    // desabilita categorias sem frases estudadas o bastante antes de
+    // chegar aqui, então esse método normalmente só é chamado quando já há
+    // conteúdo suficiente.
     // $categoryIds vazio/null = todas as categorias do usuário (comportamento
     // original, antes do picker de categorias existir).
     public static function getFrasesDoUsuario(PDO $pdo, int $user_id, ?array $categoryIds = null): array
     {
-        $frases = self::buscarFrasesPorEstagio($pdo, $user_id, true, $categoryIds);
-
-        if (count($frases) < 3) {
-            $frases = self::buscarFrasesPorEstagio($pdo, $user_id, false, $categoryIds);
-        }
-
-        return $frases;
+        return self::buscarFrasesPorEstagio($pdo, $user_id, true, $categoryIds);
     }
 
     private static function buscarFrasesPorEstagio(PDO $pdo, int $user_id, bool $exigirTreinoMinimo, ?array $categoryIds = null): array

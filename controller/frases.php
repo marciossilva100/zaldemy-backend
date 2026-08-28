@@ -80,7 +80,8 @@ try {
             exit;
         }
 
-        $response = $frase->listarFrases($user_id);
+        $somenteEstudadas = !empty($input['somente_estudadas']);
+        $response = $frase->listarFrases($user_id, $somenteEstudadas);
 
         echo json_encode($response);
         exit;

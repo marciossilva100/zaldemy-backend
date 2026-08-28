@@ -99,18 +99,18 @@ try {
         // igual ao comportamento de antes do picker existir.
         $categoryIds = $input['category_ids'] ?? [];
 
-        // Diferente da Frase do Dia/Perguntas, aqui não exige frase já
-        // "estudada" - getFrasesDoUsuario() já prioriza as estudadas mas cai
-        // pra qualquer frase cadastrada quando não há 3 estudadas (ver
-        // model/TiroCerteiro.php), então o bloqueio só faz sentido quando
-        // não sobra frase nenhuma pra IA usar como base.
+        // Só usa frases já estudadas de verdade (id_treino >= 2), sem
+        // fallback pra vocabulário nunca treinado - pedido explícito do
+        // usuário. O picker de categorias no front já esconde/desabilita
+        // categorias sem frases estudadas o bastante, então isso normalmente
+        // só dispara se o usuário conseguir chegar aqui de outra forma.
         $frases = TiroCerteiro::getFrasesDoUsuario($pdo, $user_id, $categoryIds);
 
         if (empty($frases)) {
             echo json_encode([
                 "success" => false,
                 "conteudo_insuficiente" => true,
-                "message" => "Adicione frases aos flashcards para jogar o Tiro Certeiro.",
+                "message" => "Treine mais frases nos flashcards antes de jogar o Tiro Certeiro.",
             ]);
             exit;
         }
