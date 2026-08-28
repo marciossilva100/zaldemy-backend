@@ -128,7 +128,17 @@ class TiroCerteiro
             $filtroCategoria = " AND f.categoria_id IN (" . implode(',', $placeholders) . ")";
         }
 
-        $sql = "SELECT f.texto_traduzido
+        // ORDER BY id_treino DESC sozinho (sem balancear por categoria)
+        // deixava uma categoria estudada há mais tempo (muita frase
+        // id_treino=4) engolir o LIMIT inteiro, mesmo com outras categorias
+        // selecionadas e elegíveis - o RAND() só desempata dentro do MESMO
+        // id_treino, não entre categorias diferentes. Busca uma janela maior
+        // que o necessário (6x, com teto de segurança) só pra ter candidatos
+        // de sobra de cada categoria, e faz o balanceamento de verdade em
+        // PHP logo abaixo (round-robin entre categorias).
+        $limiteBusca = min(self::MAX_FRASES_PROMPT * 6, 300);
+
+        $sql = "SELECT f.categoria_id, f.texto_traduzido
                 FROM frases f
                 INNER JOIN idioma_referencia ir
                     ON ir.idioma_nativo = f.idioma_nativo
@@ -141,12 +151,46 @@ class TiroCerteiro
                 . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "")
                 . $filtroCategoria . "
                 ORDER BY f.id_treino DESC, RAND()
-                LIMIT " . self::MAX_FRASES_PROMPT;
+                LIMIT " . $limiteBusca;
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
 
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        // Agrupa por categoria - dentro de cada uma, a ordem já veio
+        // priorizada por id_treino (graças ao ORDER BY acima).
+        $porCategoria = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $linha) {
+            $porCategoria[$linha['categoria_id']][] = $linha['texto_traduzido'];
+        }
+
+        $idsCategorias = array_keys($porCategoria);
+        shuffle($idsCategorias);
+
+        // Round-robin: 1 frase de cada categoria por volta, até bater o
+        // limite final - garante que nenhuma categoria domine o pool só por
+        // ter mais frases (ou frases mais "adiantadas" no treino) que as
+        // outras.
+        $selecionadas = [];
+        for ($indice = 0; count($selecionadas) < self::MAX_FRASES_PROMPT; $indice++) {
+            $algumaAdicionada = false;
+
+            foreach ($idsCategorias as $categoriaId) {
+                if (isset($porCategoria[$categoriaId][$indice])) {
+                    $selecionadas[] = $porCategoria[$categoriaId][$indice];
+                    $algumaAdicionada = true;
+
+                    if (count($selecionadas) >= self::MAX_FRASES_PROMPT) {
+                        break;
+                    }
+                }
+            }
+
+            if (!$algumaAdicionada) {
+                break;
+            }
+        }
+
+        return $selecionadas;
     }
 
     public static function getIdiomaAprendendo(PDO $pdo, int $user_id): string
