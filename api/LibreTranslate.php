@@ -7,7 +7,15 @@ class LibreTranslate
     public $sourceLang;
     public $targetLang;
 
-    public function translateText():array
+    // Assinatura antes era ":array" (sem aceitar null) mas dois caminhos de
+    // erro abaixo (curl falhou / resposta não é JSON válido) retornavam
+    // null - TypeError fatal em PHP, capturado pelo try/catch genérico do
+    // controller e devolvido pro front como texto cru de erro do PHP
+    // (reportado pelo usuário: a mensagem de erro exibida na tela era o
+    // próprio "Return value must be of type array, null returned"). Trocado
+    // pra sempre devolver um array com success=false nesses casos, igual ao
+    // shape de sucesso - nunca null.
+    public function translateText(): array
     {
         $url = "https://translate.googleapis.com/translate_a/single?" . http_build_query([
             "client" => "gtx",
@@ -22,19 +30,18 @@ class LibreTranslate
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_ENCODING => "", 
+            CURLOPT_ENCODING => "",
             CURLOPT_USERAGENT => "Mozilla/5.0",
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_TIMEOUT => 15,
         ]);
 
         $response = curl_exec($ch);
 
-   // print_r($response);
-
         if ($response === false) {
             @curl_close($ch);
-            return null;
+            return ['success' => false, 'code' => 'translation_failed'];
         }
 
         @curl_close($ch);
@@ -44,8 +51,8 @@ class LibreTranslate
 
         $json = json_decode($response, true);
 
-        if (!$json) {
-            return null;
+        if (!$json || !isset($json[0]) || !is_array($json[0])) {
+            return ['success' => false, 'code' => 'translation_failed'];
         }
 
         $translated = '';
