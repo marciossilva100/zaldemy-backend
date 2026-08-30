@@ -12,7 +12,13 @@ class OpenAiTranscribe {
     }
 
     // $caminhoArquivoTmp: caminho de um arquivo já salvo em disco (ex: $_FILES[...]['tmp_name'])
-    public function transcrever(string $caminhoArquivoTmp, string $nomeArquivo = "audio.webm", string $mimeType = "audio/webm"): array {
+    // $idioma: sigla ISO-639-1 (ex: "en") do idioma que o aluno está falando -
+    // sem isso o Whisper tenta adivinhar sozinho a partir do áudio, o que é
+    // bem menos confiável em gravações curtas, com ruído de fundo ou sotaque
+    // (reportado pelo usuário: "falo no microfone mas parece que não capta
+    // corretamente" - o áudio podia estar sendo gravado bem e o problema ser
+    // só a transcrição errando o idioma).
+    public function transcrever(string $caminhoArquivoTmp, string $nomeArquivo = "audio.webm", string $mimeType = "audio/webm", ?string $idioma = null): array {
 
         if (!file_exists($caminhoArquivoTmp)) {
             return ["erro" => true, "mensagem" => "Arquivo de áudio não encontrado"];
@@ -26,6 +32,10 @@ class OpenAiTranscribe {
             "file" => $cfile,
             "model" => $this->model,
         ];
+
+        if ($idioma) {
+            $data["language"] = $idioma;
+        }
 
         $ch = curl_init($url);
 

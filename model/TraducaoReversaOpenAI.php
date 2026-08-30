@@ -329,6 +329,16 @@ class TraducaoReversaOpenAI
         return rtrim($cortado, " ,;:-、，");
     }
 
+    // Mapeia o nome do idioma (ex: "Inglês") pra sigla ISO-639-1 (ex: "en") -
+    // hint pro Whisper na transcrição do áudio de resposta (ver comentário em
+    // OpenAiTranscribe::transcrever).
+    private static function siglaIdioma(PDO $pdo, string $nomeIdioma): ?string
+    {
+        $stmt = $pdo->prepare("SELECT sigla FROM idiomas WHERE idioma = :nome LIMIT 1");
+        $stmt->execute([':nome' => $nomeIdioma]);
+        return $stmt->fetch(PDO::FETCH_ASSOC)['sigla'] ?? null;
+    }
+
     private static function registrarTentativaSemNota(PDO $pdo, int $id, int $tentativaAtual, string $resposta): bool
     {
         $esgotou = $tentativaAtual >= self::MAX_TENTATIVAS_POR_TEXTO;
@@ -368,7 +378,7 @@ class TraducaoReversaOpenAI
         $tentativaAtual = (int) $row['tentativas'] + 1;
 
         $nomeArquivo = "audio." . self::extensaoParaMime($mimeType);
-        $transcricaoResult = $transcribe->transcrever($caminhoAudio, $nomeArquivo, $mimeType);
+        $transcricaoResult = $transcribe->transcrever($caminhoAudio, $nomeArquivo, $mimeType, self::siglaIdioma($pdo, $idiomaAprendendoNome));
 
         if ($transcricaoResult['erro']) {
             return ["success" => false, "message" => "Não foi possível transcrever o áudio: " . $transcricaoResult['mensagem']];
