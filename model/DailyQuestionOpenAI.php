@@ -343,7 +343,15 @@ class DailyQuestionOpenAI
             // pergunta incompleta. Confere aqui em vez de confiar só no prompt.
             $terminaComInterrogacao = mb_substr(rtrim($questionCandidata), -1) === '?';
 
-            if (mb_strlen($questionCandidata) <= $maxPergunta && $terminaComInterrogacao) {
+            // O prompt já pede "no máximo 2 frases-fonte", mas isso é só uma
+            // instrução de linguagem natural - confirmado com 50 gerações
+            // reais (Frase do Dia) que 16% delas ainda combinavam 3+ fontes,
+            // principalmente quando as frases do pool são do mesmo tema e
+            // "encaixam bem" juntas. Verifica de verdade em vez de confiar só
+            // na instrução.
+            $excedeuFontes = count(RotacaoFrasesIA::frasesFonteDetectadas($phrasesOriginais, $questionCandidata)) > 2;
+
+            if (mb_strlen($questionCandidata) <= $maxPergunta && $terminaComInterrogacao && !$excedeuFontes) {
                 $question = $questionCandidata;
                 $traducao = self::truncarPreservandoPalavras($traducaoCandidata, $limiteTraducao);
                 break;

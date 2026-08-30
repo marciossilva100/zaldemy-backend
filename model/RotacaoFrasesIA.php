@@ -37,11 +37,14 @@ class RotacaoFrasesIA
     // Detecta quais frases do POOL que foi realmente enviado pra IA (não o
     // catálogo inteiro do usuário - só as candidatas dessa geração
     // específica, o que evita confundir frases de texto idêntico entre
-    // categorias diferentes) aparecem no texto gerado, e registra como
-    // usadas. Comparação por trecho de 4 palavras (não a frase inteira),
-    // já que a IA normalmente adapta levemente a frase original (pessoa
-    // gramatical, tempo verbal) ao encaixar no texto final.
-    public static function registrarUsadas(PDO $pdo, int $user_id, array $poolEnviado, string $textoGerado): void
+    // categorias diferentes) aparecem no texto gerado. Comparação por
+    // trecho de 4 palavras (não a frase inteira), já que a IA normalmente
+    // adapta levemente a frase original (pessoa gramatical, tempo verbal)
+    // ao encaixar no texto final. Reaproveitado tanto por registrarUsadas()
+    // (rotação) quanto pela checagem de "máximo 2 frases-fonte" nos 3
+    // obter*() - confirmado com dados reais que só a instrução no prompt não
+    // é suficiente: 16% de 50 gerações reais ainda combinavam 3+ fontes.
+    public static function frasesFonteDetectadas(array $poolEnviado, string $textoGerado): array
     {
         $normalizar = function (string $s): string {
             $s = mb_strtolower($s);
@@ -56,7 +59,7 @@ class RotacaoFrasesIA
         }
 
         if (empty($janelasGeradas)) {
-            return;
+            return [];
         }
 
         $usadas = [];
@@ -74,6 +77,13 @@ class RotacaoFrasesIA
             }
         }
 
+        return array_unique($usadas);
+    }
+
+    public static function registrarUsadas(PDO $pdo, int $user_id, array $poolEnviado, string $textoGerado): void
+    {
+        $usadas = self::frasesFonteDetectadas($poolEnviado, $textoGerado);
+
         if (empty($usadas)) {
             return;
         }
@@ -81,7 +91,7 @@ class RotacaoFrasesIA
         $stmt = $pdo->prepare(
             "INSERT INTO frases_uso_recente_ia (user_id, texto) VALUES (:user_id, :texto)"
         );
-        foreach (array_unique($usadas) as $texto) {
+        foreach ($usadas as $texto) {
             $stmt->execute([':user_id' => $user_id, ':texto' => mb_substr($texto, 0, 500)]);
         }
 
