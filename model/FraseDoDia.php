@@ -824,7 +824,7 @@ class FraseDoDia
         // formato ser detectado corretamente - um mp3 com nome "audio.webm"
         // falha na transcrição.
         $nomeArquivo = "audio." . self::extensaoParaMime($mimeType);
-        $transcricaoResult = $transcribe->transcrever($caminhoAudio, $nomeArquivo, $mimeType);
+        $transcricaoResult = $transcribe->transcrever($caminhoAudio, $nomeArquivo, $mimeType, self::siglaIdioma($pdo, $idiomaNome));
 
         if ($transcricaoResult['erro']) {
             return ["success" => false, "message" => "Não foi possível transcrever o áudio: " . $transcricaoResult['mensagem']];
@@ -1135,6 +1135,16 @@ class FraseDoDia
         $idioma = $stmt->fetch(PDO::FETCH_ASSOC)['idioma'] ?? null;
 
         return $idioma ?: 'inglês';
+    }
+
+    // Mapeia o nome do idioma (ex: "Inglês") pra sigla ISO-639-1 (ex: "en") -
+    // hint pro Whisper na transcrição do áudio de resposta (ver comentário em
+    // OpenAiTranscribe::transcrever).
+    private static function siglaIdioma(PDO $pdo, string $nomeIdioma): ?string
+    {
+        $stmt = $pdo->prepare("SELECT sigla FROM idiomas WHERE idioma = :nome LIMIT 1");
+        $stmt->execute([':nome' => $nomeIdioma]);
+        return $stmt->fetch(PDO::FETCH_ASSOC)['sigla'] ?? null;
     }
 
     public static function getIdiomaNativo(PDO $pdo, int $user_id): string
