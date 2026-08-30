@@ -158,6 +158,11 @@ class TraducaoReversaOpenAI
 
         shuffle($phrases);
 
+        // Cópia antes de truncar por tamanho - usada só pra detectar quais
+        // frases foram de fato usadas depois (ver RotacaoFrasesIA), com o
+        // texto completo original.
+        $phrasesOriginais = $phrases;
+
         $maxTexto = self::limiteCaracteresPara($idiomaNativoNome, $nivelNome);
         $limiteGabarito = self::limiteTraducaoPara($idiomaAprendendoNome);
         $phrases = array_map(fn($p) => mb_substr($p, 0, $maxTexto), $phrases);
@@ -272,6 +277,10 @@ class TraducaoReversaOpenAI
 
         $stmt = $pdo->prepare("INSERT INTO traducao_reversa_ia (user_id, status_id, texto_nativo, texto_traduzido_gabarito) VALUES (:user_id, 0, :texto, :gabarito)");
         $stmt->execute([':user_id' => $user_id, ':texto' => $texto, ':gabarito' => $gabarito]);
+
+        // Marca quais frases do pool foram de fato usadas nesta geração,
+        // pra elas saírem de circulação por um tempo (ver RotacaoFrasesIA).
+        RotacaoFrasesIA::registrarUsadas($pdo, $user_id, $phrasesOriginais, $texto);
 
         return [
             "success" => true,

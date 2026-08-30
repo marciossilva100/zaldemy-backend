@@ -38,6 +38,7 @@ if (!isset($_ENV['OPEN_AI'])) {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/FraseDoDia.php';
+require_once '../model/RotacaoFrasesIA.php';
 require_once '../model/PlanoLimitado.php';
 require_once '../model/Nivel.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
