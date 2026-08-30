@@ -84,9 +84,10 @@ try {
     }
 
     // Buscar idiomas do usuário
-    $stmt = $pdo->prepare("SELECT 
+    $stmt = $pdo->prepare("SELECT
         I1.sigla AS idioma_aprender,
-        I2.sigla AS idioma_nativo
+        I2.sigla AS idioma_nativo,
+        I2.idioma AS idioma_nativo_nome
         FROM idioma_referencia IR
         LEFT JOIN idiomas I1 ON I1.id = IR.idioma_aprender
         LEFT JOIN idiomas I2 ON I2.id = IR.idioma_nativo
@@ -106,6 +107,7 @@ try {
     if (!$idioma_referencia) {
         $idioma_referencia = [
             "idioma_nativo" => null,
+            "idioma_nativo_nome" => null,
             "idioma_aprender" => null
         ];
     }
@@ -147,6 +149,11 @@ try {
             "categoria_ia_bloqueio" => $bloqueioCategoriaIA,
             "assinatura_cancelamento_previsto" => $usuario['assinatura_cancelamento_previsto'] ?? null,
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,
+            // Nome do idioma nativo (ex: "Português", "Inglês") - usado no
+            // front pra montar dinamicamente o rótulo "Palavra ou frase em
+            // {idioma}" no ModalFrase, que antes ficava fixo em português
+            // mesmo pra quem não tem português como nativo.
+            "native_language_name" => $idioma_referencia['idioma_nativo_nome'] ?? null,
             "learning_language" => $idioma_referencia['idioma_aprender'] ?? null
         ]
     ]);
