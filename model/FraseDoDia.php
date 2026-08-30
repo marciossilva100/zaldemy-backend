@@ -409,7 +409,14 @@ class FraseDoDia
             // em vez de confiar só na instrução.
             $temInterrogacao = mb_strpos($fraseCandidata, '?') !== false;
 
-            if (mb_strlen($fraseCandidata) >= $min && mb_strlen($fraseCandidata) <= $max && !$temInterrogacao) {
+            // O prompt já pede "no máximo 2 frases-fonte", mas isso é só uma
+            // instrução de linguagem natural - confirmado com 50 gerações
+            // reais que 16% delas ainda combinavam 3+ fontes, principalmente
+            // quando as frases do pool são do mesmo tema e "encaixam bem"
+            // juntas. Verifica de verdade em vez de confiar só na instrução.
+            $excedeuFontes = count(RotacaoFrasesIA::frasesFonteDetectadas($phrasesOriginais, $fraseCandidata)) > 2;
+
+            if (mb_strlen($fraseCandidata) >= $min && mb_strlen($fraseCandidata) <= $max && !$temInterrogacao && !$excedeuFontes) {
                 $frase = $fraseCandidata;
                 $traducao = self::truncarPreservandoPalavras($traducaoCandidata, $limiteTraducao);
                 break;

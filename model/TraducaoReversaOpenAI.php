@@ -263,7 +263,15 @@ class TraducaoReversaOpenAI
             $textoCandidato = trim((string) $decodificado['texto'], "\" \n\r\t");
             $gabaritoCandidato = trim((string) ($decodificado['traducao_gabarito'] ?? ''), "\" \n\r\t");
 
-            if (mb_strlen($textoCandidato) <= $maxTexto) {
+            // O prompt já pede "no máximo 2 frases-fonte", mas isso é só uma
+            // instrução de linguagem natural - confirmado com 50 gerações
+            // reais (Frase do Dia, mesmo prompt/pool) que 16% delas ainda
+            // combinavam 3+ fontes, principalmente quando as frases do pool
+            // são do mesmo tema e "encaixam bem" juntas. Verifica de verdade
+            // em vez de confiar só na instrução.
+            $excedeuFontes = count(RotacaoFrasesIA::frasesFonteDetectadas($phrasesOriginais, $textoCandidato)) > 2;
+
+            if (mb_strlen($textoCandidato) <= $maxTexto && !$excedeuFontes) {
                 $texto = $textoCandidato;
                 $gabarito = self::truncarPreservandoPalavras($gabaritoCandidato, $limiteGabarito);
                 break;
