@@ -280,33 +280,50 @@ class FraseDoDia
             // Efeito colateral descoberto depois (usuário reportou só ver
             // conteúdo de uma categoria específica): "prefira usar só 1
             // frase como base" fazia a IA ancorar quase sempre num tema só
-            // por geração, mesmo com frases de várias categorias
-            // disponíveis - testado com frases reais de 5 categorias, 8
-            // gerações: só 3 categorias apareceram. Trocado o padrão pra
-            // "combine quando for plausível" (testado de novo: mais
-            // categorias representadas), mantendo as mesmas travas de
-            // coerência (lugar/tempo/interlocutor) como exceção, não regra.
+            // por geração. Trocado pra "combine quando for plausível" - mas
+            // essa mudança ficou CONTRADITÓRIA com a instrução de tamanho
+            // (ver $systemPrompt abaixo), que dizia "nunca acrescente um
+            // segundo assunto sem relação" bem ao lado de "sempre que for
+            // plausível, combine temas diferentes" - duas instruções
+            // puxando o modelo pra direções opostas na mesma resposta.
+            // Resultado: o EXATO bug original voltou (usuário reportou de
+            // novo o mesmo exemplo "nasci no Brasil" + "amo computadores" +
+            // "entender como funciona" + "motivação" + "inspirar outros").
+            // Reconciliado com um teto numérico explícito (mesma técnica que
+            // funcionou em TraducaoReversaOpenAI::obterTexto): no máximo 2
+            // frases-fonte por frase, nunca 3+, e a instrução de tamanho
+            // (abaixo) e de mistura de categoria (aqui) agora dizem a MESMA
+            // coisa em vez de coisas opostas. Testado com o lote exato do
+            // bug reportado (17 gerações, ver commit) sem reproduzir mais o
+            // encadeamento de 3+ fatos soltos.
             : "Monte a frase usando trechos das frases que o aluno já estuda a seguir - elas são a matéria-prima "
-                . "principal da frase, não apenas uma referência solta de vocabulário. As frases vêm de temas "
-                . "variados do dia a dia do aluno - SEMPRE QUE FOR PLAUSÍVEL, combine trechos de frases de temas "
-                . "DIFERENTES dentro de uma mesma cena real (ex: uma situação sobre compras pode mencionar algo de "
-                . "saúde, tipo comprar remédio numa farmácia) - varie as fontes em vez de girar sempre em torno de "
-                . "uma frase só (ver instrução de tamanho "
-                . "acima), desde que a combinação faça sentido como uma cena real e coerente. Só use 1 frase só "
-                . "como base do tema central quando as frases disponíveis realmente não combinarem de forma "
-                . "natural - coerência sempre vem antes de quantidade de trechos, mas dentro do que for coerente, "
-                . "misturar mais de uma fonte é melhor que usar sempre só uma. O conteúdo (tema, ação, situação) "
-                . "tem que vir claramente do que está nessas frases, não de uma ideia nova inventada do zero. As "
+                . "principal da frase, não apenas uma referência solta de vocabulário. LIMITE RÍGIDO: NUNCA use "
+                . "trechos de mais de 2 frases-fonte diferentes na mesma frase final - mesmo que o aluno tenha "
+                . "várias frases de temas variados disponíveis, combine no máximo 2 delas, e só quando as duas "
+                . "realmente formarem uma cena real única (ex: uma situação sobre compras pode mencionar algo de "
+                . "saúde, tipo comprar remédio numa farmácia, antes de uma viagem). Se nenhum par de 2 frases "
+                . "combinar bem, use só 1 frase-fonte como base (nunca 0, nunca 3+) - coerência sempre vem antes de "
+                . "quantidade de trechos ou de variar categorias. O conteúdo (tema, ação, situação) tem que vir "
+                . "claramente do que está nessas frases, não de uma ideia nova inventada do zero. As "
                 . "frases do aluno vêm de conversas soltas e diferentes entre si - "
                 . "muitas só fazem sentido dentro do contexto original delas (ex: uma resposta a alguém específico, "
                 . "uma instrução dirigida a outra pessoa, um assunto que não tem nada a ver com outra frase da "
-                . "lista). NÃO encadeie temas/assuntos de vida diferentes (ex: onde nasceu + hobby + academia + "
-                . "objetivo de aprendizado + motivação + sonho futuro) numa lista de fatos colados por "
-                . "'e'/'porque'/'então' só pra somar caracteres - isso vira uma lista de fatos soltos sem lógica "
-                . "entre si, não uma frase natural. A frase final tem que soar como se fosse dita por UM narrador, "
-                . "sobre UMA única coisa que ele quer contar. Se um trecho só encaixar ajustando pessoa gramatical "
-                . "ou tempo verbal pra combinar com o resto, ajuste; se não der pra encaixar sem parecer forçado, "
-                . "não use esse trecho.";
+                . "lista). NUNCA encadeie 3 ou mais frases-fonte sobre assuntos de vida diferentes (ex: onde "
+                . "nasceu + hobby + academia + objetivo de aprendizado + motivação + sonho futuro) numa lista de "
+                . "fatos colados por 'e'/'porque'/'então' - isso é ERRADO mesmo que cada fato individual esteja "
+                . "gramaticalmente correto e mesmo que ajude a bater o tamanho pedido; vira uma lista de fatos "
+                . "soltos sem lógica entre si, não uma frase natural. CUIDADO ESPECIAL: quando as frases do aluno "
+                . "forem afirmações soltas sobre a vida/identidade dele (onde nasceu, do que gosta, no que "
+                . "trabalha, o que deseja), a tentação natural é escrever uma frase de AUTOAPRESENTAÇÃO "
+                . "encadeando várias delas com 'e' (ex: \"Nasci no Brasil e amo trabalhar com computadores, e "
+                . "estou tentando entender como funciona porque preciso de motivação para continuar e espero "
+                . "inspirar outras pessoas.\") - isso é o MESMO erro de listar fatos soltos, só disfarçado de "
+                . "gênero de texto válido. Escolha só 1 (ou, seguindo o limite acima, no máximo 2) desses fatos e "
+                . "elabore uma cena curta e específica em torno dele, em vez de listar quem a pessoa é. A frase "
+                . "final tem que soar como se fosse "
+                . "dita por UM narrador, sobre UMA única cena que ele quer contar. Se um trecho só encaixar "
+                . "ajustando pessoa gramatical ou tempo verbal pra combinar com o resto, ajuste; se não der pra "
+                . "encaixar sem parecer forçado, não use esse trecho.";
 
         $systemPrompt = "Você é um professor de idiomas escrevendo uma frase de exemplo em {$idiomaNome} pra um aluno "
             . "de nível {$nivelNome}. Ajuste o vocabulário e a complexidade gramatical da frase pro nível dele - "
@@ -318,11 +335,13 @@ class FraseDoDia
             . "REQUISITO MAIS IMPORTANTE: a frase precisa ter entre {$min} e {$max} caracteres, contando espaços e "
             . "pontuação - conte os caracteres mentalmente antes de responder e, se estiver fora dessa faixa, "
             . "reescreva até acertar. Frases curtas de uma oração só (tipo 'I like coffee.') SEMPRE ficam curtas "
-            . "demais. IMPORTANTE: pra chegar no tamanho certo, elabore com MAIS DETALHE sobre a MESMA ideia central "
-            . "(quando, onde, por quê, como a pessoa se sente, o que ela pretende fazer a respeito) - nunca "
-            . "acrescente um segundo assunto de vida sem relação nenhuma com o primeiro só pra ganhar caracteres. "
-            . "Uma frase mais longa mas sobre UMA coisa só é sempre melhor que uma frase no tamanho certo que "
-            . "mistura vários assuntos. A frase deve ser natural e do dia a dia, adequada pra um aluno ler em "
+            . "demais. IMPORTANTE: pra chegar no tamanho certo, a PRIMEIRA opção é sempre elaborar com MAIS "
+            . "DETALHE sobre a MESMA cena/ideia central (quando, onde, por quê, como a pessoa se sente, o que ela "
+            . "pretende fazer a respeito) - essa é a forma mais segura de crescer a frase sem perder coerência. "
+            . "Só recorra a combinar com uma 2ª frase-fonte (ver regra de limite mais abaixo) se elaborar detalhe "
+            . "não bastar pra atingir o tamanho, e nunca vá além dessas 2 frases-fonte só pra ganhar caracteres. "
+            . "Uma frase mais longa mas sobre UMA cena só é sempre melhor que uma frase no tamanho certo que "
+            . "mistura vários assuntos de vida sem relação. A frase deve ser natural e do dia a dia, adequada pra um aluno ler em "
             . "voz alta como exercício de pronúncia, e tem que ser inteiramente uma afirmação (declarativa) do "
             . "início ao fim - nenhuma oração dentro da frase pode ser uma pergunta, nem mesmo uma pergunta "
             . "retórica ou tag question (tipo 'certo?', 'não é?'); o texto final não pode conter nenhum ponto de "
