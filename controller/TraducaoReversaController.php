@@ -45,6 +45,10 @@ class TraducaoReversaController
     // gastaria tokens à toa pra quem tem centenas de frases.
     const MAX_FRASES_PROMPT = 50;
 
+    // Piso mínimo de frases garantidas por categoria elegível no pool
+    // enviado pra IA - ver balancearPorCategoria() abaixo.
+    const MINIMO_GARANTIDO_POR_CATEGORIA = 2;
+
     private $pdo;
     private $chat;
     private $chatGeracao;
@@ -261,26 +265,94 @@ class TraducaoReversaController
     // (diferente de Perguntas/Frase do Dia): o conteúdo tem que vir de
     // frases com id_treino >= 2 sempre, senão cai em conteúdo_insuficiente -
     // pedido explícito do usuário.
+    // A 1ª tentativa de corrigir isso (janela global maior, LIMIT 300) não
+    // bastava: ORDER BY id_treino DESC é aplicado ANTES do LIMIT pra tabela
+    // INTEIRA, não por categoria - se uma única categoria já tem, sozinha,
+    // mais itens no nível mais alto (id_treino=4) do que o tamanho da
+    // janela (caso real de produção: 1 categoria com 451 frases id_treino=4,
+    // outras 5 categorias em id_treino=2/3 com só 1-15 frases cada), a
+    // janela inteira é preenchida só por ela ANTES de qualquer categoria
+    // menor ter chance de entrar - não importa quão maior a janela seja.
+    // Corrigido de vez com ROW_NUMBER() OVER (PARTITION BY categoria_id...):
+    // cada categoria é rankeada (por id_treino DESC, RAND()) DENTRO DE SI
+    // MESMA, então o corte por rn <= N garante até N candidatos de CADA
+    // categoria elegível, não da tabela inteira - nenhuma categoria consegue
+    // mais "roubar o espaço" de outra na hora de montar os candidatos.
     private function getUserPhrases($user_id)
     {
-        $sql = "SELECT f.texto_nativo
-                FROM frases f
-                INNER JOIN idioma_referencia ir
-                    ON ir.idioma_nativo = f.idioma_nativo
-                    AND ir.idioma_aprender = f.idioma_aprendendo
-                    AND ir.id_user = :user_id
-                WHERE f.texto_nativo IS NOT NULL
-                AND f.usuario_id = :user_id
-                AND TRIM(f.texto_nativo) <> ''
-                AND f.status_id > 0
-                AND f.id_treino >= 2
-                ORDER BY f.id_treino DESC, RAND()
-                LIMIT " . self::MAX_FRASES_PROMPT;
+        $sql = "SELECT categoria_id, texto_nativo FROM (
+                    SELECT f.categoria_id, f.texto_nativo,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY f.categoria_id
+                            ORDER BY f.id_treino DESC, RAND()
+                        ) AS rn
+                    FROM frases f
+                    INNER JOIN idioma_referencia ir
+                        ON ir.idioma_nativo = f.idioma_nativo
+                        AND ir.idioma_aprender = f.idioma_aprendendo
+                        AND ir.id_user = :user_id
+                    WHERE f.texto_nativo IS NOT NULL
+                    AND f.usuario_id = :user_id
+                    AND TRIM(f.texto_nativo) <> ''
+                    AND f.status_id > 0
+                    AND f.id_treino >= 2
+                ) candidatos
+                WHERE rn <= " . self::MAX_FRASES_PROMPT;
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
 
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        return $this->balancearPorCategoria($stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    // Round-robin puro (testado antes) dava peso IGUAL pra toda categoria,
+    // não importa o tamanho - uma categoria de 5 frases valia o mesmo que
+    // uma de 455. Feedback do usuário: se uma categoria tem mais frases
+    // estudadas, é natural/esperado que ela contribua mais - o problema
+    // era só nenhuma categoria ficar em ZERO, não o volume ser desigual.
+    // Por isso: reserva um piso mínimo (MINIMO_GARANTIDO_POR_CATEGORIA) de
+    // cada categoria elegível pra garantir que nenhuma some, e preenche o
+    // resto por sorteio livre entre TODAS as frases restantes - aí sim a
+    // categoria maior naturalmente contribui mais, proporcional ao volume
+    // real dela. Categorias são embaralhadas antes de reservar o piso, e a
+    // reserva só é aplicada se ainda couber no limite total - protege
+    // contra o caso de muitas categorias pequenas (ex: dezenas de
+    // categorias de teste) tomando o pool inteiro só na garantia mínima.
+    private function balancearPorCategoria(array $linhas): array
+    {
+        $porCategoria = [];
+        foreach ($linhas as $linha) {
+            $porCategoria[$linha['categoria_id']][] = $linha['texto_nativo'];
+        }
+
+        $idsCategorias = array_keys($porCategoria);
+        shuffle($idsCategorias);
+
+        $reservadas = [];
+        $restante = [];
+
+        foreach ($idsCategorias as $categoriaId) {
+            $frasesCategoria = $porCategoria[$categoriaId];
+            shuffle($frasesCategoria);
+            $corte = min(count($frasesCategoria), self::MINIMO_GARANTIDO_POR_CATEGORIA);
+
+            if (count($reservadas) + $corte <= self::MAX_FRASES_PROMPT) {
+                $reservadas = array_merge($reservadas, array_slice($frasesCategoria, 0, $corte));
+                $restante = array_merge($restante, array_slice($frasesCategoria, $corte));
+            } else {
+                $restante = array_merge($restante, $frasesCategoria);
+            }
+        }
+
+        shuffle($restante);
+        $selecionadas = $reservadas;
+        $faltam = self::MAX_FRASES_PROMPT - count($selecionadas);
+
+        if ($faltam > 0) {
+            $selecionadas = array_merge($selecionadas, array_slice($restante, 0, $faltam));
+        }
+
+        return array_slice($selecionadas, 0, self::MAX_FRASES_PROMPT);
     }
 
     private function getIdiomaAprendendo($user_id): string
