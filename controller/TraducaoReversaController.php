@@ -30,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/TraducaoReversaOpenAI.php';
+require_once '../model/RotacaoFrasesIA.php';
 require_once '../model/PlanoLimitado.php';
 require_once '../model/Nivel.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
@@ -301,8 +302,25 @@ class TraducaoReversaController
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
+        $linhas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return $this->balancearPorCategoria($stmt->fetchAll(PDO::FETCH_ASSOC));
+        // Afasta do pool as frases usadas como fonte nas últimas gerações
+        // (dos 3 treinos de IA, ver RotacaoFrasesIA) - sem isso, frases de
+        // categorias pequenas cabem quase sempre no sorteio de 50 e a IA
+        // repete a mesma frase "fácil" toda vez que ela está disponível
+        // (confirmado com dados reais: 1 frase em 40% de 50 gerações). Só
+        // filtra se sobrar pelo menos 3 depois - com pouco vocabulário, é
+        // melhor repetir do que gerar sem matéria-prima nenhuma.
+        $excluir = array_flip(RotacaoFrasesIA::textosParaExcluir($this->pdo, $user_id));
+        $semRecentes = array_values(array_filter(
+            $linhas,
+            fn($linha) => !isset($excluir[$linha['texto_nativo']])
+        ));
+        if (count($semRecentes) >= 3) {
+            $linhas = $semRecentes;
+        }
+
+        return $this->balancearPorCategoria($linhas);
     }
 
     // Round-robin puro (testado antes) dava peso IGUAL pra toda categoria,

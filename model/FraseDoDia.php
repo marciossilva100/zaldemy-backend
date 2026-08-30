@@ -426,6 +426,10 @@ class FraseDoDia
         $stmt = $pdo->prepare("INSERT INTO frase_dia_ia (user_id, frase, frase_traducao, status_id) VALUES (:user_id, :frase, :traducao, 0)");
         $stmt->execute([':user_id' => $user_id, ':frase' => $frase, ':traducao' => $traducao]);
 
+        // Marca quais frases do pool foram de fato usadas nesta geração,
+        // pra elas saírem de circulação por um tempo (ver RotacaoFrasesIA).
+        RotacaoFrasesIA::registrarUsadas($pdo, $user_id, $phrasesOriginais, $frase);
+
         return [
             "success" => true,
             "id" => (int) $pdo->lastInsertId(),
@@ -1000,6 +1004,22 @@ class FraseDoDia
             $stmt->fetchAll(PDO::FETCH_ASSOC),
             fn($linha) => str_word_count($linha['texto_traduzido']) >= 3
         ));
+
+        // Afasta do pool as frases usadas como fonte nas últimas gerações
+        // (dos 3 treinos de IA, ver RotacaoFrasesIA) - sem isso, frases de
+        // categorias pequenas cabem quase sempre no sorteio de 50 e a IA
+        // repete a mesma frase "fácil" toda vez que ela está disponível
+        // (confirmado com dados reais: 1 frase em 36-40% de 50 gerações).
+        // Só filtra se sobrar pelo menos 3 depois - com pouco vocabulário,
+        // é melhor repetir do que gerar sem matéria-prima nenhuma.
+        $excluir = array_flip(RotacaoFrasesIA::textosParaExcluir($pdo, $user_id));
+        $semRecentes = array_values(array_filter(
+            $linhas,
+            fn($linha) => !isset($excluir[$linha['texto_traduzido']])
+        ));
+        if (count($semRecentes) >= 3) {
+            $linhas = $semRecentes;
+        }
 
         return self::balancearPorCategoria($linhas);
     }

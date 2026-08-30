@@ -359,6 +359,10 @@ class DailyQuestionOpenAI
         $stmt = $pdo->prepare("INSERT INTO perguntas_ia (user_id, status_id, question, question_traducao) VALUES (:user_id, 0, :question, :traducao)");
         $stmt->execute([':user_id' => $user_id, ':question' => $question, ':traducao' => $traducao]);
 
+        // Marca quais frases do pool foram de fato usadas nesta geração,
+        // pra elas saírem de circulação por um tempo (ver RotacaoFrasesIA).
+        RotacaoFrasesIA::registrarUsadas($pdo, $user_id, $phrasesOriginais, $question);
+
         return [
             "success" => true,
             "id" => (int) $pdo->lastInsertId(),
