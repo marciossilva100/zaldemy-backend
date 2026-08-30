@@ -425,6 +425,13 @@ class FraseDoDia
 
         $stmt = $pdo->prepare("INSERT INTO frase_dia_ia (user_id, frase, frase_traducao, status_id) VALUES (:user_id, :frase, :traducao, 0)");
         $stmt->execute([':user_id' => $user_id, ':frase' => $frase, ':traducao' => $traducao]);
+        // Captura o id JÁ AQUI - RotacaoFrasesIA::registrarUsadas() abaixo faz
+        // seu próprio INSERT/DELETE na mesma conexão, e lastInsertId() reflete
+        // só a última instrução executada (não a última que gerou auto-
+        // increment na sessão) - chamar lastInsertId() depois disso retornava
+        // 0 sempre que a rotação detectava alguma frase usada (confirmado
+        // isolado: INSERT->1, depois de um INSERT+DELETE em outra tabela->0).
+        $novoId = (int) $pdo->lastInsertId();
 
         // Marca quais frases do pool foram de fato usadas nesta geração,
         // pra elas saírem de circulação por um tempo (ver RotacaoFrasesIA).
@@ -432,7 +439,7 @@ class FraseDoDia
 
         return [
             "success" => true,
-            "id" => (int) $pdo->lastInsertId(),
+            "id" => $novoId,
             "frase" => $frase,
             "traducao" => $traducao,
             "frase_destacada" => self::destacarPalavrasConhecidas($frase, $phrasesOriginais, $idiomaNome),

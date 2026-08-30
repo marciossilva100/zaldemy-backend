@@ -277,6 +277,10 @@ class TraducaoReversaOpenAI
 
         $stmt = $pdo->prepare("INSERT INTO traducao_reversa_ia (user_id, status_id, texto_nativo, texto_traduzido_gabarito) VALUES (:user_id, 0, :texto, :gabarito)");
         $stmt->execute([':user_id' => $user_id, ':texto' => $texto, ':gabarito' => $gabarito]);
+        // Captura o id JÁ AQUI - ver comentário equivalente em
+        // FraseDoDia::obterFraseDoDia (lastInsertId() depois de
+        // registrarUsadas() retorna 0, confirmado isolado).
+        $novoId = (int) $pdo->lastInsertId();
 
         // Marca quais frases do pool foram de fato usadas nesta geração,
         // pra elas saírem de circulação por um tempo (ver RotacaoFrasesIA).
@@ -284,7 +288,7 @@ class TraducaoReversaOpenAI
 
         return [
             "success" => true,
-            "id" => (int) $pdo->lastInsertId(),
+            "id" => $novoId,
             "texto" => $texto,
         ];
     }
