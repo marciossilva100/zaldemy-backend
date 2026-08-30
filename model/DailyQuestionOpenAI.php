@@ -380,7 +380,14 @@ class DailyQuestionOpenAI
             "id" => $novoId,
             "question" => $question,
             "traducao" => $traducao,
-            "question_destacada" => self::destacarPalavrasConhecidas($question, $phrasesOriginais, $idiomaNome),
+            // Contra TODO o catálogo elegível do usuário, não só o pool de até
+            // 50 frases usado nesta geração - senão o destaque nunca marca
+            // palavra conhecida que só aparece em frases de fora do pool
+            // sorteado desta vez (mesmo catálogo já usado no ramo de
+            // pendência acima, em getPendente/$todasFrases - eram
+            // inconsistentes, reportado pelo usuário como "não mostra todas
+            // as palavras que já estudo").
+            "question_destacada" => self::destacarPalavrasConhecidas($question, self::getTodasFrasesElegiveis($pdo, $user_id), $idiomaNome),
         ];
     }
 

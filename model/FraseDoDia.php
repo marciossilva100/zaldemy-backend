@@ -449,7 +449,14 @@ class FraseDoDia
             "id" => $novoId,
             "frase" => $frase,
             "traducao" => $traducao,
-            "frase_destacada" => self::destacarPalavrasConhecidas($frase, $phrasesOriginais, $idiomaNome),
+            // Contra TODO o catálogo elegível do usuário, não só o pool de até
+            // 50 frases usado nesta geração - senão o destaque nunca marca
+            // palavra conhecida que só aparece em frases de fora do pool
+            // sorteado desta vez (mesmo catálogo já usado no ramo de
+            // pendência acima, em getPendente/$todasFrases - eram
+            // inconsistentes, reportado pelo usuário como "não mostra todas
+            // as palavras que já estudo").
+            "frase_destacada" => self::destacarPalavrasConhecidas($frase, self::getTodasFrasesElegiveis($pdo, $user_id), $idiomaNome),
         ];
     }
 
