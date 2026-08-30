@@ -979,7 +979,22 @@ class FraseDoDia
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
 
-        return self::balancearPorCategoria($stmt->fetchAll(PDO::FETCH_ASSOC));
+        // Mesmo filtro de DailyQuestionOpenAI/TraducaoReversaOpenAI (que já
+        // tinham isso, só FraseDoDia não tinha) - sem ele, uma categoria
+        // cheia de fragmentos/palavras soltas (ex: listas de vocabulário
+        // tipo "*Motivation", "don't give up" sem contexto) conta como
+        // "grande" no balanceamento por categoria sem oferecer matéria-prima
+        // usável de verdade - a IA acaba preterindo essa categoria mesmo
+        // tendo mais espaço reservado pra ela, porque não tem frase completa
+        // pra aproveitar (confirmado com dados reais de produção: categoria
+        // com 451 itens, 383 sem nem pontuação final, e a IA só usava ela em
+        // ~20% das gerações mesmo dominando o pool numericamente).
+        $linhas = array_values(array_filter(
+            $stmt->fetchAll(PDO::FETCH_ASSOC),
+            fn($linha) => str_word_count($linha['texto_traduzido']) >= 3
+        ));
+
+        return self::balancearPorCategoria($linhas);
     }
 
     // Agrupa por categoria (cada uma já vem ordenada por prioridade de
