@@ -73,12 +73,22 @@ class TraducaoReversaOpenAI
         return ["success" => false, "premium_necessario" => true, "message" => "Tradução Reversa por IA é um recurso exclusivo do plano Premium."];
     }
 
+    // Só considera pendente do PAR DE IDIOMAS ATUAL do usuário (JOIN com
+    // idioma_referencia) - sem isso, trocar de idioma aprendendo no mesmo
+    // dia continuava devolvendo o texto pendente antigo, gerado no idioma
+    // anterior, porque a tabela não guardava qual par de idiomas gerou
+    // cada linha (reportado: "treino permite acessar com frases em inglês
+    // mesmo com o idioma da Home setado pra outro").
     private static function getPendente(PDO $pdo, int $user_id): ?array
     {
-        $sql = "SELECT id, texto_nativo, texto_traduzido_gabarito, DATE(data_criacao) = CURDATE() AS eh_de_hoje
-                FROM traducao_reversa_ia
-                WHERE user_id = :user_id AND status_id = 0
-                ORDER BY id DESC LIMIT 1";
+        $sql = "SELECT f.id, f.texto_nativo, f.texto_traduzido_gabarito, DATE(f.data_criacao) = CURDATE() AS eh_de_hoje
+                FROM traducao_reversa_ia f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprender
+                    AND ir.id_user = :user_id
+                WHERE f.user_id = :user_id AND f.status_id = 0
+                ORDER BY f.id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -287,8 +297,14 @@ class TraducaoReversaOpenAI
             $gabarito = $gabaritoCandidato;
         }
 
-        $stmt = $pdo->prepare("INSERT INTO traducao_reversa_ia (user_id, status_id, texto_nativo, texto_traduzido_gabarito) VALUES (:user_id, 0, :texto, :gabarito)");
-        $stmt->execute([':user_id' => $user_id, ':texto' => $texto, ':gabarito' => $gabarito]);
+        // Grava junto o par de idiomas atual (via subquery em idioma_referencia)
+        // pra getPendente() conseguir filtrar por ele depois - ver comentário lá.
+        $stmt = $pdo->prepare("
+            INSERT INTO traducao_reversa_ia (user_id, status_id, texto_nativo, texto_traduzido_gabarito, idioma_nativo, idioma_aprender)
+            SELECT :user_id, 0, :texto, :gabarito, ir.idioma_nativo, ir.idioma_aprender
+            FROM idioma_referencia ir WHERE ir.id_user = :user_id2
+        ");
+        $stmt->execute([':user_id' => $user_id, ':texto' => $texto, ':gabarito' => $gabarito, ':user_id2' => $user_id]);
         // Captura o id JÁ AQUI - ver comentário equivalente em
         // FraseDoDia::obterFraseDoDia (lastInsertId() depois de
         // registrarUsadas() retorna 0, confirmado isolado).

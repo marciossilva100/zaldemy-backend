@@ -151,12 +151,23 @@ class FraseDoDia
     // ficar bloqueando a geração da frase nova do premium pra sempre. Pro
     // limitado isso nunca chega a importar aqui: uma pendência de dia
     // anterior já é barrada antes, em verificarAcesso() (temPendenteExpirada).
+    // Só considera pendente do PAR DE IDIOMAS ATUAL do usuário (JOIN com
+    // idioma_referencia) - sem isso, trocar de idioma aprendendo no mesmo
+    // dia (ex: inglês -> lituano) continuava devolvendo a frase pendente
+    // antiga, gerada no idioma anterior, porque a tabela não guardava qual
+    // par de idiomas gerou cada linha (reportado: "treino permite acessar
+    // com frases em inglês mesmo com o idioma da Home setado pra outro").
     private static function getPendente(PDO $pdo, int $user_id): ?array
     {
-        $sql = "SELECT id, frase, frase_traducao FROM frase_dia_ia
-                WHERE user_id = :user_id AND status_id = 0
-                  AND DATE(data_criacao) = CURDATE()
-                ORDER BY id DESC LIMIT 1";
+        $sql = "SELECT f.id, f.frase, f.frase_traducao
+                FROM frase_dia_ia f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprender
+                    AND ir.id_user = :user_id
+                WHERE f.user_id = :user_id AND f.status_id = 0
+                  AND DATE(f.data_criacao) = CURDATE()
+                ORDER BY f.id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -434,8 +445,14 @@ class FraseDoDia
             $traducao = $traducaoCandidata;
         }
 
-        $stmt = $pdo->prepare("INSERT INTO frase_dia_ia (user_id, frase, frase_traducao, status_id) VALUES (:user_id, :frase, :traducao, 0)");
-        $stmt->execute([':user_id' => $user_id, ':frase' => $frase, ':traducao' => $traducao]);
+        // Grava junto o par de idiomas atual (via subquery em idioma_referencia)
+        // pra getPendente() conseguir filtrar por ele depois - ver comentário lá.
+        $stmt = $pdo->prepare("
+            INSERT INTO frase_dia_ia (user_id, frase, frase_traducao, status_id, idioma_nativo, idioma_aprender)
+            SELECT :user_id, :frase, :traducao, 0, ir.idioma_nativo, ir.idioma_aprender
+            FROM idioma_referencia ir WHERE ir.id_user = :user_id2
+        ");
+        $stmt->execute([':user_id' => $user_id, ':frase' => $frase, ':traducao' => $traducao, ':user_id2' => $user_id]);
         // Captura o id JÁ AQUI - RotacaoFrasesIA::registrarUsadas() abaixo faz
         // seu próprio INSERT/DELETE na mesma conexão, e lastInsertId() reflete
         // só a última instrução executada (não a última que gerou auto-
