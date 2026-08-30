@@ -939,26 +939,105 @@ class FraseDoDia
         return $frases;
     }
 
+    // A 1ª tentativa de corrigir isso (janela global maior, LIMIT 300) não
+    // bastava: ORDER BY id_treino DESC é aplicado ANTES do LIMIT pra tabela
+    // INTEIRA, não por categoria - se uma única categoria já tem, sozinha,
+    // mais itens no nível mais alto (id_treino=4) do que o tamanho da
+    // janela (caso real de produção: 1 categoria com 451 frases id_treino=4,
+    // outras 5 categorias em id_treino=2/3 com só 1-15 frases cada), a
+    // janela inteira é preenchida só por ela ANTES de qualquer categoria
+    // menor ter chance de entrar - não importa quão maior a janela seja.
+    // Corrigido de vez com ROW_NUMBER() OVER (PARTITION BY categoria_id...):
+    // cada categoria é rankeada (por id_treino DESC, RAND()) DENTRO DE SI
+    // MESMA, então o corte por rn <= N garante até N candidatos de CADA
+    // categoria elegível, não da tabela inteira - nenhuma categoria consegue
+    // mais "roubar o espaço" de outra na hora de montar os candidatos.
+    // Testado com dados reais (6 categorias elegíveis, uma com 451 frases
+    // em id_treino=4 e as outras 5 com 1-15 frases em id_treino=2/3): antes,
+    // só 2 das 6 apareciam nos candidatos; depois, as 6.
     private static function buscarFrasesPorEstagio(PDO $pdo, int $user_id, bool $exigirTreinoMinimo): array
     {
-        $sql = "SELECT f.texto_traduzido
-                FROM frases f
-                INNER JOIN idioma_referencia ir
-                    ON ir.idioma_nativo = f.idioma_nativo
-                    AND ir.idioma_aprender = f.idioma_aprendendo
-                    AND ir.id_user = :user_id
-                WHERE f.texto_traduzido IS NOT NULL
-                AND f.usuario_id = :user_id
-                AND TRIM(f.texto_nativo) <> ''
-                AND f.status_id > 0"
-                . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "") . "
-                ORDER BY f.id_treino DESC, RAND()
-                LIMIT " . self::MAX_FRASES_PROMPT;
+        $sql = "SELECT categoria_id, texto_traduzido FROM (
+                    SELECT f.categoria_id, f.texto_traduzido,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY f.categoria_id
+                            ORDER BY f.id_treino DESC, RAND()
+                        ) AS rn
+                    FROM frases f
+                    INNER JOIN idioma_referencia ir
+                        ON ir.idioma_nativo = f.idioma_nativo
+                        AND ir.idioma_aprender = f.idioma_aprendendo
+                        AND ir.id_user = :user_id
+                    WHERE f.texto_traduzido IS NOT NULL
+                    AND f.usuario_id = :user_id
+                    AND TRIM(f.texto_nativo) <> ''
+                    AND f.status_id > 0"
+                    . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "") . "
+                ) candidatos
+                WHERE rn <= " . self::MAX_FRASES_PROMPT;
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
 
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        return self::balancearPorCategoria($stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    // Agrupa por categoria (cada uma já vem ordenada por prioridade de
+    // treino, graças ao ORDER BY da query acima) e intercala 1 frase de
+    // cada categoria por volta, até bater o limite final - garante que
+    // nenhuma categoria domine o pool só por ter mais frases (ou frases
+    // mais adiantadas no treino) que as outras. Mesmo algoritmo de
+    // TiroCerteiro::buscarFrasesPorEstagio.
+    // Round-robin puro (testado antes) dava peso IGUAL pra toda categoria,
+    // não importa o tamanho - uma categoria de 5 frases valia o mesmo que
+    // uma de 455. Feedback do usuário: se uma categoria tem mais frases
+    // estudadas, é natural/esperado que ela contribua mais - o problema
+    // era só nenhuma categoria ficar em ZERO, não o volume ser desigual.
+    // Por isso: reserva um piso mínimo (MINIMO_GARANTIDO_POR_CATEGORIA) de
+    // cada categoria elegível pra garantir que nenhuma some, e preenche o
+    // resto por sorteio livre entre TODAS as frases restantes - aí sim a
+    // categoria maior naturalmente contribui mais, proporcional ao volume
+    // real dela. Categorias são embaralhadas antes de reservar o piso, e a
+    // reserva só é aplicada se ainda couber no limite total - protege
+    // contra o caso de muitas categorias pequenas (ex: dezenas de
+    // categorias de teste) tomando o pool inteiro só na garantia mínima.
+    const MINIMO_GARANTIDO_POR_CATEGORIA = 2;
+
+    private static function balancearPorCategoria(array $linhas): array
+    {
+        $porCategoria = [];
+        foreach ($linhas as $linha) {
+            $porCategoria[$linha['categoria_id']][] = $linha['texto_traduzido'];
+        }
+
+        $idsCategorias = array_keys($porCategoria);
+        shuffle($idsCategorias);
+
+        $reservadas = [];
+        $restante = [];
+
+        foreach ($idsCategorias as $categoriaId) {
+            $frasesCategoria = $porCategoria[$categoriaId];
+            shuffle($frasesCategoria);
+            $corte = min(count($frasesCategoria), self::MINIMO_GARANTIDO_POR_CATEGORIA);
+
+            if (count($reservadas) + $corte <= self::MAX_FRASES_PROMPT) {
+                $reservadas = array_merge($reservadas, array_slice($frasesCategoria, 0, $corte));
+                $restante = array_merge($restante, array_slice($frasesCategoria, $corte));
+            } else {
+                $restante = array_merge($restante, $frasesCategoria);
+            }
+        }
+
+        shuffle($restante);
+        $selecionadas = $reservadas;
+        $faltam = self::MAX_FRASES_PROMPT - count($selecionadas);
+
+        if ($faltam > 0) {
+            $selecionadas = array_merge($selecionadas, array_slice($restante, 0, $faltam));
+        }
+
+        return array_slice($selecionadas, 0, self::MAX_FRASES_PROMPT);
     }
 
     // Usado só pra recalcular o destaque de uma frase PENDENTE (já gerada,
