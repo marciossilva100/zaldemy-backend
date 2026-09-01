@@ -322,6 +322,11 @@ class DailyQuestionOpenAI
             . "menção de como/por que você combinou as frases. "
             . "Máximo {$maxPergunta} caracteres na "
             . "pergunta. Não use aspas. "
+            . "Produza também a tradução dela em {$idiomaNativoNome} (campo \"traducao\") - natural e "
+            . "idiomática, não literal palavra por palavra, mas fiel ao sentido. CUIDADO: mantenha a MESMA "
+            . "pessoa gramatical em TODOS os verbos da tradução, sem trocar no meio por engano (ex: uma pergunta "
+            . "toda na 2ª pessoa não pode ter um verbo isolado conjugado na 3ª pessoa). Revise cada verbo da "
+            . "tradução antes de responder. "
             . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
 
         // A IA nem sempre respeita o limite de caracteres à primeira tentativa -
