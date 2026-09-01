@@ -24,10 +24,17 @@ class Treino {
 
         global $pdo;
 
-        // if (empty($this->updatedList)) {
-
-        //     return false;
-        // }
+        // Sem isso, updatedList vazio virava "WHERE id IN ()" - erro de
+        // sintaxe SQL (já causou uma tela inteira nunca gravar id_treino
+        // direito, sem erro visível pro usuário - ver comentário em
+        // controller/treino.php sobre o bug do Emparelhar). Guarda
+        // existia comentada, nunca tinha sido ativada.
+        if (empty($this->updatedList)) {
+            return [
+                'success' => false,
+                'message' => 'Nenhuma frase informada',
+            ];
+        }
 
         try {
 
@@ -301,13 +308,19 @@ class Treino {
 
     }
 
+    // Grava métricas em lote (acertos + erros de uma sessão inteira, ex:
+    // Emparelhar) numa INSERT só. Método nunca tinha sido chamado por
+    // ninguém até essa correção - estava incompleto: dava commit() numa
+    // transação que ele mesmo nunca abria (PDOException "no active
+    // transaction" sempre que alguém tentasse usar), sem try/catch nem
+    // retorno. Reescrito autocontido, mesmo padrão de treino()/
+    // retornarTreino().
     public function metricas($user_id){
 
         global $pdo;
 
-            // =========================
-            // 3️⃣ INSERT MÉTRICAS
-            // =========================
+        try {
+            $pdo->beginTransaction();
 
             // junta tudo (acertos + erros)
             $placeholdersMetricas = [];
@@ -342,6 +355,16 @@ class Treino {
 
             $pdo->commit();
 
+            return ['success' => true];
+
+        } catch (Exception $e) {
+            $pdo->rollBack();
+
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+            ];
+        }
     }
 
 
