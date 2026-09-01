@@ -90,8 +90,28 @@ class PushNotification
 
                 if ($report->isSubscriptionExpired()) {
                     self::removerSubscriptionPorId($pdo, (int) $sub['id']);
+                } elseif (!$report->isSuccess()) {
+                    // Falha que NÃO é expiração (ex: chave VAPID divergindo
+                    // da usada na hora do subscribe, payload rejeitado,
+                    // erro do provedor) - antes isso desaparecia sem deixar
+                    // rastro nenhum. Loga pro push.log do cron (ver
+                    // crontab em cron/enviar_notificacoes_push.php) pra dar
+                    // pra investigar sem precisar reproduzir manualmente.
+                    error_log(sprintf(
+                        '[push] falha não-expirada user_id=%d sub_id=%d motivo=%s endpoint=%s',
+                        $user_id,
+                        (int) $sub['id'],
+                        $report->getReason(),
+                        parse_url($sub['endpoint'], PHP_URL_HOST) ?: '?'
+                    ));
                 }
             } catch (\Throwable $e) {
+                error_log(sprintf(
+                    '[push] exceção ao enviar user_id=%d sub_id=%d: %s',
+                    $user_id,
+                    (int) $sub['id'],
+                    $e->getMessage()
+                ));
                 self::removerSubscriptionPorId($pdo, (int) $sub['id']);
             }
         }
