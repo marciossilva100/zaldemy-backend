@@ -304,7 +304,7 @@ try {
         // =========================
         // 🎧 HEADERS DE ÁUDIO
         // =========================
-        header("Content-Type: audio/mpeg");
+        header("Content-Type: audio/wav");
         header("Content-Length: " . strlen($result["audio"]));
         header("Accept-Ranges: bytes");
 
