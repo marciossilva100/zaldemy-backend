@@ -95,6 +95,41 @@ try {
 
     if ($action === 'review' || $action === 'trainee_finish' || $action === 'learn') {
 
+        // Emparelhar.jsx manda um LOTE inteiro de frases de uma sessão de
+        // uma vez só, já separadas em corretas/incorretas (updatedList/
+        // updatedIncorrectList) - formato diferente do usado por
+        // Flashcards/DigitarTexto (1 frase por vez via frase_id +
+        // statusCorrectPhrase). Bug real encontrado: Emparelhar mandava só
+        // "updatedList" com TODAS as frases (sem separar corretas/
+        // incorretas) e sem "frase_id"/"statusCorrectPhrase" - o backend só
+        // lia "frase_id" (inexistente nesse payload), então updatedList
+        // ficava vazio, o UPDATE quebrava com erro de sintaxe SQL (IN vazio)
+        // e metricasFrase() lançava exceção não capturada (acertou NULL) -
+        // ou seja, essa tela nunca gravou nada corretamente. Corrigido
+        // detectando esse formato de lote e usando Treino::metricas()
+        // (método que já existia pronto pra isso, só nunca era chamado).
+        if (isset($input['updatedList']) || isset($input['updatedIncorrectList'])) {
+            $listaAcertos = $input['updatedList'] ?? [];
+            $listaErros = $input['updatedIncorrectList'] ?? [];
+            $treino->category_id = $input['category_id'] ?? null;
+
+            if (!empty($listaAcertos)) {
+                $treino->updatedList = $listaAcertos;
+                $treino->treino(4, $user_id);
+            }
+            if (!empty($listaErros)) {
+                $treino->updatedList = $listaErros;
+                $treino->treino(1, $user_id);
+            }
+
+            $treino->updatedList = $listaAcertos;
+            $treino->updatedIncorrectList = $listaErros;
+            $treino->metricas($user_id);
+
+            echo json_encode(['success' => true]);
+            exit;
+        }
+
         $treino->acerto = $input['statusCorrectPhrase'];
 
         $tipo_treino = 2;
