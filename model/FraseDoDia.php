@@ -912,6 +912,10 @@ class FraseDoDia
             . "na divergência da transcrição) e fluência normalmente. "
             . "Dê nota de 0 a 10 e feedback curto (máx 150 caracteres cada campo) em {$idiomaNativoNome}, gentil e "
             . "específico. "
+            . "REVISÃO FINAL antes de responder: os 3 campos de feedback têm que estar INTEIRAMENTE em "
+            . "{$idiomaNativoNome} do início ao fim - a única exceção é citar literalmente um trecho da "
+            . "transcrição do aluno como exemplo do erro; NUNCA escreva a explicação em si (a parte que você está "
+            . "dizendo, não citando) em {$idiomaNome} ou em qualquer outro idioma. "
             . 'Responda em JSON: {"nota": 0-10, "feedback_gramatica": "...", "feedback_pronuncia": "...", "feedback_fluencia": "..."}';
 
         $correcaoResult = $chat->completar([
