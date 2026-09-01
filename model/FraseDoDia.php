@@ -379,6 +379,13 @@ class FraseDoDia
             . "O campo \"frase\" tem que conter SÓ a frase final em si, ESCRITA INTEIRAMENTE EM {$idiomaNome} do "
             . "início ao fim (nunca troque de idioma no meio nem responda em outro idioma) - nunca inclua "
             . "comentários, explicações ou qualquer menção de como/por que você combinou as frases do aluno. "
+            . "Produza também a tradução dela em {$idiomaNativoNome} (campo \"traducao\") - natural e idiomática, "
+            . "não literal palavra por palavra, mas fiel ao sentido. CUIDADO: mantenha a MESMA pessoa gramatical "
+            . "(narrador) em TODOS os verbos da tradução, sem trocar no meio - se a frase original é toda narrada "
+            . "em primeira pessoa (\"I slice... I taste... I clean\"), a tradução tem que estar inteira em "
+            . "primeira pessoa também (\"eu fatio... eu provo... eu limpo\"), nunca um verbo isolado indo pra "
+            . "outra pessoa/conjugação por engano (ex: \"eu fatiou\" está ERRADO - é 3ª pessoa misturada numa "
+            . "frase em 1ª pessoa; o certo é \"eu fatiei\"). Revise cada verbo da tradução antes de responder. "
             . 'Responda em JSON: {"frase": "...", "traducao": "..."}';
 
         $userContent = "Frases que o aluno já estuda:\n" . $phrasesText;
