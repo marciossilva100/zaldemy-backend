@@ -1,9 +1,15 @@
 <?php
 
-// "Melhorar com IA": diferente do botão gratuito de sugestão (Google Translate,
-// tradução literal instantânea), esse usa o modelo de linguagem pra sugerir uma
-// tradução mais natural/idiomática, como um nativo diria - recurso exclusivo
-// do plano Premium (Limitado não tem mais amostra grátis disso).
+require_once __DIR__ . '/PlanoLimitado.php';
+
+// "Melhorar com IA": diferente do botão de sugestão gratuita (Google
+// Translate, tradução literal instantânea - desativado, ver comentário em
+// ModalFrase.jsx), esse usa o modelo de linguagem pra sugerir uma tradução
+// mais natural/idiomática, como um nativo diria. Premium tem teto diário
+// (LIMITE_DIARIO_PREMIUM); Limitado ganhou de volta uma amostra vitalícia
+// (PlanoLimitado::LIMITE_MELHORAR_TRADUCAO_VITALICIO - mesma constante que
+// conta pro rebaixamento automático, fonte única em vez de duplicar o
+// número aqui) - free não tem acesso.
 class TraducaoIA
 {
     const LIMITE_DIARIO_PREMIUM = 20;
@@ -12,6 +18,16 @@ class TraducaoIA
     {
         $sql = "SELECT COUNT(*) as total FROM traducao_ia_uso
                 WHERE user_id = :user_id AND DATE(data_criacao) = CURDATE()";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    }
+
+    // Sem filtro de data - é o total vitalício, não o de hoje (usado só pelo
+    // Limitado, que tem teto vitalício em vez de diário).
+    public static function contarTotal(PDO $pdo, int $user_id): int
+    {
+        $sql = "SELECT COUNT(*) as total FROM traducao_ia_uso WHERE user_id = :user_id";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
@@ -28,6 +44,13 @@ class TraducaoIA
         if ($plano === 1) {
             if (self::contarHoje($pdo, $user_id) >= self::LIMITE_DIARIO_PREMIUM) {
                 return ["success" => false, "limite_atingido" => true, "message" => "Você já usou " . self::LIMITE_DIARIO_PREMIUM . " melhorias de tradução com IA hoje. Volte amanhã!"];
+            }
+            return null;
+        }
+
+        if ($plano === 3) {
+            if (self::contarTotal($pdo, $user_id) >= PlanoLimitado::LIMITE_MELHORAR_TRADUCAO_VITALICIO) {
+                return ["success" => false, "limite_atingido" => true, "message" => "Você já usou suas " . PlanoLimitado::LIMITE_MELHORAR_TRADUCAO_VITALICIO . " melhorias de tradução com IA gratuitas. Assine o Premium pra continuar usando."];
             }
             return null;
         }
