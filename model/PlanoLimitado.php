@@ -12,9 +12,9 @@
 // Perguntas e os jogos Chuva de Frases e Tiro Certeiro NÃO entram aqui -
 // viraram teto diário (não vitalício, ver DailyQuestionOpenAI/
 // JogoChuvaFrases/TiroCerteiro), então nunca "esgotam de vez" e não devem
-// contar pra esse rebaixamento. Melhorar tradução com IA também não entra -
-// virou recurso exclusivo do Premium, Limitado nunca teve acesso a ela
-// (ver TraducaoIA::verificarAcesso).
+// contar pra esse rebaixamento. Melhorar tradução com IA entra normalmente
+// desde que o Limitado ganhou de volta uma amostra vitalícia dela (ver
+// TraducaoIA::verificarAcesso).
 //
 // Ferramenta nunca tentada (uso = 0) não conta contra o usuário - só entra
 // na conta quem ele já usou pelo menos uma vez. Ferramenta tentada mas com
@@ -30,6 +30,7 @@ class PlanoLimitado
     const LIMITE_AUDIO_VITALICIO = 10;
     const LIMITE_FRASE_DIA_VITALICIO = 1;
     const LIMITE_CATEGORIA_IA_VITALICIO = 1;
+    const LIMITE_MELHORAR_TRADUCAO_VITALICIO = 5;
     const MIN_FERRAMENTAS_TENTADAS = 3;
 
     private static function contar(PDO $pdo, string $tabela, int $user_id): int
@@ -52,6 +53,7 @@ class PlanoLimitado
             [self::contar($pdo, 'audio_ia_uso', $user_id), self::LIMITE_AUDIO_VITALICIO],
             [self::contarComStatus($pdo, 'frase_dia_ia', $user_id), self::LIMITE_FRASE_DIA_VITALICIO],
             [self::contar($pdo, 'categoria_ia_uso', $user_id), self::LIMITE_CATEGORIA_IA_VITALICIO],
+            [self::contar($pdo, 'traducao_ia_uso', $user_id), self::LIMITE_MELHORAR_TRADUCAO_VITALICIO],
         ];
 
         $ferramentasTentadas = 0;
