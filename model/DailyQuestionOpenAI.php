@@ -891,6 +891,10 @@ class DailyQuestionOpenAI
             . "\"incompleta\"/sem frase completa, avalie normalmente o conteúdo. Se estiver no idioma certo, avalie "
             . "se responde à pergunta e sua qualidade. {$focoAvaliacao} Dê nota de 0 "
             . "a 10, se está correto, e explique os principais erros em {$idiomaNativoNome} (máx 200 caracteres). "
+            . "REVISÃO FINAL antes de responder: o campo \"feedback\" tem que estar INTEIRAMENTE em "
+            . "{$idiomaNativoNome} do início ao fim - a única exceção é citar literalmente um trecho da resposta "
+            . "do aluno como exemplo do erro; NUNCA escreva a explicação em si (a parte que você está dizendo, "
+            . "não citando) em {$idiomaNome} ou em qualquer outro idioma. "
             . 'Responda em JSON: {"nota": 0-10, "correto": true ou false, "feedback": "..."}';
 
         $correcaoResult = $chat->completar([
