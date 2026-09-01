@@ -32,8 +32,9 @@ class OpenAiTts {
         $speed = max(0.25, min(4.0, $speed));
 
         // 🔥 gera hash único - inclui voz e velocidade pra não misturar áudios diferentes
+        // .wav (não .mp3) - ver response_format abaixo.
         $hash = md5($texto . $idioma . $voice . $speed);
-        $file = $this->cacheDir . $hash . ".mp3";
+        $file = $this->cacheDir . $hash . ".wav";
 
         // =========================
         // 🔥 CACHE HIT
@@ -55,7 +56,15 @@ class OpenAiTts {
             "model" => $this->model,
             "input" => $texto,
             "voice" => $voice,
-            "response_format" => "mp3",
+            // wav (não mp3) - usuário reportou áudio cortado na metade no
+            // Safari/iOS. MP3 gerado on-the-fly não tem cabeçalho VBR/Xing
+            // completo, e o decodificador do Safari às vezes "acha" que o
+            // áudio acabou antes da hora (confirmado que a geração em si
+            // estava completa - transcrevi o mp3 de volta e batia 100% com
+            // o texto original, então não era truncamento na origem). WAV
+            // não tem essa ambiguidade de duração - funciona igual em
+            // qualquer navegador/SO, ao custo de arquivo bem maior.
+            "response_format" => "wav",
             "speed" => $speed
         ];
 
