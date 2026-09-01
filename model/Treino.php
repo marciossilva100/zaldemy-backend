@@ -6,6 +6,7 @@ class Treino {
     // Usados em retornarTreino() - ver comentário lá.
     const MAX_TENTATIVAS_RECENTES_RETORNO = 5;
     const MIN_TENTATIVAS_PARA_EXTREMOS = 2;
+    const PRAZO_DIAS_PRIMEIRA_VEZ = 3;
 
     public $category_id;
     public $id_frase = array(); // array de ids
@@ -168,6 +169,25 @@ class Treino {
         // de tentativas antes de confiar nos extremos (>=70%/<30%) - uma
         // única resposta (certa ou errada) não deveria travar a frase num
         // prazo extremo por acaso.
+        //
+        // EXCEÇÃO antes de tudo isso: a promoção pra id_treino=4 acontece
+        // com 1 único acerto (mesmo vindo direto do id_treino=1) - taxa de
+        // acerto recente não consegue distinguir "acabei de aprender, ainda
+        // frágil" de "domino isso há meses", porque as duas situações têm
+        // uma resposta certa bem recente (foi o que causou a promoção).
+        // Confirmado com dado real: 0 de 21 frases recém-promovidas pela
+        // primeira vez ficou com média abaixo de 30% nas últimas tentativas
+        // - o critério de acerto nunca pegaria esse caso. Por isso, na 1ª
+        // vez que a frase chega em id_treino=4 (nenhum ciclo completo de
+        // esquecer-e-reconfirmar ainda), o prazo é fixo, ignora acerto. Da
+        // 2ª vez em diante, a frase já sobreviveu a pelo menos 1 ciclo real
+        // de decaimento e reconfirmação - prova de retenção mais forte que
+        // resposta recente - e cai na lógica normal de acerto abaixo.
+        $stmtVezesMemorizada = $pdo->prepare("
+            SELECT COUNT(*) FROM treino_data_atualizacao
+            WHERE id_frase = ? AND id_treino = 4
+        ");
+
         $stmtUltimasTentativas = $pdo->prepare("
             SELECT acertou FROM metricas
             WHERE frase_id = ? AND user_id = ?
@@ -179,20 +199,27 @@ class Treino {
         $dados = [];
 
         foreach ($candidatas as $candidata) {
-            $stmtUltimasTentativas->execute([$candidata['id_frase'], $user_id]);
-            $tentativas = $stmtUltimasTentativas->fetchAll(PDO::FETCH_COLUMN);
+            $stmtVezesMemorizada->execute([$candidata['id_frase']]);
+            $vezesMemorizada = (int) $stmtVezesMemorizada->fetchColumn();
 
-            $totalTentativas = count($tentativas);
-            $mediaAcertos = $totalTentativas > 0 ? array_sum($tentativas) / $totalTentativas : 0;
-
-            if ($totalTentativas < self::MIN_TENTATIVAS_PARA_EXTREMOS) {
-                $prazoDias = 7;
-            } elseif ($mediaAcertos >= 0.7) {
-                $prazoDias = 15;
-            } elseif ($mediaAcertos < 0.3) {
-                $prazoDias = 3;
+            if ($vezesMemorizada <= 1) {
+                $prazoDias = self::PRAZO_DIAS_PRIMEIRA_VEZ;
             } else {
-                $prazoDias = 7;
+                $stmtUltimasTentativas->execute([$candidata['id_frase'], $user_id]);
+                $tentativas = $stmtUltimasTentativas->fetchAll(PDO::FETCH_COLUMN);
+
+                $totalTentativas = count($tentativas);
+                $mediaAcertos = $totalTentativas > 0 ? array_sum($tentativas) / $totalTentativas : 0;
+
+                if ($totalTentativas < self::MIN_TENTATIVAS_PARA_EXTREMOS) {
+                    $prazoDias = 7;
+                } elseif ($mediaAcertos >= 0.7) {
+                    $prazoDias = 15;
+                } elseif ($mediaAcertos < 0.3) {
+                    $prazoDias = 3;
+                } else {
+                    $prazoDias = 7;
+                }
             }
 
             $vence = new DateTime($candidata['ultima_data']);
