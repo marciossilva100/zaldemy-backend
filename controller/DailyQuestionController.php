@@ -33,6 +33,7 @@ require_once '../model/DailyQuestionOpenAI.php';
 require_once '../model/RotacaoFrasesIA.php';
 require_once '../model/PlanoLimitado.php';
 require_once '../model/Nivel.php';
+require_once '../model/DuvidaPerguntaIA.php';
 require_once __DIR__ . '/../api/OpenAiChat.php';
 require_once __DIR__ . '/../api/OpenAiTranscribe.php';
 require_once 'moderation.php';
@@ -267,6 +268,61 @@ class DailyQuestionController
         }
     }
 
+    /* ===============================
+       GET → HISTÓRICO DO CHAT DE DÚVIDA (reabrir a tela não perde o que já foi perguntado)
+    =============================== */
+    public function duvidaHistoricoRoute()
+    {
+        try {
+            $user_id = $this->getUserId();
+            $perguntaId = (int) ($_GET['question_id'] ?? 0);
+
+            if (!$perguntaId) {
+                throw new Exception('question_id obrigatório.');
+            }
+
+            $historico = DuvidaPerguntaIA::listarHistorico($this->pdo, $perguntaId, $user_id);
+            $usadas = DuvidaPerguntaIA::contarMensagensUsuario($this->pdo, $perguntaId, $user_id);
+
+            $this->json([
+                'success' => true,
+                'historico' => $historico,
+                'mensagens_restantes' => DuvidaPerguntaIA::MAX_MENSAGENS_USUARIO - $usadas,
+            ]);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
+    }
+
+    /* ===============================
+       POST → ENVIAR MENSAGEM NO CHAT DE DÚVIDA
+    =============================== */
+    public function duvidaEnviar()
+    {
+        try {
+            $user_id = $this->getUserId();
+            $perguntaId = (int) ($_POST['question_id'] ?? 0);
+            $mensagem = (string) ($_POST['mensagem'] ?? '');
+
+            if (!$perguntaId) {
+                throw new Exception('question_id obrigatório.');
+            }
+
+            $resultado = DuvidaPerguntaIA::responder(
+                $this->pdo,
+                $this->chat,
+                $user_id,
+                $perguntaId,
+                $mensagem,
+                $this->getIdiomaNativo($user_id)
+            );
+
+            $this->json($resultado);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
+    }
+
     // Só frases do par de idioma (nativo/aprendendo) ATUAL do usuário -
     // sem esse filtro, alguém que já trocou de idioma de estudo (ou tem
     // frases de mais de um par cadastradas) tinha tudo misturado indo pra
@@ -486,6 +542,8 @@ try {
             $controller->getHistorico();
         } elseif (($_GET['action'] ?? null) === 'verificar_acesso') {
             $controller->verificarAcessoRoute();
+        } elseif (($_GET['action'] ?? null) === 'duvida_historico') {
+            $controller->duvidaHistoricoRoute();
         } else {
             $controller->getDailyQuestion();
         }
@@ -498,6 +556,8 @@ try {
             $controller->skipDailyQuestion();
         } elseif ($action === 'responder_texto') {
             $controller->answerDailyQuestionTexto();
+        } elseif ($action === 'duvida_enviar') {
+            $controller->duvidaEnviar();
         } else {
             $controller->answerDailyQuestion();
         }
