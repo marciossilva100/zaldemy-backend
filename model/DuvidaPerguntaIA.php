@@ -37,12 +37,22 @@ class DuvidaPerguntaIA
     // com nota) - o chat de dúvida só faz sentido depois do feedback
     // existir. Travar por user_id evita um usuário mandar dúvida sobre o
     // pergunta_id de outra pessoa só adivinhando o número.
+    //
+    // NÃO exige status_id = 1 - reportado pelo usuário: "Pergunta não
+    // encontrada" ao tentar tirar dúvida logo depois de errar uma pergunta
+    // que ainda tinha tentativa sobrando. Causa: quando a resposta não passa
+    // E ainda não esgotou as tentativas, avaliarESalvarResposta() mantém
+    // status_id=0 de propósito (pergunta continua "pendente" pra nova
+    // tentativa) mesmo já tendo nota/feedback preenchidos - e a tela de
+    // feedback (com o botão de dúvida) aparece nesse caso também. O que
+    // realmente importa pro chat de dúvida é só ter sido avaliada (nota
+    // preenchida), não estar "fechada".
     private static function buscarPerguntaRespondida(PDO $pdo, int $perguntaId, int $user_id): ?array
     {
         $stmt = $pdo->prepare(
             "SELECT question, question_traducao, transcricao, nota, feedback
              FROM perguntas_ia
-             WHERE id = :id AND user_id = :user_id AND status_id = 1 AND nota IS NOT NULL"
+             WHERE id = :id AND user_id = :user_id AND nota IS NOT NULL"
         );
         $stmt->execute([':id' => $perguntaId, ':user_id' => $user_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
