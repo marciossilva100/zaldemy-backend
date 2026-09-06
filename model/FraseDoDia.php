@@ -274,7 +274,12 @@ class FraseDoDia
 
         [$min, $max] = self::faixaCaracteresPara($idiomaNome, $nivelNome);
         $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome, $nivelNome);
-        $phrasesText = implode("\n", array_map(fn($p) => mb_substr($p, 0, $max), $phrases));
+        // truncarPreservandoPalavras (não mb_substr cru) - um corte no meio
+        // de uma palavra dava matéria-prima quebrada pra IA (ex: aluno
+        // iniciante com frase longa cadastrada, cortada em "...visitin"),
+        // mesmo a IA lidando bem com isso na prática, nunca deveria mandar
+        // palavra cortada como entrada.
+        $phrasesText = implode("\n", array_map(fn($p) => self::truncarPreservandoPalavras($p, $max), $phrases));
 
         // Quando o aluno tem pouco vocabulário estudado (ex: acabou de passar
         // no gate de 3 frases treinadas, todas curtas), exigir 80% de uso desse
@@ -1039,12 +1044,14 @@ class FraseDoDia
         return $frases;
     }
 
-    // Lista as categorias com pelo menos 1 frase elegível (mesmos filtros
-    // básicos de buscarFrasesPorEstagio, sem exigir id_treino mínimo - é só
-    // pra preencher o seletor de categoria, quanto mais opções melhor)
-    // pro par de idioma atual do aluno, com a contagem de quantas frases
-    // tem em cada uma. "Todas as categorias" (sorteio automático, o padrão
-    // de sempre) fica por conta do front, não precisa vir daqui.
+    // Lista só as categorias DE VERDADE elegíveis - mesmo critério exigido
+    // pela busca principal (id_treino >= 2, ver buscarFrasesPorEstagio) -
+    // não o filtro relaxado do fallback. Sem isso, o seletor mostrava
+    // categoria que na prática não contribuía nada pro pool (a busca com
+    // id_treino >= 2 ignora ela, e o fallback só entra em cena se o TOTAL
+    // ficar abaixo de 3, não resolve uma categoria específica escolhida
+    // ficar vazia) - o aluno escolhia 2 categorias e só 1 aparecia de
+    // verdade na frase, sem aviso nenhum.
     public static function listarCategoriasElegiveis(PDO $pdo, int $user_id): array
     {
         $sql = "SELECT f.categoria_id, c.categoria, COUNT(*) as total
@@ -1058,6 +1065,7 @@ class FraseDoDia
                 AND f.texto_traduzido IS NOT NULL
                 AND TRIM(f.texto_nativo) <> ''
                 AND f.status_id > 0
+                AND f.id_treino >= 2
                 AND CHAR_LENGTH(TRIM(f.texto_traduzido)) - CHAR_LENGTH(REPLACE(TRIM(f.texto_traduzido), ' ', '')) >= 2
                 GROUP BY f.categoria_id, c.categoria
                 ORDER BY c.categoria ASC";
