@@ -33,15 +33,16 @@ class Configuracoes
 
         // inserir configuração padrão
         $sql = "INSERT INTO configuracoes
-                (quantidade_frases_aprender, user_id, voz_tts, velocidade_tts)
+                (quantidade_frases_aprender, user_id, voz_tts, velocidade_tts, velocidade_tts_padrao)
                 VALUES
-                (:quantidade_frases_aprender, :user_id, :voz_tts, :velocidade_tts)";
+                (:quantidade_frases_aprender, :user_id, :voz_tts, :velocidade_tts, :velocidade_tts_padrao)";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':quantidade_frases_aprender', 8, PDO::PARAM_INT);
         $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
         $stmt->bindValue(':voz_tts', self::VOZ_TTS_PADRAO, PDO::PARAM_STR);
         $stmt->bindValue(':velocidade_tts', self::VELOCIDADE_TTS_PADRAO);
+        $stmt->bindValue(':velocidade_tts_padrao', self::VELOCIDADE_TTS_PADRAO);
         $stmt->execute();
 
         return [
@@ -55,7 +56,7 @@ class Configuracoes
         // garante que existe uma configuração antes de buscar
         self::setConfiguracoes($pdo, $user_id);
 
-        $sql = "SELECT quantidade_frases_aprender, voz_tts, velocidade_tts
+        $sql = "SELECT quantidade_frases_aprender, voz_tts, velocidade_tts, velocidade_tts_padrao
                 FROM configuracoes
                 WHERE user_id = :user_id
                 LIMIT 1";
@@ -70,7 +71,10 @@ class Configuracoes
             'success' => true,
             'quantidade_frases_aprender' => (int) ($configuracao['quantidade_frases_aprender'] ?? 8),
             'voz_tts' => $configuracao['voz_tts'] ?? self::VOZ_TTS_PADRAO,
-            'velocidade_tts' => isset($configuracao['velocidade_tts']) ? (float) $configuracao['velocidade_tts'] : self::VELOCIDADE_TTS_PADRAO
+            // Velocidade da voz natural (OpenAI) e da voz padrão (Google) são
+            // independentes - antes compartilhavam a mesma coluna/preferência.
+            'velocidade_tts' => isset($configuracao['velocidade_tts']) ? (float) $configuracao['velocidade_tts'] : self::VELOCIDADE_TTS_PADRAO,
+            'velocidade_tts_padrao' => isset($configuracao['velocidade_tts_padrao']) ? (float) $configuracao['velocidade_tts_padrao'] : self::VELOCIDADE_TTS_PADRAO
         ];
     }
 
@@ -156,6 +160,40 @@ class Configuracoes
             'success' => true,
             'message' => 'Velocidade atualizada com sucesso.',
             'velocidade_tts' => $velocidade
+        ];
+    }
+
+    // Velocidade da voz padrão (Google) - independente da voz natural acima.
+    // Só é lida/aplicada no cliente (audioPlayer.js via audio.playbackRate,
+    // já que a API do Google não aceita parâmetro de velocidade); o backend
+    // só guarda a preferência pra sincronizar entre dispositivos/sessões.
+    public static function atualizarVelocidadeTtsPadrao(PDO $pdo, $user_id, $velocidade): array
+    {
+        $velocidade = (float) $velocidade;
+
+        if (!in_array($velocidade, self::VELOCIDADES_TTS_VALIDAS, true)) {
+            return [
+                'success' => false,
+                'message' => 'Velocidade inválida.'
+            ];
+        }
+
+        // garante que existe uma configuração antes de atualizar
+        self::setConfiguracoes($pdo, $user_id);
+
+        $sql = "UPDATE configuracoes
+                SET velocidade_tts_padrao = :velocidade_tts_padrao
+                WHERE user_id = :user_id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':velocidade_tts_padrao', $velocidade);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'success' => true,
+            'message' => 'Velocidade atualizada com sucesso.',
+            'velocidade_tts_padrao' => $velocidade
         ];
     }
 
