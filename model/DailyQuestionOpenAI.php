@@ -96,6 +96,23 @@ class DailyQuestionOpenAI
         return ["success" => false, "premium_necessario" => true, "message" => "Perguntas diárias por IA são um recurso exclusivo do plano Premium."];
     }
 
+    // O seletor de categoria só faz sentido ANTES de gerar a pergunta de
+    // hoje - se já existe uma pendente de hoje (mesma condição de reuso de
+    // obterPergunta) ou o aluno já bateu o limite diário, mostrar o seletor
+    // de novo não muda nada (a escolha só é usada na hora de gerar conteúdo
+    // novo). Mesmo padrão de FraseDoDia::precisaEscolherCategoria.
+    public static function precisaEscolherCategoria(PDO $pdo, int $user_id, int $plano): bool
+    {
+        if (self::verificarAcesso($pdo, $user_id, $plano) !== null) {
+            return false;
+        }
+
+        $pendente = self::getPendente($pdo, $user_id);
+        $temPendenteValida = $pendente && !empty($pendente['question_traducao']) && !empty($pendente['eh_de_hoje']);
+
+        return !$temPendenteValida;
+    }
+
     // Só considera pendente do PAR DE IDIOMAS ATUAL do usuário (JOIN com
     // idioma_referencia) - sem isso, trocar de idioma aprendendo no mesmo
     // dia continuava devolvendo a pergunta pendente antiga, gerada no

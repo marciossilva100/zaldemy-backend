@@ -73,6 +73,22 @@ class TraducaoReversaOpenAI
         return ["success" => false, "premium_necessario" => true, "message" => "Tradução Reversa por IA é um recurso exclusivo do plano Premium."];
     }
 
+    // O seletor de categoria só faz sentido ANTES de gerar o texto de hoje -
+    // se já existe uma pendente de hoje (mesma condição de reuso do fluxo
+    // normal) ou o aluno já bateu o limite diário, mostrar o seletor de novo
+    // não muda nada. Mesmo padrão de FraseDoDia::precisaEscolherCategoria.
+    public static function precisaEscolherCategoria(PDO $pdo, int $user_id, int $plano): bool
+    {
+        if (self::verificarAcesso($pdo, $user_id, $plano) !== null) {
+            return false;
+        }
+
+        $pendente = self::getPendente($pdo, $user_id);
+        $temPendenteValida = $pendente && !empty($pendente['texto_traduzido_gabarito']) && !empty($pendente['eh_de_hoje']);
+
+        return !$temPendenteValida;
+    }
+
     // Só considera pendente do PAR DE IDIOMAS ATUAL do usuário (JOIN com
     // idioma_referencia) - sem isso, trocar de idioma aprendendo no mesmo
     // dia continuava devolvendo o texto pendente antigo, gerado no idioma
