@@ -1105,6 +1105,20 @@ class FraseDoDia
     // categorias de teste) tomando o pool inteiro só na garantia mínima.
     const MINIMO_GARANTIDO_POR_CATEGORIA = 2;
 
+    // Isolado com teste direto na API (não só teoria): o que causa frase sem
+    // coesão/assuntos misturados não é o TAMANHO do pool, é quantas
+    // categorias DIFERENTES entram na mesma geração. Comparando pools do
+    // MESMO tamanho (16 frases), variando só o número de categorias: 8
+    // categorias diferentes → 8 de 8 gerações misturaram 3-4 assuntos sem
+    // relação (mesmo com a regra de "máximo 2 fontes" no prompt); 3
+    // categorias diferentes (mesmo tamanho de pool) → maioria coerente. O
+    // garantido-por-categoria antigo (aplicado a TODAS as categorias
+    // elegíveis) forçava justamente essa alta diversidade por geração -
+    // reduzido aqui: sorteia só MAX_CATEGORIAS_POR_GERACAO categorias por
+    // vez (categorias diferentes ainda aparecem ao longo de várias
+    // gerações/dias, só não todas de uma vez na mesma frase).
+    const MAX_CATEGORIAS_POR_GERACAO = 3;
+
     private static function balancearPorCategoria(array $linhas): array
     {
         $porCategoria = [];
@@ -1114,6 +1128,7 @@ class FraseDoDia
 
         $idsCategorias = array_keys($porCategoria);
         shuffle($idsCategorias);
+        $idsCategorias = array_slice($idsCategorias, 0, self::MAX_CATEGORIAS_POR_GERACAO);
 
         $reservadas = [];
         $restante = [];
