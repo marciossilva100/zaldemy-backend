@@ -54,6 +54,10 @@ class DailyQuestionController
     // enviado pra IA - ver balancearPorCategoria() abaixo.
     const MINIMO_GARANTIDO_POR_CATEGORIA = 2;
 
+    // Máximo de categorias que o aluno pode escolher à mão como assunto da
+    // pergunta - mesmo padrão/mesmo limite de FraseDoDia::MAX_CATEGORIAS_ESCOLHA_MANUAL.
+    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 2;
+
     private $pdo;
     private $chat;
     private $chatGeracao;
@@ -123,7 +127,18 @@ class DailyQuestionController
                 return;
             }
 
-            $phrases = $this->getUserPhrases($user_id);
+            // category_ids opcional (até 2, separadas por vírgula) - via
+            // querystring porque essa rota é GET (sem corpo JSON, diferente
+            // de FraseDoDia/TraducaoReversa). Pedido do aluno pra escolher o
+            // assunto da pergunta em vez de deixar sempre por conta do
+            // sorteio automático.
+            $categoriaIds = null;
+            if (!empty($_GET['category_ids'])) {
+                $categoriaIds = array_filter(array_map('intval', explode(',', $_GET['category_ids'])));
+                $categoriaIds = !empty($categoriaIds) ? array_values($categoriaIds) : null;
+            }
+
+            $phrases = $this->getUserPhrases($user_id, $categoriaIds);
             $idioma = $this->getIdiomaAprendendo($user_id);
             $idiomaNativo = $this->getIdiomaNativo($user_id);
             $nivel = DailyQuestionOpenAI::getNivelNome($this->pdo, $user_id);
@@ -329,9 +344,14 @@ class DailyQuestionController
     // IA junto, gerando pergunta sem relação nenhuma com o que está
     // estudando agora. Mesmo filtro de idioma_referencia já usado em
     // Categorias::contarCategoriasAtivas.
-    private function getUserPhrases($user_id)
+    // $categoriaIds: null = comportamento padrão (sorteia entre as categorias
+    // elegíveis, ver balancearPorCategoria). Quando informado (1 ou 2
+    // categorias, pedido do aluno pra escolher o assunto da pergunta),
+    // restringe a busca a elas e divide o pool igualmente entre elas -
+    // mesmo padrão de FraseDoDia.
+    private function getUserPhrases($user_id, ?array $categoriaIds = null)
     {
-        $phrases = $this->buscarFrasesPorEstagio($user_id, true);
+        $phrases = $this->buscarFrasesPorEstagio($user_id, true, $categoriaIds);
 
         // O gate que libera o recurso (DailyQuestionOpenAI::contarFrasesEstudadas)
         // conta pelo histórico (já alcançou id_treino>=2 alguma vez), mas essa
@@ -341,10 +361,56 @@ class DailyQuestionController
         // esse filtro (mantendo a priorização por estágio) em vez de bloquear
         // a geração por falta de frases que na verdade existem.
         if (count($phrases) < 3) {
-            $phrases = $this->buscarFrasesPorEstagio($user_id, false);
+            $phrases = $this->buscarFrasesPorEstagio($user_id, false, $categoriaIds);
         }
 
         return $phrases;
+    }
+
+    // Lista só as categorias DE VERDADE elegíveis (id_treino >= 2, mesmo
+    // critério da busca principal - não o filtro relaxado do fallback) pro
+    // seletor de categoria do aluno.
+    public function listarCategoriasRoute()
+    {
+        try {
+            $user_id = $this->getUserId();
+
+            $sql = "SELECT f.categoria_id, c.categoria, COUNT(*) as total
+                    FROM frases f
+                    INNER JOIN idioma_referencia ir
+                        ON ir.idioma_nativo = f.idioma_nativo
+                        AND ir.idioma_aprender = f.idioma_aprendendo
+                        AND ir.id_user = :user_id
+                    LEFT JOIN categorias c ON c.id = f.categoria_id
+                    WHERE f.usuario_id = :user_id
+                    AND f.texto_traduzido IS NOT NULL
+                    AND TRIM(f.texto_nativo) <> ''
+                    AND f.status_id > 0
+                    AND f.id_treino >= 2
+                    AND CHAR_LENGTH(TRIM(f.texto_traduzido)) - CHAR_LENGTH(REPLACE(TRIM(f.texto_traduzido), ' ', '')) >= 2
+                    GROUP BY f.categoria_id, c.categoria
+                    ORDER BY c.categoria ASC";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([':user_id' => $user_id]);
+
+            $this->json(['success' => true, 'categorias' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
+    }
+
+    // Tela de escolha de categoria só aparece 1x por dia - ver
+    // DailyQuestionOpenAI::precisaEscolherCategoria.
+    public function precisaEscolherCategoriaRoute()
+    {
+        try {
+            $user_id = $this->getUserId();
+            $precisa = DailyQuestionOpenAI::precisaEscolherCategoria($this->pdo, $user_id, $this->getPlano());
+            $this->json(['success' => true, 'precisa_escolher' => $precisa]);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
     }
 
     // A 1ª tentativa de corrigir isso (janela global maior, LIMIT 300) não
@@ -360,8 +426,13 @@ class DailyQuestionController
     // MESMA, então o corte por rn <= N garante até N candidatos de CADA
     // categoria elegível, não da tabela inteira - nenhuma categoria consegue
     // mais "roubar o espaço" de outra na hora de montar os candidatos.
-    private function buscarFrasesPorEstagio($user_id, bool $exigirTreinoMinimo)
+    private function buscarFrasesPorEstagio($user_id, bool $exigirTreinoMinimo, ?array $categoriaIds = null)
     {
+        $categoriaIds = !empty($categoriaIds) ? array_slice(array_map('intval', $categoriaIds), 0, self::MAX_CATEGORIAS_ESCOLHA_MANUAL) : null;
+        $filtroCategoria = $categoriaIds !== null
+            ? " AND f.categoria_id IN (" . implode(',', $categoriaIds) . ")"
+            : "";
+
         $sql = "SELECT categoria_id, texto_traduzido FROM (
                     SELECT f.categoria_id, f.texto_traduzido,
                         ROW_NUMBER() OVER (
@@ -377,7 +448,8 @@ class DailyQuestionController
                     AND f.usuario_id = :user_id
                     AND TRIM(f.texto_nativo) <> ''
                     AND f.status_id > 0"
-                    . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "") . "
+                    . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "")
+                    . $filtroCategoria . "
                 ) candidatos
                 WHERE rn <= " . self::MAX_FRASES_PROMPT;
 
@@ -401,7 +473,41 @@ class DailyQuestionController
             $linhas = $semRecentes;
         }
 
+        if ($categoriaIds !== null) {
+            return $this->dividirIgualmenteEntreCategorias($linhas, $categoriaIds);
+        }
+
         return $this->balancearPorCategoria($linhas);
+    }
+
+    // Categoria(s) escolhida(s) à mão pelo aluno: divide o pool IGUALMENTE
+    // entre elas, sem deixar a maior afogar a menor - mesma lógica testada
+    // e corrigida em FraseDoDia::dividirIgualmenteEntreCategorias (a 1ª
+    // versão completava a vaga sobrando com o excedente da categoria maior,
+    // voltando a desequilibrar).
+    private function dividirIgualmenteEntreCategorias(array $linhas, array $categoriaIds): array
+    {
+        $porCategoria = [];
+        foreach ($linhas as $linha) {
+            $porCategoria[$linha['categoria_id']][] = $linha['texto_traduzido'];
+        }
+
+        $categoriasComConteudo = array_filter($categoriaIds, fn($id) => !empty($porCategoria[$id]));
+        if (empty($categoriasComConteudo)) {
+            return [];
+        }
+
+        $cota = (int) ceil(self::MAX_FRASES_PROMPT / count($categoriasComConteudo));
+        $selecionadas = [];
+
+        foreach ($categoriasComConteudo as $categoriaId) {
+            $frasesCategoria = $porCategoria[$categoriaId];
+            shuffle($frasesCategoria);
+            $selecionadas = array_merge($selecionadas, array_slice($frasesCategoria, 0, $cota));
+        }
+
+        shuffle($selecionadas);
+        return $selecionadas;
     }
 
     // Agrupa por categoria (cada uma já vem ordenada por prioridade de
@@ -544,6 +650,10 @@ try {
             $controller->verificarAcessoRoute();
         } elseif (($_GET['action'] ?? null) === 'duvida_historico') {
             $controller->duvidaHistoricoRoute();
+        } elseif (($_GET['action'] ?? null) === 'listar_categorias') {
+            $controller->listarCategoriasRoute();
+        } elseif (($_GET['action'] ?? null) === 'precisa_escolher_categoria') {
+            $controller->precisaEscolherCategoriaRoute();
         } else {
             $controller->getDailyQuestion();
         }
