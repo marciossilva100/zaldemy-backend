@@ -912,7 +912,10 @@ class DailyQuestionOpenAI
             . "{$idiomaNativoNome} do início ao fim - a única exceção é citar literalmente um trecho da resposta "
             . "do aluno como exemplo do erro; NUNCA escreva a explicação em si (a parte que você está dizendo, "
             . "não citando) em {$idiomaNome} ou em qualquer outro idioma. "
-            . 'Responda em JSON: {"nota": 0-10, "correto": true ou false, "feedback": "..."}';
+            . "Além disso, gere também o campo \"resposta_ideal\": um exemplo de resposta boa pra essa pergunta, "
+            . "SEMPRE em {$idiomaNome} (mesmo idioma da pergunta), mesmo quando a resposta do aluno já estiver "
+            . "correta - serve de referência pro aluno comparar. "
+            . 'Responda em JSON: {"nota": 0-10, "correto": true ou false, "feedback": "...", "resposta_ideal": "..."}';
 
         $correcaoResult = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
@@ -931,7 +934,8 @@ class DailyQuestionOpenAI
 
         $nota = max(0, min(10, (int) $correcao['nota']));
         $correto = (bool) ($correcao['correto'] ?? false);
-        $feedback = mb_substr((string) ($correcao['feedback'] ?? ''), 0, 300);
+        $feedback = self::truncarPreservandoPalavras((string) ($correcao['feedback'] ?? ''), 300);
+        $respostaIdeal = self::truncarPreservandoPalavras((string) ($correcao['resposta_ideal'] ?? ''), 300);
 
         // Só marca como respondida (e conta pro limite) quando a resposta é
         // boa o suficiente, OU quando já esgotou as tentativas dessa pergunta
@@ -945,7 +949,7 @@ class DailyQuestionOpenAI
 
         $stmt = $pdo->prepare("
             UPDATE perguntas_ia
-            SET status_id = :status_id, tentativas = :tentativas, transcricao = :transcricao, nota = :nota, feedback = :feedback
+            SET status_id = :status_id, tentativas = :tentativas, transcricao = :transcricao, nota = :nota, feedback = :feedback, resposta_ideal = :resposta_ideal
             WHERE id = :id
         ");
         $stmt->execute([
@@ -954,8 +958,11 @@ class DailyQuestionOpenAI
             ':transcricao' => $resposta,
             ':nota' => $nota,
             ':feedback' => $feedback,
+            ':resposta_ideal' => $respostaIdeal,
             ':id' => $perguntaId,
         ]);
+
+        $podeTentarNovamente = !$passou && !$esgotouTentativas;
 
         return [
             "success" => true,
@@ -963,7 +970,11 @@ class DailyQuestionOpenAI
             "nota" => $nota,
             "correto" => $correto,
             "feedback" => $feedback,
-            "pode_tentar_novamente" => !$passou && !$esgotouTentativas,
+            "pode_tentar_novamente" => $podeTentarNovamente,
+            // Só manda a resposta ideal quando o treino dessa pergunta acabou
+            // (acertou ou esgotou as tentativas) - antes disso mostraria o
+            // "gabarito" pro aluno enquanto ele ainda pode tentar de novo.
+            "resposta_ideal" => $podeTentarNovamente ? null : $respostaIdeal,
         ];
     }
 
