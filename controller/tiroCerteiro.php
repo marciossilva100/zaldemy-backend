@@ -137,6 +137,40 @@ try {
         exit;
     }
 
+    // Gera mais rodadas pra uma partida JÁ EM ANDAMENTO (o jogador zerou o
+    // lote de QTD_RODADAS e completou uma volta) - reportado pelo usuário
+    // que as mesmas rodadas voltavam a se repetir na mesma ordem sem parar,
+    // porque antes o front só reciclava localmente o mesmo lote pra sempre.
+    // Deliberadamente NÃO chama verificarAcesso/registrarUso/downgrade -
+    // isso já aconteceu uma vez em obter_rodadas no início desta MESMA
+    // partida; gerar mais conteúdo pra continuar o jogo em andamento não é
+    // um novo "uso" do recurso, e contar de novo aqui estouraria o teto
+    // diário do plano limitado no meio de uma única partida.
+    if ($action === 'mais_rodadas') {
+        $categoryIds = $input['category_ids'] ?? [];
+        $frases = TiroCerteiro::getFrasesDoUsuario($pdo, $user_id, $categoryIds);
+
+        if (empty($frases)) {
+            echo json_encode(["success" => false, "message" => "Sem frases suficientes pra continuar."]);
+            exit;
+        }
+
+        $chat = new OpenAiChat($_ENV['OPEN_AI'], "gpt-5-mini");
+        $idioma = TiroCerteiro::getIdiomaAprendendo($pdo, $user_id);
+        $idiomaNativo = TiroCerteiro::getIdiomaNativo($pdo, $user_id);
+        $nivel = Nivel::obterNomeDoUsuario($pdo, $user_id);
+
+        $rodadas = TiroCerteiro::gerarRodadas($pdo, $chat, $frases, $idioma, $idiomaNativo, $nivel);
+
+        if (isset($rodadas['erro']) || empty($rodadas)) {
+            echo json_encode(["success" => false, "message" => $rodadas['mensagem'] ?? "Não foi possível gerar mais rodadas."]);
+            exit;
+        }
+
+        echo json_encode(["success" => true, "rodadas" => $rodadas]);
+        exit;
+    }
+
     if ($action === 'buscar_recorde') {
         $recorde = TiroCerteiro::buscarRecorde($pdo, $user_id);
         echo json_encode(["success" => true, "recorde" => $recorde]);
