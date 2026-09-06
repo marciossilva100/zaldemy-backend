@@ -68,6 +68,24 @@ try {
         exit;
     }
 
+    // Tela de escolha de categoria só aparece 1x por dia - se já existe uma
+    // pendente de hoje (ou o aluno já bateu o limite), não faz sentido
+    // perguntar de novo, a escolha só é usada na hora de gerar conteúdo novo.
+    if ($action === 'precisa_escolher_categoria') {
+        $precisa = FraseDoDia::precisaEscolherCategoria($pdo, $user_id, $plano);
+        echo json_encode(["success" => true, "precisa_escolher" => $precisa]);
+        exit;
+    }
+
+    // Lista as categorias que o aluno pode escolher como assunto da frase -
+    // "Todas as categorias" (sorteio automático, o padrão de sempre) fica só
+    // no front, não precisa vir do backend.
+    if ($action === 'listar_categorias') {
+        $categorias = FraseDoDia::listarCategoriasElegiveis($pdo, $user_id);
+        echo json_encode(["success" => true, "categorias" => $categorias]);
+        exit;
+    }
+
     if ($action === 'obter') {
         $bloqueio = FraseDoDia::verificarAcesso($pdo, $user_id, $plano);
 
@@ -76,6 +94,14 @@ try {
             exit;
         }
 
+        // category_ids opcional (até 2) - pedido do aluno pra poder escolher
+        // o(s) assunto(s) da frase em vez de deixar sempre por conta do
+        // sorteio automático (null = comportamento padrão, sorteia entre as
+        // categorias elegíveis).
+        $categoriaIds = !empty($input['category_ids']) && is_array($input['category_ids'])
+            ? array_map('intval', $input['category_ids'])
+            : null;
+
         // gpt-5-mini só pra gerar a frase - testado direto na API, combina os
         // trechos das frases do aluno de forma bem mais coerente que o nano
         // nessa tarefa específica de "compor" texto novo a partir de várias
@@ -83,7 +109,7 @@ try {
         $chat = new OpenAiChat($_ENV['OPEN_AI'], "gpt-5-mini");
         $idioma = FraseDoDia::getIdiomaAprendendo($pdo, $user_id);
         $idiomaNativo = FraseDoDia::getIdiomaNativo($pdo, $user_id);
-        $frases = FraseDoDia::getFrasesDoUsuario($pdo, $user_id);
+        $frases = FraseDoDia::getFrasesDoUsuario($pdo, $user_id, $categoriaIds);
         $nivel = FraseDoDia::getNivelNome($pdo, $user_id);
 
         $resultado = FraseDoDia::obterFraseDoDia($pdo, $chat, $user_id, $idioma, $idiomaNativo, $frases, $nivel);

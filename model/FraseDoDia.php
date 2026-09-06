@@ -146,6 +146,20 @@ class FraseDoDia
         return ["success" => false, "premium_necessario" => true, "message" => "A frase do dia é um recurso exclusivo do plano Premium."];
     }
 
+    // O seletor de categoria só faz sentido ANTES de gerar a frase de hoje -
+    // se já existe uma pendente (gerada hoje, ainda não respondida) ou o
+    // aluno já bateu o limite diário, mostrar o seletor de novo não muda
+    // nada (a escolha de categoria só é usada na hora de gerar conteúdo
+    // novo). Pedido do usuário: essa tela só aparece 1x por dia.
+    public static function precisaEscolherCategoria(PDO $pdo, int $user_id, int $plano): bool
+    {
+        if (self::verificarAcesso($pdo, $user_id, $plano) !== null) {
+            return false;
+        }
+
+        return self::getPendente($pdo, $user_id) === null;
+    }
+
     // Só considera pendente de HOJE - uma pendência esquecida de um dia
     // anterior (ex: usuário nunca voltou pra usar a 2ª tentativa) não pode
     // ficar bloqueando a geração da frase nova do premium pra sempre. Pro
@@ -992,9 +1006,24 @@ class FraseDoDia
     // Frases do próprio usuário, só do par de idioma (nativo/aprendendo)
     // ATUAL - mesmo filtro usado em DailyQuestionController::getUserPhrases,
     // pra não misturar frases de um idioma que o usuário já trocou.
-    public static function getFrasesDoUsuario(PDO $pdo, int $user_id): array
+    // Máximo de categorias que o aluno pode escolher à mão - mais que isso
+    // reintroduz o mesmo risco de mistura sem coerência que motivou limitar
+    // o sorteio automático a 3 (ver MAX_CATEGORIAS_POR_GERACAO). 2 é
+    // suficiente pra combinar 2 assuntos de propósito (ex: viagem + comida)
+    // sem virar uma lista de temas soltos.
+    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 2;
+
+    // $categoriaIds: null/vazio = comportamento padrão (sorteia entre as
+    // categorias elegíveis, ver balancearPorCategoria). Quando informado (1
+    // ou 2 categorias, nunca mais que MAX_CATEGORIAS_ESCOLHA_MANUAL),
+    // restringe a busca só a elas e divide o pool IGUALMENTE entre as
+    // escolhidas (ver dividirIgualmenteEntreCategorias) - pedido do usuário
+    // pra poder escolher o assunto da frase em vez de deixar sempre por
+    // conta do sorteio, sem que uma das categorias escolhidas afogue a
+    // outra só por ter mais frases cadastradas.
+    public static function getFrasesDoUsuario(PDO $pdo, int $user_id, ?array $categoriaIds = null): array
     {
-        $frases = self::buscarFrasesPorEstagio($pdo, $user_id, true);
+        $frases = self::buscarFrasesPorEstagio($pdo, $user_id, true, $categoriaIds);
 
         // O gate que libera o recurso (contarFrasesEstudadas) conta pelo
         // histórico (já alcançou id_treino>=2 alguma vez), mas essa busca
@@ -1004,10 +1033,39 @@ class FraseDoDia
         // sem esse filtro (mantendo a priorização por estágio) em vez de
         // gerar conteúdo sem vocabulário nenhum do aluno.
         if (count($frases) < 3) {
-            $frases = self::buscarFrasesPorEstagio($pdo, $user_id, false);
+            $frases = self::buscarFrasesPorEstagio($pdo, $user_id, false, $categoriaIds);
         }
 
         return $frases;
+    }
+
+    // Lista as categorias com pelo menos 1 frase elegível (mesmos filtros
+    // básicos de buscarFrasesPorEstagio, sem exigir id_treino mínimo - é só
+    // pra preencher o seletor de categoria, quanto mais opções melhor)
+    // pro par de idioma atual do aluno, com a contagem de quantas frases
+    // tem em cada uma. "Todas as categorias" (sorteio automático, o padrão
+    // de sempre) fica por conta do front, não precisa vir daqui.
+    public static function listarCategoriasElegiveis(PDO $pdo, int $user_id): array
+    {
+        $sql = "SELECT f.categoria_id, c.categoria, COUNT(*) as total
+                FROM frases f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprendendo
+                    AND ir.id_user = :user_id
+                LEFT JOIN categorias c ON c.id = f.categoria_id
+                WHERE f.usuario_id = :user_id
+                AND f.texto_traduzido IS NOT NULL
+                AND TRIM(f.texto_nativo) <> ''
+                AND f.status_id > 0
+                AND CHAR_LENGTH(TRIM(f.texto_traduzido)) - CHAR_LENGTH(REPLACE(TRIM(f.texto_traduzido), ' ', '')) >= 2
+                GROUP BY f.categoria_id, c.categoria
+                ORDER BY c.categoria ASC";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // A 1ª tentativa de corrigir isso (janela global maior, LIMIT 300) não
@@ -1026,8 +1084,18 @@ class FraseDoDia
     // Testado com dados reais (6 categorias elegíveis, uma com 451 frases
     // em id_treino=4 e as outras 5 com 1-15 frases em id_treino=2/3): antes,
     // só 2 das 6 apareciam nos candidatos; depois, as 6.
-    private static function buscarFrasesPorEstagio(PDO $pdo, int $user_id, bool $exigirTreinoMinimo): array
+    private static function buscarFrasesPorEstagio(PDO $pdo, int $user_id, bool $exigirTreinoMinimo, ?array $categoriaIds = null): array
     {
+        $categoriaIds = !empty($categoriaIds) ? array_slice(array_map('intval', $categoriaIds), 0, self::MAX_CATEGORIAS_ESCOLHA_MANUAL) : null;
+
+        // IN (...) com os ids literais (já forçados pra int acima, não vem
+        // direto de input do usuário sem passar por isso) - mais simples que
+        // gerar N placeholders nomeados só pra um filtro opcional de no
+        // máximo 2 valores.
+        $filtroCategoria = $categoriaIds !== null
+            ? " AND f.categoria_id IN (" . implode(',', $categoriaIds) . ")"
+            : "";
+
         $sql = "SELECT categoria_id, texto_traduzido FROM (
                     SELECT f.categoria_id, f.texto_traduzido,
                         ROW_NUMBER() OVER (
@@ -1043,7 +1111,8 @@ class FraseDoDia
                     AND f.usuario_id = :user_id
                     AND TRIM(f.texto_nativo) <> ''
                     AND f.status_id > 0"
-                    . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "") . "
+                    . ($exigirTreinoMinimo ? " AND f.id_treino >= 2" : "")
+                    . $filtroCategoria . "
                 ) candidatos
                 WHERE rn <= " . self::MAX_FRASES_PROMPT;
 
@@ -1081,7 +1150,54 @@ class FraseDoDia
             $linhas = $semRecentes;
         }
 
+        // Categoria(s) escolhida(s) à mão pelo aluno: divide o pool
+        // IGUALMENTE entre elas, em vez do balanceamento proporcional de
+        // sempre - o sorteio automático (balancearPorCategoria) deixa a
+        // categoria maior contribuir mais, o que é o comportamento certo
+        // quando é o sistema que está sorteando entre várias elegíveis, mas
+        // não faz sentido aqui: se o aluno escolheu 2 categorias de
+        // propósito, ele espera as duas representadas, não uma afogando a
+        // outra só por ter mais frases cadastradas.
+        if ($categoriaIds !== null) {
+            return self::dividirIgualmenteEntreCategorias($linhas, $categoriaIds);
+        }
+
         return self::balancearPorCategoria($linhas);
+    }
+
+    private static function dividirIgualmenteEntreCategorias(array $linhas, array $categoriaIds): array
+    {
+        $porCategoria = [];
+        foreach ($linhas as $linha) {
+            $porCategoria[$linha['categoria_id']][] = $linha['texto_traduzido'];
+        }
+
+        $categoriasComConteudo = array_filter($categoriaIds, fn($id) => !empty($porCategoria[$id]));
+        if (empty($categoriasComConteudo)) {
+            return [];
+        }
+
+        $cota = (int) ceil(self::MAX_FRASES_PROMPT / count($categoriasComConteudo));
+
+        // Testado direto contra dado real (2 categorias bem desiguais: 438 x
+        // 11 frases) - a 1ª versão preenchia a vaga que sobrava da categoria
+        // pequena com o excedente da categoria grande, e voltava a dar 32x5
+        // em vez de perto de 25x25: exatamente o afogamento que essa divisão
+        // deveria evitar. Corrigido: cada categoria contribui NO MÁXIMO sua
+        // cota, sem completar a vaga sobrando com a outra - se uma categoria
+        // escolhida for pequena, o pool final fica menor que 50 (perto de
+        // 2x o tamanho da menor), mas a PROPORÇÃO entre as escolhidas fica
+        // preservada, que é o que o aluno pediu ao escolher as duas.
+        $selecionadas = [];
+
+        foreach ($categoriasComConteudo as $categoriaId) {
+            $frasesCategoria = $porCategoria[$categoriaId];
+            shuffle($frasesCategoria);
+            $selecionadas = array_merge($selecionadas, array_slice($frasesCategoria, 0, $cota));
+        }
+
+        shuffle($selecionadas);
+        return $selecionadas;
     }
 
     // Agrupa por categoria (cada uma já vem ordenada por prioridade de
