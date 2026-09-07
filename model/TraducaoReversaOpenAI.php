@@ -553,10 +553,14 @@ class TraducaoReversaOpenAI
             . "não citando) em {$idiomaAprendendoNome} ou em qualquer outro idioma. "
             . 'Responda em JSON: {"nota": 0-10, "correto": true ou false, "feedback": "..."}';
 
+        // Mesmo ajuste de folga de DailyQuestionOpenAI/FraseDoDia (já
+        // cortaram feedback no meio da frase por orçamento de tokens curto
+        // demais) - 900 é folga grande o bastante mesmo só com 1 campo de
+        // texto aqui (custo extra é zero, max_tokens é só um teto).
         $correcaoResult = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => "Texto original: {$textoOriginal}\nTradução de referência: {$gabarito}\nTradução do aluno: {$resposta}"],
-        ], true, 500);
+        ], true, 900);
 
         if ($correcaoResult['erro']) {
             return ["success" => false, "message" => "Não foi possível corrigir: " . $correcaoResult['mensagem']];
@@ -570,12 +574,11 @@ class TraducaoReversaOpenAI
 
         $nota = max(0, min(10, (int) $correcao['nota']));
         $correto = (bool) ($correcao['correto'] ?? false);
-        // truncarPreservandoPalavras (não mb_substr cru) - um corte no meio
-        // da palavra/frase produzia feedback incompleto (reportado pelo
-        // usuário, mesmo bug já corrigido em DailyQuestionOpenAI/FraseDoDia);
-        // 300 -> 500 só como trava de segurança, a IA já é instruída a ficar
-        // em ~200 caracteres.
-        $feedback = self::truncarPreservandoPalavras((string) ($correcao['feedback'] ?? ''), 500);
+        // 300 e depois 500 já cortaram no meio da frase (mesmo bug corrigido
+        // em DailyQuestionOpenAI/FraseDoDia) mesmo com a IA instruída a
+        // ficar em ~200 caracteres. 2000 é só uma trava de sanidade contra a
+        // IA enlouquecer, não deve cortar NADA em uso normal, nunca mais.
+        $feedback = self::truncarPreservandoPalavras((string) ($correcao['feedback'] ?? ''), 2000);
 
         $passou = $nota >= 5 && $correto;
         $esgotouTentativas = $tentativaAtual >= self::MAX_TENTATIVAS_POR_TEXTO;
