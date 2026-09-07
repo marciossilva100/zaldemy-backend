@@ -570,7 +570,12 @@ class TraducaoReversaOpenAI
 
         $nota = max(0, min(10, (int) $correcao['nota']));
         $correto = (bool) ($correcao['correto'] ?? false);
-        $feedback = mb_substr((string) ($correcao['feedback'] ?? ''), 0, 300);
+        // truncarPreservandoPalavras (não mb_substr cru) - um corte no meio
+        // da palavra/frase produzia feedback incompleto (reportado pelo
+        // usuário, mesmo bug já corrigido em DailyQuestionOpenAI/FraseDoDia);
+        // 300 -> 500 só como trava de segurança, a IA já é instruída a ficar
+        // em ~200 caracteres.
+        $feedback = self::truncarPreservandoPalavras((string) ($correcao['feedback'] ?? ''), 500);
 
         $passou = $nota >= 5 && $correto;
         $esgotouTentativas = $tentativaAtual >= self::MAX_TENTATIVAS_POR_TEXTO;
@@ -590,14 +595,20 @@ class TraducaoReversaOpenAI
             ':id' => $id,
         ]);
 
+        $podeTentarNovamente = !$passou && !$esgotouTentativas;
+
         return [
             "success" => true,
             "resposta" => $resposta,
             "nota" => $nota,
             "correto" => $correto,
             "feedback" => $feedback,
-            "traducao_gabarito" => $gabarito,
-            "pode_tentar_novamente" => !$passou && !$esgotouTentativas,
+            // Só manda o gabarito quando o treino desse texto acabou (acertou
+            // ou esgotou as tentativas) - antes disso devolveria a resposta
+            // pro aluno enquanto ele ainda pode tentar de novo (mesmo cuidado
+            // de DailyQuestionOpenAI::avaliarESalvarResposta com resposta_ideal).
+            "traducao_gabarito" => $podeTentarNovamente ? null : $gabarito,
+            "pode_tentar_novamente" => $podeTentarNovamente,
         ];
     }
 

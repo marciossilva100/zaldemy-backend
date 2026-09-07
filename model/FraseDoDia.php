@@ -937,10 +937,15 @@ class FraseDoDia
             . "dizendo, não citando) em {$idiomaNome} ou em qualquer outro idioma. "
             . 'Responda em JSON: {"nota": 0-10, "feedback_gramatica": "...", "feedback_pronuncia": "...", "feedback_fluencia": "..."}';
 
+        // 500 não sobrava espaço suficiente pra 3 campos de feedback no
+        // mesmo JSON - a IA cortava um deles no meio da frase pra caber no
+        // orçamento de tokens (reportado: texto terminando sem pontuação
+        // final). Cada campo pede até ~150 caracteres - 900 dá folga
+        // confortável pros 3 mais a estrutura do JSON.
         $correcaoResult = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => "Frase original: {$frase}\nTranscrição: {$transcricao}"],
-        ], true, 500);
+        ], true, 900);
 
         if ($correcaoResult['erro']) {
             return ["success" => false, "message" => "Não foi possível corrigir: " . $correcaoResult['mensagem']];
@@ -953,9 +958,13 @@ class FraseDoDia
         }
 
         $nota = max(0, min(10, (int) $correcao['nota']));
-        $fbGramatica = mb_substr((string) ($correcao['feedback_gramatica'] ?? ''), 0, 250);
-        $fbPronuncia = mb_substr((string) ($correcao['feedback_pronuncia'] ?? ''), 0, 250);
-        $fbFluencia = mb_substr((string) ($correcao['feedback_fluencia'] ?? ''), 0, 250);
+        // truncarPreservandoPalavras (não mb_substr cru) - um corte no meio
+        // da palavra/frase produzia feedback incompleto (reportado pelo
+        // usuário); 250 -> 400 só como trava de segurança, a IA já é
+        // instruída a ficar em ~150 caracteres por campo.
+        $fbGramatica = self::truncarPreservandoPalavras((string) ($correcao['feedback_gramatica'] ?? ''), 400);
+        $fbPronuncia = self::truncarPreservandoPalavras((string) ($correcao['feedback_pronuncia'] ?? ''), 400);
+        $fbFluencia = self::truncarPreservandoPalavras((string) ($correcao['feedback_fluencia'] ?? ''), 400);
 
         // Mesmo padrão do Perguntas (avaliarESalvarResposta): só fecha a
         // frase (status_id=1, passa a valer pro histórico/limite diário ou

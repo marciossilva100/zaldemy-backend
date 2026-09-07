@@ -912,15 +912,21 @@ class DailyQuestionOpenAI
             . "{$idiomaNativoNome} do início ao fim - a única exceção é citar literalmente um trecho da resposta "
             . "do aluno como exemplo do erro; NUNCA escreva a explicação em si (a parte que você está dizendo, "
             . "não citando) em {$idiomaNome} ou em qualquer outro idioma. "
-            . "Além disso, gere também o campo \"resposta_ideal\": um exemplo de resposta boa pra essa pergunta, "
-            . "SEMPRE em {$idiomaNome} (mesmo idioma da pergunta), mesmo quando a resposta do aluno já estiver "
-            . "correta - serve de referência pro aluno comparar. "
+            . "Além disso, gere também o campo \"resposta_ideal\": um exemplo de resposta boa pra essa pergunta (1 a 3 "
+            . "frases, máx 300 caracteres), SEMPRE em {$idiomaNome} (mesmo idioma da pergunta), mesmo quando a "
+            . "resposta do aluno já estiver correta - serve de referência pro aluno comparar. "
             . 'Responda em JSON: {"nota": 0-10, "correto": true ou false, "feedback": "...", "resposta_ideal": "..."}';
 
+        // 500 não sobrava espaço suficiente pra "feedback" E "resposta_ideal"
+        // juntos no mesmo JSON - a IA cortava um dos dois campos no meio da
+        // frase pra caber no orçamento de tokens (reportado: texto do
+        // feedback terminando sem pontuação final). Cada campo pede até ~300
+        // caracteres (~100-150 tokens em pt/en) - 900 dá folga confortável
+        // pros dois mais a estrutura do JSON.
         $correcaoResult = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => "Pergunta: {$question}\nResposta do aluno: {$resposta}"],
-        ], true, 500);
+        ], true, 900);
 
         if ($correcaoResult['erro']) {
             return ["success" => false, "message" => "Não foi possível corrigir: " . $correcaoResult['mensagem']];
@@ -934,8 +940,13 @@ class DailyQuestionOpenAI
 
         $nota = max(0, min(10, (int) $correcao['nota']));
         $correto = (bool) ($correcao['correto'] ?? false);
-        $feedback = self::truncarPreservandoPalavras((string) ($correcao['feedback'] ?? ''), 300);
-        $respostaIdeal = self::truncarPreservandoPalavras((string) ($correcao['resposta_ideal'] ?? ''), 300);
+        // 300 era cortando no meio da explicação mesmo com a IA já
+        // respeitando o pedido de "máx 200/300 caracteres" no prompt -
+        // margem curta demais pra qualquer resposta um pouco mais longa.
+        // 500 é só uma trava de segurança contra a IA fugir do pedido, não
+        // deve cortar nada em uso normal.
+        $feedback = self::truncarPreservandoPalavras((string) ($correcao['feedback'] ?? ''), 500);
+        $respostaIdeal = self::truncarPreservandoPalavras((string) ($correcao['resposta_ideal'] ?? ''), 500);
 
         // Só marca como respondida (e conta pro limite) quando a resposta é
         // boa o suficiente, OU quando já esgotou as tentativas dessa pergunta
