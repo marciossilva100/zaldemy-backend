@@ -77,6 +77,36 @@ try {
         exit;
     }
 
+    if ($action === 'obter_nome') {
+        $categoria_id = $input['category_id'] ?? null;
+
+        if (!$categoria_id) {
+            http_response_code(400);
+            echo json_encode(["error" => "category_id obrigatório"]);
+            exit;
+        }
+
+        $nome = Categorias::obterNome($pdo, (int) $categoria_id, $user_id);
+
+        echo json_encode(["success" => $nome !== null, "categoria" => $nome]);
+        exit;
+    }
+
+    if ($action === 'listar_para_mover') {
+        $categoria_id = $input['category_id'] ?? null;
+
+        if (!$categoria_id) {
+            http_response_code(400);
+            echo json_encode(["error" => "category_id obrigatório"]);
+            exit;
+        }
+
+        $categorias = Categorias::listarParaMover($pdo, $user_id, (int) $categoria_id);
+
+        echo json_encode(["success" => true, "categorias" => $categorias]);
+        exit;
+    }
+
     if ($action === 'dispensar_guia_primeira_categoria') {
         Categorias::dispensarGuiaPrimeiraCategoria($pdo, $user_id);
         echo json_encode(['success' => true]);
