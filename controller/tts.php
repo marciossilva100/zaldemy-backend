@@ -281,8 +281,10 @@ try {
 
         // 🔥 agora com cache ativado
         $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
-        $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
-        $result = $tts->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
+        // Velocidade NÃO é mais passada aqui de propósito - gerar o áudio já
+        // acelerado/desacelerado no servidor e o cliente aplicar playbackRate
+        // por cima dobrava o efeito (ver comentário em OpenAiTts::gerarAudio).
+        $result = $tts->gerarAudio($texto, $idioma, true, $vozPreferida);
 
         if ($result["erro"]) {
             desfazerReservaAudioIa($pdo, $user_id);
@@ -351,8 +353,10 @@ try {
         }
 
         $vozPreferida = Configuracoes::getVozTts($pdo, $user_id);
-        $velocidadePreferida = Configuracoes::getVelocidadeTts($pdo, $user_id);
-        $result = $tts->gerarAudio($texto, $idioma, true, $vozPreferida, $velocidadePreferida);
+        // Velocidade NÃO é mais passada aqui de propósito - gerar o áudio já
+        // acelerado/desacelerado no servidor e o cliente aplicar playbackRate
+        // por cima dobrava o efeito (ver comentário em OpenAiTts::gerarAudio).
+        $result = $tts->gerarAudio($texto, $idioma, true, $vozPreferida);
 
         if ($result["erro"]) {
             desfazerReservaAudioIa($pdo, $user_id);
