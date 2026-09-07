@@ -239,8 +239,54 @@ class Frases
         ];
     }
 
+    // Move a frase pra outra categoria do PRÓPRIO usuário. O JOIN exige que
+    // a categoria de destino pertença ao usuário, esteja ativa E tenha o
+    // MESMO par de idiomas da frase - sem essa última checagem daria pra
+    // "mover" uma frase pra uma categoria de outro idioma, quebrando a
+    // consistência (a frase guarda idioma_nativo/idioma_aprendendo
+    // próprios, herdados da categoria original). Se a categoria de destino
+    // não existir/não for do usuário/não bater o idioma, o JOIN não casa
+    // linha nenhuma e rowCount() fica 0 - mesmo efeito de "não encontrada".
+    public function moverFrase($user_id, $novaCategoriaId): array
+    {
+        global $pdo;
 
-  
+        $sql = "UPDATE frases f
+                INNER JOIN categorias c
+                    ON c.id = :nova_categoria_join
+                    AND c.id_user = :usuario_id_categoria
+                    AND c.status_id > 0
+                    AND c.idioma_nativo = f.idioma_nativo
+                    AND c.idioma_aprendendo = f.idioma_aprendendo
+                SET f.categoria_id = :nova_categoria_set
+                WHERE f.id = :id
+                AND f.usuario_id = :usuario_id_frase
+                AND f.status_id > 0";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':nova_categoria_join', $novaCategoriaId, PDO::PARAM_INT);
+        $stmt->bindValue(':nova_categoria_set', $novaCategoriaId, PDO::PARAM_INT);
+        $stmt->bindValue(':usuario_id_categoria', $user_id, PDO::PARAM_INT);
+        $stmt->bindValue(':id', $this->id, PDO::PARAM_INT);
+        $stmt->bindValue(':usuario_id_frase', $user_id, PDO::PARAM_INT);
+
+        $stmt->execute();
+
+        if ($stmt->rowCount() > 0) {
+            return [
+                'success' => true,
+                'message' => 'Frase movida com sucesso'
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => 'Não foi possível mover a frase - categoria de destino inválida ou frase não encontrada.'
+        ];
+    }
+
+
+
 
      public function addFrases($user_id): array
     {

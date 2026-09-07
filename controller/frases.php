@@ -151,6 +151,29 @@ try {
 
     }
 
+    if ($action === 'move_phrase') {
+
+        $frase->id = $input['id_phrase'] ?? null;
+        $novaCategoriaId = $input['category_id_destino'] ?? null;
+
+        if (!$frase->id) {
+            http_response_code(400);
+            echo json_encode(["error" => "id_phrase obrigatório"]);
+            exit;
+        }
+
+        if (!$novaCategoriaId) {
+            http_response_code(400);
+            echo json_encode(["error" => "category_id_destino obrigatório"]);
+            exit;
+        }
+
+        $response = $frase->moverFrase($user_id, $novaCategoriaId);
+
+        echo json_encode($response);
+        exit;
+    }
+
      if ($action === 'add_phrase') {
         $frase->categoriaId = $input['category_id'] ?? null;
         $frase->texto_nativo = $input['phrase'] ?? null;

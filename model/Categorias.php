@@ -405,6 +405,65 @@ class Categorias
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // Nome da categoria pra exibir no título da tela de Frases - diferente
+    // de getById (sem checagem de dono, usado só internamente ao adicionar
+    // uma categoria compartilhada), esse exige que a categoria pertença ao
+    // usuário logado, já que é chamado direto por uma tela sua.
+    public static function obterNome(PDO $pdo, int $categoriaId, int $user_id): ?string
+    {
+        $sql = "SELECT categoria FROM categorias WHERE id = :id AND id_user = :id_user AND status_id > 0 LIMIT 1";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id', $categoriaId, PDO::PARAM_INT);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $result['categoria'] ?? null;
+    }
+
+    // Categorias do usuário elegíveis como destino ao "mover" uma frase -
+    // só do MESMO par de idiomas da categoria atual (mover pra outro idioma
+    // quebraria a consistência, ver Frases::moverFrase) e nunca a própria
+    // categoria atual (mover pra ela mesma não é uma opção real).
+    public static function listarParaMover(PDO $pdo, int $user_id, int $categoriaAtualId): array
+    {
+        $sql = "SELECT idioma_nativo, idioma_aprendendo
+                FROM categorias
+                WHERE id = :id AND id_user = :id_user AND status_id > 0
+                LIMIT 1";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id', $categoriaAtualId, PDO::PARAM_INT);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $atual = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$atual) {
+            return [];
+        }
+
+        $sql = "SELECT id, categoria
+                FROM categorias
+                WHERE id_user = :id_user
+                AND status_id > 0
+                AND idioma_nativo = :idioma_nativo
+                AND idioma_aprendendo = :idioma_aprendendo
+                AND id <> :categoria_atual
+                ORDER BY categoria ASC";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->bindValue(':idioma_nativo', $atual['idioma_nativo'], PDO::PARAM_INT);
+        $stmt->bindValue(':idioma_aprendendo', $atual['idioma_aprendendo'], PDO::PARAM_INT);
+        $stmt->bindValue(':categoria_atual', $categoriaAtualId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getById(PDO $pdo, int $categoria): ? string
     {
         $sql = "
