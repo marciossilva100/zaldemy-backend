@@ -937,15 +937,15 @@ class FraseDoDia
             . "dizendo, não citando) em {$idiomaNome} ou em qualquer outro idioma. "
             . 'Responda em JSON: {"nota": 0-10, "feedback_gramatica": "...", "feedback_pronuncia": "...", "feedback_fluencia": "..."}';
 
-        // 500 não sobrava espaço suficiente pra 3 campos de feedback no
-        // mesmo JSON - a IA cortava um deles no meio da frase pra caber no
-        // orçamento de tokens (reportado: texto terminando sem pontuação
-        // final). Cada campo pede até ~150 caracteres - 900 dá folga
-        // confortável pros 3 mais a estrutura do JSON.
+        // JÁ FOI CORTADO NO MEIO DA FRASE por um orçamento de tokens curto
+        // demais pra 3 campos de feedback no mesmo JSON (500, depois 900,
+        // ainda não bastava) - 1600 é folga grande o bastante pra nunca
+        // faltar espaço pros 3 em uso normal (custo extra é zero, max_tokens
+        // é só um teto, não é cobrado o que não é gerado).
         $correcaoResult = $chat->completar([
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => "Frase original: {$frase}\nTranscrição: {$transcricao}"],
-        ], true, 900);
+        ], true, 1600);
 
         if ($correcaoResult['erro']) {
             return ["success" => false, "message" => "Não foi possível corrigir: " . $correcaoResult['mensagem']];
@@ -958,13 +958,14 @@ class FraseDoDia
         }
 
         $nota = max(0, min(10, (int) $correcao['nota']));
-        // truncarPreservandoPalavras (não mb_substr cru) - um corte no meio
-        // da palavra/frase produzia feedback incompleto (reportado pelo
-        // usuário); 250 -> 400 só como trava de segurança, a IA já é
-        // instruída a ficar em ~150 caracteres por campo.
-        $fbGramatica = self::truncarPreservandoPalavras((string) ($correcao['feedback_gramatica'] ?? ''), 400);
-        $fbPronuncia = self::truncarPreservandoPalavras((string) ($correcao['feedback_pronuncia'] ?? ''), 400);
-        $fbFluencia = self::truncarPreservandoPalavras((string) ($correcao['feedback_fluencia'] ?? ''), 400);
+        // 250 e depois 400 já cortaram no meio da frase mesmo com a IA já
+        // instruída a ficar em ~150 caracteres por campo - texto em
+        // português tende a ser mais verboso que o pedido sugere. 2000 é só
+        // uma trava de sanidade contra a IA enlouquecer, não deve cortar
+        // NADA em uso normal, nunca mais.
+        $fbGramatica = self::truncarPreservandoPalavras((string) ($correcao['feedback_gramatica'] ?? ''), 2000);
+        $fbPronuncia = self::truncarPreservandoPalavras((string) ($correcao['feedback_pronuncia'] ?? ''), 2000);
+        $fbFluencia = self::truncarPreservandoPalavras((string) ($correcao['feedback_fluencia'] ?? ''), 2000);
 
         // Mesmo padrão do Perguntas (avaliarESalvarResposta): só fecha a
         // frase (status_id=1, passa a valer pro histórico/limite diário ou
