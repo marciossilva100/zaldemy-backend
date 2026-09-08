@@ -140,7 +140,12 @@ try {
             exit;
         }
 
-        $chat = new OpenAiChat($_ENV['OPEN_AI']);
+        // gpt-5-mini (não nano) - mesmo motivo de DailyQuestionController.php:
+        // testado direto na API com uma transcrição 100% no idioma certo mas
+        // gramaticalmente ruim, nano alegou falsamente "idioma errado" na
+        // maioria das tentativas mesmo com o prompt já reforçado; mini
+        // acertou consistentemente.
+        $chat = new OpenAiChat($_ENV['OPEN_AI'], "gpt-5-mini");
         $transcribe = new OpenAiTranscribe($_ENV['OPEN_AI']);
 
         $resultado = FraseDoDia::responder(

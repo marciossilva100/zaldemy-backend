@@ -66,12 +66,17 @@ class DailyQuestionController
     public function __construct(PDO $pdo, string $apiKey)
     {
         $this->pdo = $pdo;
-        $this->chat = new OpenAiChat($apiKey);
-        // gpt-5-mini só pra gerar a pergunta - testado direto na API, combina
-        // os trechos das frases do aluno de forma bem mais coerente que o
-        // nano nessa tarefa específica. A correção da resposta (mais simples,
-        // não precisa "compor" texto novo a partir de várias frases soltas)
-        // continua no nano de $this->chat.
+        // gpt-5-mini pros dois - $this->chat (avaliar a resposta do aluno)
+        // usava nano até aqui, por ser "mais simples" que compor uma pergunta
+        // nova a partir de frases soltas. Só que testado direto na API (5x
+        // com o mesmo texto 100% em inglês, só gramaticalmente ruim): nano
+        // alegou falsamente "mistura de português"/"não está em inglês" em
+        // 4 das 5 vezes (mesmo com o prompt já reforçado distinguindo erro
+        // gramatical de idioma errado); mini acertou "está em inglês, mas..."
+        // nas 5 de 5, com feedback bem mais específico. Mesmo motivo que já
+        // levou $this->chatGeracao a usar mini (nano confunde conteúdo
+        // parecido/mal formado com algo que não é).
+        $this->chat = new OpenAiChat($apiKey, "gpt-5-mini");
         $this->chatGeracao = new OpenAiChat($apiKey, "gpt-5-mini");
         $this->transcribe = new OpenAiTranscribe($apiKey);
     }
