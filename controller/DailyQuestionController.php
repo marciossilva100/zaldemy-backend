@@ -143,12 +143,19 @@ class DailyQuestionController
                 $categoriaIds = !empty($categoriaIds) ? array_values($categoriaIds) : null;
             }
 
+            // Sem category_ids na requisição - reusa a escolha de HOJE em vez
+            // de cair pro sorteio automático entre todas as categorias (ver
+            // comentário em DailyQuestionOpenAI::obterCategoriaEscolhidaHoje).
+            if ($categoriaIds === null) {
+                $categoriaIds = DailyQuestionOpenAI::obterCategoriaEscolhidaHoje($this->pdo, $user_id);
+            }
+
             $phrases = $this->getUserPhrases($user_id, $categoriaIds);
             $idioma = $this->getIdiomaAprendendo($user_id);
             $idiomaNativo = $this->getIdiomaNativo($user_id);
             $nivel = DailyQuestionOpenAI::getNivelNome($this->pdo, $user_id);
 
-            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chatGeracao, $user_id, $phrases, $idioma, $idiomaNativo, $nivel);
+            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chatGeracao, $user_id, $phrases, $idioma, $idiomaNativo, $nivel, $categoriaIds);
 
             if ($resultado['success']) {
                 $plano = $this->getPlano();

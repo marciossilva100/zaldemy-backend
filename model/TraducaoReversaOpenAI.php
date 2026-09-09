@@ -111,6 +111,37 @@ class TraducaoReversaOpenAI
         return $row ?: null;
     }
 
+    // Lembra a última categoria escolhida à mão pelo aluno HOJE, pra reusar
+    // quando uma geração nova chegar SEM category_ids na requisição - mesmo
+    // raciocínio/mesmo bug de DailyQuestionOpenAI::obterCategoriaEscolhidaHoje
+    // (reportado com dados reais: category_ids parava de ser reenviado pelo
+    // frontend numa geração seguinte, provavelmente por um app suspenso/
+    // recarregado pelo SO em segundo plano, e a geração caía pro sorteio
+    // automático entre todas as categorias).
+    public static function obterCategoriaEscolhidaHoje(PDO $pdo, int $user_id): ?array
+    {
+        $sql = "SELECT f.categoria_ids_escolhidos
+                FROM traducao_reversa_ia f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprender
+                    AND ir.id_user = :user_id
+                WHERE f.user_id = :user_id
+                AND DATE(f.data_criacao) = CURDATE()
+                AND f.categoria_ids_escolhidos IS NOT NULL
+                ORDER BY f.id DESC LIMIT 1";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        $valor = $stmt->fetchColumn();
+
+        if (!$valor) {
+            return null;
+        }
+
+        $ids = array_filter(array_map('intval', explode(',', $valor)));
+        return !empty($ids) ? array_values($ids) : null;
+    }
+
     // Mesmo gate de Perguntas/Frase do Dia: só libera pra quem já estudou
     // pelo menos algumas frases de verdade (id_treino>=2 alguma vez,
     // cobrindo o histórico pra não travar em caso de dessincronia antiga -
@@ -147,7 +178,7 @@ class TraducaoReversaOpenAI
     // OBRIGATÓRIO (sem fallback relaxado, diferente de Perguntas/Frase do
     // Dia) - pedido explícito do usuário: o conteúdo tem que vir de frases
     // que ele já estudou de verdade, sem exceção.
-    public static function obterTexto(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNativoNome, string $idiomaAprendendoNome, ?string $nivelNome = null): array
+    public static function obterTexto(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNativoNome, string $idiomaAprendendoNome, ?string $nivelNome = null, ?array $categoriaIds = null): array
     {
         $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
@@ -326,12 +357,15 @@ class TraducaoReversaOpenAI
 
         // Grava junto o par de idiomas atual (via subquery em idioma_referencia)
         // pra getPendente() conseguir filtrar por ele depois - ver comentário lá.
+        // categoria_ids_escolhidos: só preenche quando o aluno escolheu à mão
+        // (null em geração automática) - ver obterCategoriaEscolhidaHoje.
+        $categoriaIdsStr = !empty($categoriaIds) ? implode(',', $categoriaIds) : null;
         $stmt = $pdo->prepare("
-            INSERT INTO traducao_reversa_ia (user_id, status_id, texto_nativo, texto_traduzido_gabarito, idioma_nativo, idioma_aprender)
-            SELECT :user_id, 0, :texto, :gabarito, ir.idioma_nativo, ir.idioma_aprender
+            INSERT INTO traducao_reversa_ia (user_id, status_id, texto_nativo, texto_traduzido_gabarito, idioma_nativo, idioma_aprender, categoria_ids_escolhidos)
+            SELECT :user_id, 0, :texto, :gabarito, ir.idioma_nativo, ir.idioma_aprender, :categoria_ids
             FROM idioma_referencia ir WHERE ir.id_user = :user_id2
         ");
-        $stmt->execute([':user_id' => $user_id, ':texto' => $texto, ':gabarito' => $gabarito, ':user_id2' => $user_id]);
+        $stmt->execute([':user_id' => $user_id, ':texto' => $texto, ':gabarito' => $gabarito, ':categoria_ids' => $categoriaIdsStr, ':user_id2' => $user_id]);
         // Captura o id JÁ AQUI - ver comentário equivalente em
         // FraseDoDia::obterFraseDoDia (lastInsertId() depois de
         // registrarUsadas() retorna 0, confirmado isolado).

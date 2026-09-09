@@ -175,12 +175,19 @@ class TraducaoReversaController
                 $categoriaIds = !empty($categoriaIds) ? array_values($categoriaIds) : null;
             }
 
+            // Sem category_ids na requisição - reusa a escolha de HOJE em vez
+            // de cair pro sorteio automático entre todas as categorias (ver
+            // comentário em TraducaoReversaOpenAI::obterCategoriaEscolhidaHoje).
+            if ($categoriaIds === null) {
+                $categoriaIds = TraducaoReversaOpenAI::obterCategoriaEscolhidaHoje($this->pdo, $user_id);
+            }
+
             $phrases = $this->getUserPhrases($user_id, $categoriaIds);
             $idiomaNativo = $this->getIdiomaNativo($user_id);
             $idiomaAprendendo = $this->getIdiomaAprendendo($user_id);
             $nivel = TraducaoReversaOpenAI::getNivelNome($this->pdo, $user_id);
 
-            $resultado = TraducaoReversaOpenAI::obterTexto($this->pdo, $this->chatGeracao, $user_id, $phrases, $idiomaNativo, $idiomaAprendendo, $nivel);
+            $resultado = TraducaoReversaOpenAI::obterTexto($this->pdo, $this->chatGeracao, $user_id, $phrases, $idiomaNativo, $idiomaAprendendo, $nivel, $categoriaIds);
 
             if ($resultado['success']) {
                 $resultado['idioma_alvo'] = $idiomaAprendendo;

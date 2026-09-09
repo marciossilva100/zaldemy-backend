@@ -102,6 +102,13 @@ try {
             ? array_map('intval', $input['category_ids'])
             : null;
 
+        // Sem category_ids na requisição - reusa a escolha de HOJE em vez de
+        // cair pro sorteio automático entre todas as categorias (ver
+        // comentário em FraseDoDia::obterCategoriaEscolhidaHoje).
+        if ($categoriaIds === null) {
+            $categoriaIds = FraseDoDia::obterCategoriaEscolhidaHoje($pdo, $user_id);
+        }
+
         // gpt-5-mini só pra gerar a frase - testado direto na API, combina os
         // trechos das frases do aluno de forma bem mais coerente que o nano
         // nessa tarefa específica de "compor" texto novo a partir de várias
@@ -112,7 +119,7 @@ try {
         $frases = FraseDoDia::getFrasesDoUsuario($pdo, $user_id, $categoriaIds);
         $nivel = FraseDoDia::getNivelNome($pdo, $user_id);
 
-        $resultado = FraseDoDia::obterFraseDoDia($pdo, $chat, $user_id, $idioma, $idiomaNativo, $frases, $nivel);
+        $resultado = FraseDoDia::obterFraseDoDia($pdo, $chat, $user_id, $idioma, $idiomaNativo, $frases, $nivel, $categoriaIds);
 
         echo json_encode($resultado);
         exit;

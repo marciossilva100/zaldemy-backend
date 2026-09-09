@@ -135,6 +135,43 @@ class DailyQuestionOpenAI
         return $row ?: null;
     }
 
+    // Lembra a última categoria escolhida à mão pelo aluno HOJE, pra reusar
+    // quando uma geração nova chegar SEM category_ids na requisição - sem
+    // isso, o frontend é a ÚNICA fonte de verdade pra qual categoria usar, e
+    // qualquer falha em reenviar a escolha (ex: app suspenso/recarregado
+    // pelo SO em segundo plano sem o usuário perceber - único cenário
+    // reproduzido que ainda vazava categoria mesmo com o fluxo do frontend
+    // já corrigido) fazia a geração cair pro sorteio automático entre TODAS
+    // as categorias, ignorando a escolha original. Só considera o PAR DE
+    // IDIOMAS ATUAL (mesmo motivo de getPendente) e só pega registros que
+    // realmente guardaram uma escolha (categoria_ids_escolhidos não nulo) -
+    // uma geração automática (sem escolha) no meio do dia não "apaga" a
+    // escolha anterior, porque simplesmente não teria essa coluna preenchida
+    // pra sobrescrever.
+    public static function obterCategoriaEscolhidaHoje(PDO $pdo, int $user_id): ?array
+    {
+        $sql = "SELECT f.categoria_ids_escolhidos
+                FROM perguntas_ia f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprender
+                    AND ir.id_user = :user_id
+                WHERE f.user_id = :user_id
+                AND DATE(f.data_criacao) = CURDATE()
+                AND f.categoria_ids_escolhidos IS NOT NULL
+                ORDER BY f.id DESC LIMIT 1";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        $valor = $stmt->fetchColumn();
+
+        if (!$valor) {
+            return null;
+        }
+
+        $ids = array_filter(array_map('intval', explode(',', $valor)));
+        return !empty($ids) ? array_values($ids) : null;
+    }
+
     // Só conta como "estudada" a frase que já passou pelo menos uma vez pelo
     // treino 2 (memorizando) - treino_data_atualizacao é um histórico (várias
     // linhas por frase ao longo do tempo), então cobre o caso de ter voltado
@@ -206,7 +243,7 @@ class DailyQuestionOpenAI
 
     // Gera também a tradução da pergunta pro idioma nativo - a tela
     // funciona como um flashcard (frente = pergunta gerada, verso = tradução).
-    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome, ?string $nivelNome = null): array
+    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome, ?string $nivelNome = null, ?array $categoriaIds = null): array
     {
         $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
@@ -409,12 +446,15 @@ class DailyQuestionOpenAI
 
         // Grava junto o par de idiomas atual (via subquery em idioma_referencia)
         // pra getPendente() conseguir filtrar por ele depois - ver comentário lá.
+        // categoria_ids_escolhidos: só preenche quando o aluno escolheu à mão
+        // (null em geração automática) - ver obterCategoriaEscolhidaHoje.
+        $categoriaIdsStr = !empty($categoriaIds) ? implode(',', $categoriaIds) : null;
         $stmt = $pdo->prepare("
-            INSERT INTO perguntas_ia (user_id, status_id, question, question_traducao, idioma_nativo, idioma_aprender)
-            SELECT :user_id, 0, :question, :traducao, ir.idioma_nativo, ir.idioma_aprender
+            INSERT INTO perguntas_ia (user_id, status_id, question, question_traducao, idioma_nativo, idioma_aprender, categoria_ids_escolhidos)
+            SELECT :user_id, 0, :question, :traducao, ir.idioma_nativo, ir.idioma_aprender, :categoria_ids
             FROM idioma_referencia ir WHERE ir.id_user = :user_id2
         ");
-        $stmt->execute([':user_id' => $user_id, ':question' => $question, ':traducao' => $traducao, ':user_id2' => $user_id]);
+        $stmt->execute([':user_id' => $user_id, ':question' => $question, ':traducao' => $traducao, ':categoria_ids' => $categoriaIdsStr, ':user_id2' => $user_id]);
         // Captura o id JÁ AQUI - ver comentário equivalente em
         // FraseDoDia::obterFraseDoDia (lastInsertId() depois de
         // registrarUsadas() retorna 0, confirmado isolado).
