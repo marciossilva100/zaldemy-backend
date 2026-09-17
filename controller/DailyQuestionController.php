@@ -167,6 +167,13 @@ class DailyQuestionController
                     $resultado['numero'] = DailyQuestionOpenAI::contarHoje($this->pdo, $user_id) + 1;
                     $resultado['total'] = DailyQuestionOpenAI::LIMITE_DIARIO_LIMITADO;
                 }
+
+                // Categoria(s) de fato usada(s) nessa pergunta - já resolvidas
+                // acima (da requisição OU da escolha de hoje via
+                // obterCategoriaEscolhidaHoje). O front usa isso pra manter
+                // categoriasSelecionadas em dia mesmo quando não reenvia
+                // category_ids (2ª+ pergunta do dia), pro botão "Vocabulário".
+                $resultado['categoria_ids'] = $categoriaIds;
             }
 
             $this->json($resultado);
