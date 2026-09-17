@@ -1040,6 +1040,29 @@ class FraseDoDia
         ];
     }
 
+    // Botão "Finalizar" no feedback (ver comentário no controller) - fecha
+    // a frase pendente já avaliada (nota/feedback de responder() continuam
+    // os mesmos, só status_id vira 1) sem exigir esgotar as tentativas.
+    // Exige nota já preenchida - sem isso o botão não deveria nem aparecer
+    // (só existe na tela de resultado, que só existe depois de responder()
+    // ter rodado pelo menos uma vez).
+    public static function finalizarPendente(PDO $pdo, int $user_id): array
+    {
+        $stmt = $pdo->prepare("
+            UPDATE frase_dia_ia
+            SET status_id = 1
+            WHERE user_id = :user_id AND status_id = 0 AND nota IS NOT NULL
+            ORDER BY id DESC LIMIT 1
+        ");
+        $stmt->execute([':user_id' => $user_id]);
+
+        if ($stmt->rowCount() === 0) {
+            return ["success" => false, "message" => "Nenhuma frase pendente com nota pra finalizar."];
+        }
+
+        return ["success" => true];
+    }
+
     private static function extensaoParaMime(string $mimeType): string
     {
         $mapa = [

@@ -175,6 +175,31 @@ try {
         exit;
     }
 
+    // Botão "Finalizar" na tela de feedback, quando pode_tentar_novamente
+    // veio true (nota baixa, mas ainda dentro do limite de tentativas) - o
+    // aluno decide não tentar de novo e encerrar com a nota que já tem.
+    // Sem essa ação, a frase ficava presa em status_id=0 pra sempre (nunca
+    // esgotava tentativas sozinha), sumindo do histórico e sendo devolvida
+    // de novo como pendente na próxima visita - bug real reportado pelo
+    // usuário ("o botão finalizar não faz o que deveria").
+    if ($action === 'finalizar') {
+        $bloqueio = FraseDoDia::verificarAcesso($pdo, $user_id, $plano);
+
+        if ($bloqueio !== null) {
+            echo json_encode($bloqueio);
+            exit;
+        }
+
+        $resultado = FraseDoDia::finalizarPendente($pdo, $user_id);
+
+        if ($resultado['success']) {
+            PlanoLimitado::verificarEDowngradear($pdo, $user_id, $plano);
+        }
+
+        echo json_encode($resultado);
+        exit;
+    }
+
     if ($action === 'historico') {
         // Limitado só vê a amostra grátis que ganhou no mesmo dia - no dia
         // seguinte ela some do histórico (é uma amostra vitalícia única, não
