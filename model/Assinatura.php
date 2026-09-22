@@ -130,6 +130,35 @@ class Assinatura
         return ['success' => true];
     }
 
+    // Sessão do Billing Portal do próprio Stripe (hospedado por eles, com
+    // suporte de verdade a "atualizar cartão") - NÃO reaproveita
+    // criarCheckoutSession, que cria uma assinatura NOVA (duplicaria a
+    // existente). É pra onde o botão "Atualizar forma de pagamento" em
+    // Configurações (e o link do email/push de cobrança falhada) leva -
+    // antes esses avisos linkavam só pra /configuracoes, que não tinha
+    // nenhuma ação pra resolver o problema, só cancelar (bug real
+    // reportado: "clica e não acontece nada").
+    public static function criarPortalSessao(PDO $pdo, int $user_id): array
+    {
+        $stmt = $pdo->prepare("SELECT stripe_customer_id FROM usuarios WHERE id = :id");
+        $stmt->execute([':id' => $user_id]);
+        $customerId = $stmt->fetch(PDO::FETCH_ASSOC)['stripe_customer_id'] ?? null;
+
+        if (!$customerId) {
+            return ['success' => false, 'message' => 'Nenhuma assinatura encontrada.'];
+        }
+
+        $stripe = self::client();
+        $appUrl = $_ENV['APP_URL'] ?? 'https://zaldemy.com';
+
+        $sessao = $stripe->billingPortal->sessions->create([
+            'customer' => $customerId,
+            'return_url' => $appUrl . '/configuracoes',
+        ]);
+
+        return ['success' => true, 'url' => $sessao->url];
+    }
+
     // Verifica a assinatura do webhook (garante que a chamada veio mesmo do
     // Stripe) e atualiza o plano do usuário conforme o evento recebido.
     public static function processarWebhook(PDO $pdo, string $payload, string $sigHeader): array
@@ -275,7 +304,17 @@ class Assinatura
     // demais (risco real de perder o Premium) pra depender só de 1 canal.
     private static function notificarPagamentoFalhou(PDO $pdo, string $customerId): void
     {
-        $stmt = $pdo->prepare("SELECT id, nome, email FROM usuarios WHERE stripe_customer_id = :cid");
+        // idioma_nativo (sigla, ex: "en") pra mandar o email no idioma do
+        // usuário (pedido explícito) - mesmo JOIN idioma_referencia/idiomas
+        // já usado em controller/me.php pra resolver native_language.
+        $stmt = $pdo->prepare("
+            SELECT u.id, u.nome, u.email, i.sigla AS idioma_nativo
+            FROM usuarios u
+            LEFT JOIN idioma_referencia ir ON ir.id_user = u.id
+            LEFT JOIN idiomas i ON i.id = ir.idioma_nativo
+            WHERE u.stripe_customer_id = :cid
+            LIMIT 1
+        ");
         $stmt->execute([':cid' => $customerId]);
         $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -307,7 +346,7 @@ class Assinatura
             '/configuracoes'
         );
 
-        if (!empty($usuario['email']) && !enviarEmailPagamentoFalhou($usuario['email'], $usuario['nome'] ?? '')) {
+        if (!empty($usuario['email']) && !enviarEmailPagamentoFalhou($usuario['email'], $usuario['nome'] ?? '', $usuario['idioma_nativo'] ?? 'pt')) {
             error_log("[assinatura] falha ao enviar email de pagamento falhou user_id={$userId}");
         }
 

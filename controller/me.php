@@ -65,7 +65,7 @@ require_once '../model/Nivel.php';
 try {
 
     $stmt = $pdo->prepare("
-        SELECT id, nome, email, apelido, apelido_definido_pelo_usuario, foto_perfil, step, plano, nivel, interesses_definidos, guia_categoria_dispensado, guia_treino_dispensado, assinatura_cancelamento_previsto
+        SELECT id, nome, email, apelido, apelido_definido_pelo_usuario, foto_perfil, step, plano, nivel, interesses_definidos, guia_categoria_dispensado, guia_treino_dispensado, assinatura_cancelamento_previsto, assinatura_status
         FROM usuarios
         WHERE auth_token = :token
         LIMIT 1
@@ -148,6 +148,11 @@ try {
             "categoria_ia_disponivel" => $categoriaIaDisponivel,
             "categoria_ia_bloqueio" => $bloqueioCategoriaIA,
             "assinatura_cancelamento_previsto" => $usuario['assinatura_cancelamento_previsto'] ?? null,
+            // "past_due" (cobrança falhando, Stripe ainda tentando) é o que
+            // faz a tela de Configurações mostrar "Atualizar forma de
+            // pagamento" em vez de "Assinatura ativa" - sem esse campo o
+            // front não tinha como saber que a cobrança estava falhando.
+            "assinatura_status" => $usuario['assinatura_status'] ?? null,
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,
             // Nome do idioma nativo (ex: "Português", "Inglês") - usado no
             // front pra montar dinamicamente o rótulo "Palavra ou frase em
