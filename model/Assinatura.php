@@ -1,10 +1,12 @@
 <?php
 
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/PushNotification.php';
 
 use Stripe\StripeClient;
 use Stripe\Webhook;
 use Stripe\Exception\SignatureVerificationException;
+use Minishlink\WebPush\WebPush;
 
 // Assinatura do Zaldemy+ via Stripe (versão web - o app Android usa Google
 // Play Billing separadamente, por exigência da política da Play Store).
@@ -167,6 +169,18 @@ class Assinatura
                 $subscription = $event->data->object;
                 self::desativarAssinatura($pdo, $subscription->customer, $subscription->id, $eventoEm);
                 break;
+
+            // Cada tentativa de cobrança que falha (Stripe tenta de novo por
+            // um tempo antes de desistir e mandar subscription.deleted) -
+            // não muda plano/status nenhum aqui (isso já é tratado por
+            // subscription.updated quando o status em si muda pra past_due),
+            // só avisa o usuário por push pra ele atualizar o cartão antes
+            // de perder o acesso. Sem isso, o aluno só ficava sabendo do
+            // problema quando a assinatura já tinha sido cancelada de vez.
+            case 'invoice.payment_failed':
+                $invoice = $event->data->object;
+                self::notificarPagamentoFalhou($pdo, $invoice->customer);
+                break;
         }
 
         return ['success' => true];
@@ -249,5 +263,45 @@ class Assinatura
              AND (assinatura_webhook_processado_em IS NULL OR assinatura_webhook_processado_em < :evt2)"
         );
         $stmt->execute([':cid' => $customerId, ':sid' => $subscriptionId, ':evt' => $eventoEm, ':evt2' => $eventoEm]);
+    }
+
+    // Aviso por push quando uma cobrança falha (ver comentário no switch de
+    // processarWebhook) - no máximo 1x por dia por usuário, mesmo padrão de
+    // dedupe (notificacoes_enviadas) já usado pelo cron de push, porque o
+    // Stripe pode tentar cobrar de novo mais de uma vez no mesmo dia.
+    private static function notificarPagamentoFalhou(PDO $pdo, string $customerId): void
+    {
+        $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE stripe_customer_id = :cid");
+        $stmt->execute([':cid' => $customerId]);
+        $userId = $stmt->fetch(PDO::FETCH_ASSOC)['id'] ?? null;
+
+        if (!$userId) {
+            return;
+        }
+
+        $userId = (int) $userId;
+        $tipo = 'pagamento_falhou';
+
+        if (PushNotification::jaFoiNotificadoHoje($pdo, $userId, $tipo)) {
+            return;
+        }
+
+        $webPush = new WebPush([
+            'VAPID' => [
+                'subject' => $_ENV['VAPID_SUBJECT'],
+                'publicKey' => $_ENV['VAPID_PUBLIC_KEY'],
+                'privateKey' => $_ENV['VAPID_PRIVATE_KEY'],
+            ],
+        ]);
+
+        PushNotification::enviarParaUsuario(
+            $pdo,
+            $webPush,
+            $userId,
+            'Não conseguimos cobrar sua assinatura',
+            'Atualize sua forma de pagamento pra continuar com o Zaldemy+.',
+            '/configuracoes'
+        );
+        PushNotification::registrarNotificacaoEnviada($pdo, $userId, $tipo);
     }
 }
