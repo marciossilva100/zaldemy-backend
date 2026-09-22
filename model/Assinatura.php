@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/PushNotification.php';
+require_once __DIR__ . '/../controller/email.php'; // enviarEmailPagamentoFalhou()
 
 use Stripe\StripeClient;
 use Stripe\Webhook;
@@ -265,21 +266,24 @@ class Assinatura
         $stmt->execute([':cid' => $customerId, ':sid' => $subscriptionId, ':evt' => $eventoEm, ':evt2' => $eventoEm]);
     }
 
-    // Aviso por push quando uma cobrança falha (ver comentário no switch de
-    // processarWebhook) - no máximo 1x por dia por usuário, mesmo padrão de
-    // dedupe (notificacoes_enviadas) já usado pelo cron de push, porque o
-    // Stripe pode tentar cobrar de novo mais de uma vez no mesmo dia.
+    // Aviso por push E email quando uma cobrança falha (ver comentário no
+    // switch de processarWebhook) - no máximo 1x por dia por usuário, mesmo
+    // padrão de dedupe (notificacoes_enviadas) já usado pelo cron de push,
+    // porque o Stripe pode tentar cobrar de novo mais de uma vez no mesmo
+    // dia. Email além do push (pedido do usuário) porque nem todo mundo tem
+    // push ativado/permitido no navegador - falha de cobrança é sensível
+    // demais (risco real de perder o Premium) pra depender só de 1 canal.
     private static function notificarPagamentoFalhou(PDO $pdo, string $customerId): void
     {
-        $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE stripe_customer_id = :cid");
+        $stmt = $pdo->prepare("SELECT id, nome, email FROM usuarios WHERE stripe_customer_id = :cid");
         $stmt->execute([':cid' => $customerId]);
-        $userId = $stmt->fetch(PDO::FETCH_ASSOC)['id'] ?? null;
+        $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$userId) {
+        if (!$usuario) {
             return;
         }
 
-        $userId = (int) $userId;
+        $userId = (int) $usuario['id'];
         $tipo = 'pagamento_falhou';
 
         if (PushNotification::jaFoiNotificadoHoje($pdo, $userId, $tipo)) {
@@ -302,6 +306,11 @@ class Assinatura
             'Atualize sua forma de pagamento pra continuar com o Zaldemy+.',
             '/configuracoes'
         );
+
+        if (!empty($usuario['email']) && !enviarEmailPagamentoFalhou($usuario['email'], $usuario['nome'] ?? '')) {
+            error_log("[assinatura] falha ao enviar email de pagamento falhou user_id={$userId}");
+        }
+
         PushNotification::registrarNotificacaoEnviada($pdo, $userId, $tipo);
     }
 }
