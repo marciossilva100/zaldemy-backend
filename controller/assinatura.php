@@ -53,6 +53,12 @@ try {
         exit;
     }
 
+    if ($action === 'portal_pagamento') {
+        $dados = Assinatura::criarPortalSessao($pdo, $user_id);
+        echo json_encode($dados);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(["success" => false, "message" => "Action inválida"]);
 
