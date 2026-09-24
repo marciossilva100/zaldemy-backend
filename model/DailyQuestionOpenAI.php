@@ -313,8 +313,18 @@ class DailyQuestionOpenAI
             return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine pelo menos 3 frases nos flashcards para desbloquear as perguntas faladas com IA."];
         }
 
-        $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
-        $phrases = array_values($phrases);
+        // Só filtra frase curta (< 3 palavras) no SORTEIO AUTOMÁTICO
+        // ($categoriaIds null) - quando o aluno ESCOLHE a categoria à mão,
+        // esse corte não roda: mesmo bug/mesma correção de
+        // FraseDoDia::buscarFrasesPorEstagio (ver comentário lá) - uma
+        // categoria só com conectivos curtos (however/instead/although)
+        // ficava com ZERO frases utilizáveis mesmo sendo a escolha explícita
+        // do aluno, silenciosamente (bug real reportado: escolheu 2
+        // categorias, uma delas nunca aparecia na pergunta gerada).
+        if ($categoriaIds === null) {
+            $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
+            $phrases = array_values($phrases);
+        }
 
         // Motivo diferente da checagem acima de propósito - aqui o usuário já
         // treinou frases suficientes, só que curtas demais (ex: só palavras

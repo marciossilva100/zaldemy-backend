@@ -245,8 +245,17 @@ class TraducaoReversaOpenAI
             return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine pelo menos 3 frases nos flashcards para desbloquear a Tradução Reversa com IA."];
         }
 
-        $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
-        $phrases = array_values($phrases);
+        // Só filtra frase curta (< 3 palavras) no SORTEIO AUTOMÁTICO
+        // ($categoriaIds null) - quando o aluno ESCOLHE a categoria à mão,
+        // esse corte não roda: mesmo bug/mesma correção de
+        // FraseDoDia::buscarFrasesPorEstagio (ver comentário lá) - uma
+        // categoria só com conectivos curtos (however/instead/although)
+        // ficava com ZERO frases utilizáveis mesmo sendo a escolha explícita
+        // do aluno, silenciosamente.
+        if ($categoriaIds === null) {
+            $phrases = array_filter($phrases, fn($p) => str_word_count($p) >= 3);
+            $phrases = array_values($phrases);
+        }
 
         if (count($phrases) < 3) {
             return ["success" => false, "conteudo_insuficiente" => true, "frases_curtas" => true, "message" => "Treine frases mais completas nos flashcards (não só palavras soltas) para gerar textos melhores."];
