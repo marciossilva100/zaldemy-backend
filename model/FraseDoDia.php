@@ -1202,21 +1202,33 @@ class FraseDoDia
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
+        $linhasBrutas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Mesmo filtro de DailyQuestionOpenAI/TraducaoReversaOpenAI (que já
-        // tinham isso, só FraseDoDia não tinha) - sem ele, uma categoria
-        // cheia de fragmentos/palavras soltas (ex: listas de vocabulário
-        // tipo "*Motivation", "don't give up" sem contexto) conta como
-        // "grande" no balanceamento por categoria sem oferecer matéria-prima
-        // usável de verdade - a IA acaba preterindo essa categoria mesmo
-        // tendo mais espaço reservado pra ela, porque não tem frase completa
-        // pra aproveitar (confirmado com dados reais de produção: categoria
-        // com 451 itens, 383 sem nem pontuação final, e a IA só usava ela em
-        // ~20% das gerações mesmo dominando o pool numericamente).
-        $linhas = array_values(array_filter(
-            $stmt->fetchAll(PDO::FETCH_ASSOC),
-            fn($linha) => str_word_count($linha['texto_traduzido']) >= 3
-        ));
+        // Filtro de tamanho mínimo (>= 3 palavras) só no SORTEIO AUTOMÁTICO,
+        // não quando o aluno escolheu a(s) categoria(s) à mão. Motivo do
+        // filtro em si: uma categoria cheia de fragmentos/palavras soltas
+        // (ex: listas de vocabulário tipo "*Motivation", "don't give up" sem
+        // contexto) conta como "grande" no balanceamento por categoria sem
+        // oferecer matéria-prima usável de verdade (confirmado com dados
+        // reais de produção: categoria com 451 itens, 383 sem nem pontuação
+        // final, e a IA só usava ela em ~20% das gerações mesmo dominando o
+        // pool numericamente) - faz sentido no SORTEIO, onde a categoria
+        // "venceu" sem o aluno pedir por ela. Mas obterFraseDoDia() nunca
+        // exigiu isso pra gerar (frase do dia é só 1 frase final, tolera
+        // frase-fonte curta de propósito, ver comentário lá) - aplicar o
+        // mesmo filtro ANTES de dividirIgualmenteEntreCategorias() fazia uma
+        // categoria escolhida À MÃO pelo aluno (ex: só conectivos curtos
+        // como "however"/"instead"/"although") ficar com ZERO frases no
+        // pool, mesmo sendo a escolha explícita dele - bug real reportado:
+        // escolheu 2 categorias, "não pegou nenhuma frase" de uma delas.
+        if ($categoriaIds !== null) {
+            $linhas = $linhasBrutas;
+        } else {
+            $linhas = array_values(array_filter(
+                $linhasBrutas,
+                fn($linha) => str_word_count($linha['texto_traduzido']) >= 3
+            ));
+        }
 
         // Afasta do pool as frases usadas como fonte nas últimas gerações
         // (dos 3 treinos de IA, ver RotacaoFrasesIA) - sem isso, frases de
