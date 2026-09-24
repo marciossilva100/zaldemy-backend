@@ -8,7 +8,7 @@
 // premium) em vez de um número fixo pra todo mundo.
 class DailyQuestionOpenAI
 {
-    const LIMITE_DIARIO_PREMIUM = 5;
+    const LIMITE_DIARIO_PREMIUM = 10;
     const LIMITE_DIARIO_LIMITADO = 1;
     const MAX_TENTATIVAS_POR_PERGUNTA = 3;
     const MAX_TENTATIVAS_GERACAO = 5;
@@ -96,21 +96,20 @@ class DailyQuestionOpenAI
         return ["success" => false, "premium_necessario" => true, "message" => "Perguntas diárias por IA são um recurso exclusivo do plano Premium."];
     }
 
-    // O seletor de categoria só faz sentido ANTES de gerar a pergunta de
-    // hoje - se já existe uma pendente de hoje (mesma condição de reuso de
-    // obterPergunta) ou o aluno já bateu o limite diário, mostrar o seletor
-    // de novo não muda nada (a escolha só é usada na hora de gerar conteúdo
-    // novo). Mesmo padrão de FraseDoDia::precisaEscolherCategoria.
+    // O seletor de categoria aparece toda vez que o aluno entra na tela (não
+    // só 1x por dia) - pedido explícito do usuário pra poder trocar de
+    // assunto a qualquer momento, não só "no treino do dia seguinte". Só não
+    // mostra quando o acesso já está bloqueado (premium necessário ou limite
+    // diário atingido) - nesse caso o seletor não teria pra onde ir mesmo.
+    // Reescolher uma pergunta ainda pendente (não respondida) de uma
+    // categoria diferente da nova escolha abandona ela (ver
+    // abandonarPendenteSeCategoriaDiferente, chamado pelo controller antes
+    // de gerar) - do mesmo jeito que "pular" já fazia, então NÃO estoura o
+    // limite diário: quem já usou todas as tentativas de hoje simplesmente
+    // não consegue mais gerar (verificarAcesso acima cobre isso).
     public static function precisaEscolherCategoria(PDO $pdo, int $user_id, int $plano): bool
     {
-        if (self::verificarAcesso($pdo, $user_id, $plano) !== null) {
-            return false;
-        }
-
-        $pendente = self::getPendente($pdo, $user_id);
-        $temPendenteValida = $pendente && !empty($pendente['question_traducao']) && !empty($pendente['eh_de_hoje']);
-
-        return !$temPendenteValida;
+        return self::verificarAcesso($pdo, $user_id, $plano) === null;
     }
 
     // Só considera pendente do PAR DE IDIOMAS ATUAL do usuário (JOIN com
@@ -121,7 +120,7 @@ class DailyQuestionOpenAI
     // inglês mesmo com o idioma da Home setado pra outro").
     private static function getPendente(PDO $pdo, int $user_id): ?array
     {
-        $sql = "SELECT f.id, f.question, f.question_traducao, DATE(f.data_criacao) = CURDATE() AS eh_de_hoje
+        $sql = "SELECT f.id, f.question, f.question_traducao, f.categoria_ids_escolhidos, DATE(f.data_criacao) = CURDATE() AS eh_de_hoje
                 FROM perguntas_ia f
                 INNER JOIN idioma_referencia ir
                     ON ir.idioma_nativo = f.idioma_nativo
@@ -133,6 +132,45 @@ class DailyQuestionOpenAI
         $stmt->execute([':user_id' => $user_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    // Chamado pelo controller antes de gerar, quando o aluno reabriu a tela
+    // e escolheu categoria(s) diferente(s) da pergunta pendente de hoje que
+    // ele nunca respondeu - sem isso, obterPergunta() abaixo ignorava a
+    // escolha nova e devolvia a pendente antiga de novo (bug real: "escolhe
+    // categoria de novo e não muda nada"). Fecha a pendente antiga como
+    // status_id=1 sem nota, mesmo efeito de "pular" (conta pro limite diário
+    // - trocar de categoria não é brecha pra gerar mais que o permitido).
+    // $categoriaIds null (sem escolha explícita nessa chamada) nunca
+    // abandona - só some quando o aluno realmente escolheu outra coisa.
+    public static function abandonarPendenteSeCategoriaDiferente(PDO $pdo, int $user_id, ?array $categoriaIds): bool
+    {
+        if ($categoriaIds === null) {
+            return false;
+        }
+
+        $pendente = self::getPendente($pdo, $user_id);
+
+        if (!$pendente || empty($pendente['eh_de_hoje'])) {
+            return false;
+        }
+
+        $categoriaIdsPendente = !empty($pendente['categoria_ids_escolhidos'])
+            ? array_map('intval', explode(',', $pendente['categoria_ids_escolhidos']))
+            : [];
+
+        $escolhaAtual = array_map('intval', $categoriaIds);
+        sort($categoriaIdsPendente);
+        sort($escolhaAtual);
+
+        if ($categoriaIdsPendente === $escolhaAtual) {
+            return false;
+        }
+
+        $stmt = $pdo->prepare("UPDATE perguntas_ia SET status_id = 1 WHERE id = :id");
+        $stmt->execute([':id' => $pendente['id']]);
+
+        return true;
     }
 
     // Lembra a última categoria escolhida à mão pelo aluno HOJE, pra reusar

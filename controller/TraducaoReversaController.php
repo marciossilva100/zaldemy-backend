@@ -169,15 +169,32 @@ class TraducaoReversaController
             // querystring porque essa rota é GET. Pedido do aluno pra
             // escolher o assunto do texto em vez de deixar sempre por
             // conta do sorteio automático.
-            $categoriaIds = null;
+            $categoriaIdsRequisicao = null;
             if (!empty($_GET['category_ids'])) {
-                $categoriaIds = array_filter(array_map('intval', explode(',', $_GET['category_ids'])));
-                $categoriaIds = !empty($categoriaIds) ? array_values($categoriaIds) : null;
+                $categoriaIdsRequisicao = array_filter(array_map('intval', explode(',', $_GET['category_ids'])));
+                $categoriaIdsRequisicao = !empty($categoriaIdsRequisicao) ? array_values($categoriaIdsRequisicao) : null;
+            }
+
+            // Precisa ser com o valor CRU da requisição (antes do fallback
+            // logo abaixo, que reusaria a categoria da própria pendente e
+            // nunca detectaria diferença nenhuma) - aluno reabriu a tela e
+            // escolheu categoria(s) diferente(s) do texto pendente de hoje
+            // que nunca respondeu (ver comentário no model). Abandonar
+            // conta como "pular", então reconfere o limite diário antes de
+            // gerar o próximo, pra não ultrapassar o teto.
+            if (TraducaoReversaOpenAI::abandonarPendenteSeCategoriaDiferente($this->pdo, $user_id, $categoriaIdsRequisicao)) {
+                $bloqueio = TraducaoReversaOpenAI::verificarAcesso($this->pdo, $user_id, $this->getPlano());
+
+                if ($bloqueio !== null) {
+                    $this->json($bloqueio);
+                    return;
+                }
             }
 
             // Sem category_ids na requisição - reusa a escolha de HOJE em vez
             // de cair pro sorteio automático entre todas as categorias (ver
             // comentário em TraducaoReversaOpenAI::obterCategoriaEscolhidaHoje).
+            $categoriaIds = $categoriaIdsRequisicao;
             if ($categoriaIds === null) {
                 $categoriaIds = TraducaoReversaOpenAI::obterCategoriaEscolhidaHoje($this->pdo, $user_id);
             }
