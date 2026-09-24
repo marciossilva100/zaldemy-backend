@@ -405,7 +405,14 @@ class DailyQuestionController
 
     // Lista só as categorias DE VERDADE elegíveis (id_treino >= 2, mesmo
     // critério da busca principal - não o filtro relaxado do fallback) pro
-    // seletor de categoria do aluno.
+    // seletor de categoria do aluno. Sem exigência de tamanho mínimo de
+    // frase - tinha um filtro de "pelo menos 3 palavras" aqui que
+    // buscarFrasesPorEstagio() (a busca que gera de verdade) nunca teve,
+    // então uma categoria só com frases curtas (ex: conectivos como
+    // "however"/"instead"/"although") tinha conteúdo perfeitamente
+    // elegível pra gerar, mas nunca aparecia pra escolher (reportado com
+    // dado real: categoria nova, id_treino/status corretos, 0 linhas na
+    // listagem por causa só dessa exigência).
     public function listarCategoriasRoute()
     {
         try {
@@ -423,7 +430,6 @@ class DailyQuestionController
                     AND TRIM(f.texto_nativo) <> ''
                     AND f.status_id > 0
                     AND f.id_treino >= 2
-                    AND CHAR_LENGTH(TRIM(f.texto_traduzido)) - CHAR_LENGTH(REPLACE(TRIM(f.texto_traduzido), ' ', '')) >= 2
                     GROUP BY f.categoria_id, c.categoria
                     ORDER BY c.categoria ASC";
 

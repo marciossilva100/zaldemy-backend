@@ -1122,7 +1122,13 @@ class FraseDoDia
     // id_treino >= 2 ignora ela, e o fallback só entra em cena se o TOTAL
     // ficar abaixo de 3, não resolve uma categoria específica escolhida
     // ficar vazia) - o aluno escolhia 2 categorias e só 1 aparecia de
-    // verdade na frase, sem aviso nenhum.
+    // verdade na frase, sem aviso nenhum. Sem exigência de tamanho mínimo
+    // de frase - tinha um filtro de "pelo menos 3 palavras" aqui que
+    // buscarFrasesPorEstagio() nunca teve, então uma categoria só com
+    // frases curtas (ex: conectivos como "however"/"instead"/"although")
+    // tinha conteúdo perfeitamente elegível pra gerar, mas nunca aparecia
+    // pra escolher (reportado com dado real: categoria nova, id_treino/
+    // status corretos, 0 linhas na listagem por causa só dessa exigência).
     public static function listarCategoriasElegiveis(PDO $pdo, int $user_id): array
     {
         $sql = "SELECT f.categoria_id, c.categoria, COUNT(*) as total
@@ -1137,7 +1143,6 @@ class FraseDoDia
                 AND TRIM(f.texto_nativo) <> ''
                 AND f.status_id > 0
                 AND f.id_treino >= 2
-                AND CHAR_LENGTH(TRIM(f.texto_traduzido)) - CHAR_LENGTH(REPLACE(TRIM(f.texto_traduzido), ' ', '')) >= 2
                 GROUP BY f.categoria_id, c.categoria
                 ORDER BY c.categoria ASC";
 

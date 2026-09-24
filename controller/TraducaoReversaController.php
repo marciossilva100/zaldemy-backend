@@ -109,7 +109,12 @@ class TraducaoReversaController
     }
 
     // Lista só as categorias DE VERDADE elegíveis (id_treino >= 2, mesmo
-    // critério de getUserPhrases) pro seletor de categoria do aluno.
+    // critério de getUserPhrases) pro seletor de categoria do aluno. Sem
+    // exigência de tamanho mínimo de frase - tinha um filtro de "pelo
+    // menos 3 palavras" aqui que a busca que gera de verdade nunca teve,
+    // então uma categoria só com frases curtas (ex: conectivos como
+    // "however"/"instead"/"although") tinha conteúdo perfeitamente
+    // elegível pra gerar, mas nunca aparecia pra escolher.
     public function listarCategoriasRoute()
     {
         try {
@@ -127,7 +132,6 @@ class TraducaoReversaController
                     AND TRIM(f.texto_nativo) <> ''
                     AND f.status_id > 0
                     AND f.id_treino >= 2
-                    AND CHAR_LENGTH(TRIM(f.texto_nativo)) - CHAR_LENGTH(REPLACE(TRIM(f.texto_nativo), ' ', '')) >= 2
                     GROUP BY f.categoria_id, c.categoria
                     ORDER BY c.categoria ASC";
 
