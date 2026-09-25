@@ -63,6 +63,16 @@ class DailyQuestionController
     private $chatGeracao;
     private $transcribe;
 
+    // Preenchido por dividirIgualmenteEntreCategorias() quando alguma das
+    // categorias escolhidas à mão só tem frases-fonte curtas (conectivos
+    // como "however"/"instead"/"although", sem tema/cena próprios) - ver
+    // comentário lá. obterPergunta() usa isso pra reforçar no prompt que a
+    // IA deve mesmo assim encaixar um desses conectivos na pergunta, em vez
+    // de só oferecer o material e torcer pra IA escolher por conta própria
+    // (confirmado com 5 gerações reais seguidas: sem esse reforço, a
+    // categoria de conectivos nunca aparecia, mesmo estando no pool).
+    private $conectivosObrigatorios = [];
+
     public function __construct(PDO $pdo, string $apiKey)
     {
         $this->pdo = $pdo;
@@ -172,7 +182,7 @@ class DailyQuestionController
             $idiomaNativo = $this->getIdiomaNativo($user_id);
             $nivel = DailyQuestionOpenAI::getNivelNome($this->pdo, $user_id);
 
-            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chatGeracao, $user_id, $phrases, $idioma, $idiomaNativo, $nivel, $categoriaIds);
+            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chatGeracao, $user_id, $phrases, $idioma, $idiomaNativo, $nivel, $categoriaIds, $this->conectivosObrigatorios);
 
             if ($resultado['success']) {
                 $plano = $this->getPlano();
@@ -537,6 +547,25 @@ class DailyQuestionController
         $categoriasComConteudo = array_filter($categoriaIds, fn($id) => !empty($porCategoria[$id]));
         if (empty($categoriasComConteudo)) {
             return [];
+        }
+
+        // Categoria escolhida onde NENHUMA frase tem 3+ palavras (só
+        // conectivos, sem tema/cena próprios pra virar assunto de pergunta)
+        // - oferecer no pool não basta, a IA precisa ser instruída a usar
+        // um desses conectivos de propósito (ver comentário na propriedade
+        // $conectivosObrigatorios). Cap de 5 - só precisa de exemplos
+        // suficientes pra IA escolher 1, não a lista inteira.
+        foreach ($categoriasComConteudo as $categoriaId) {
+            $temFraseComTema = false;
+            foreach ($porCategoria[$categoriaId] as $frase) {
+                if (str_word_count($frase) >= 3) {
+                    $temFraseComTema = true;
+                    break;
+                }
+            }
+            if (!$temFraseComTema) {
+                $this->conectivosObrigatorios = array_slice($porCategoria[$categoriaId], 0, 5);
+            }
         }
 
         $cota = (int) ceil(self::MAX_FRASES_PROMPT / count($categoriasComConteudo));
