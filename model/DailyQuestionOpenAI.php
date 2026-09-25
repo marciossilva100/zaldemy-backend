@@ -13,6 +13,24 @@ class DailyQuestionOpenAI
     const MAX_TENTATIVAS_POR_PERGUNTA = 3;
     const MAX_TENTATIVAS_GERACAO = 5;
 
+    // Quantas perguntas recentes mandar pro prompt como "não repita esse
+    // assunto" (ver obterPergunta) - testado de ponta a ponta pelo endpoint
+    // real (dado real do usuário, 8 gerações seguidas por teste): janela 2
+    // ainda repetia tema espaçado (a 4ª voltava a se parecer com a 1ª);
+    // janela 5 melhorou mas ainda tinha 3-4 repetições em 8; janela 10
+    // ficou com só 1 repetição em 8 (o resto claramente distinto: DevOps,
+    // idiomas, manutenção frontend, equilíbrio de habilidades, desafio de
+    // debug, vaga internacional). Não elimina 100% - a IA às vezes ignora a
+    // instrução mesmo com o tema anterior na lista - mas reduz bastante
+    // sem nenhum efeito colateral notado. RotacaoFrasesIA já evita repetir
+    // a MESMA frase-fonte, mas não
+    // evita convergir sempre no mesmo TEMA usando frases-fonte diferentes -
+    // problema catalogado com dado real: 25 perguntas reais seguidas (dias
+    // diferentes) giravam quase todas em torno de "bug"/"API não retornou
+    // dado", ignorando outras frases do pool (ex: idiomas que domina,
+    // preferência ágil/tradicional) que nunca apareciam.
+    const JANELA_ANTI_REPETICAO_TEMA = 10;
+
     // Tamanho máximo de trecho (palavras ou caracteres, conforme o idioma)
     // considerado ao montar/buscar os n-gramas do destaque de vocabulário -
     // suficiente pra capturar frases inteiras curtas sem custo quadrático
@@ -118,6 +136,28 @@ class DailyQuestionOpenAI
     // idioma anterior, porque a tabela não guardava qual par de idiomas
     // gerou cada linha (reportado: "treino permite acessar com frases em
     // inglês mesmo com o idioma da Home setado pra outro").
+    // Últimas perguntas geradas (qualquer status/categoria, mesmo par de
+    // idioma atual) - manda pro prompt como "não repita esse assunto" (ver
+    // JANELA_ANTI_REPETICAO_TEMA). Diferente de RotacaoFrasesIA (que
+    // lembra frases-FONTE usadas), isso lembra a pergunta FINAL já gerada,
+    // pra evitar convergir sempre no mesmo tema mesmo com frases-fonte
+    // diferentes a cada vez.
+    private static function getUltimasPerguntas(PDO $pdo, int $user_id): array
+    {
+        $sql = "SELECT f.question
+                FROM perguntas_ia f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprender
+                    AND ir.id_user = :user_id
+                WHERE f.user_id = :user_id
+                ORDER BY f.id DESC LIMIT " . self::JANELA_ANTI_REPETICAO_TEMA;
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
     private static function getPendente(PDO $pdo, int $user_id): ?array
     {
         $sql = "SELECT f.id, f.question, f.question_traducao, f.categoria_ids_escolhidos, DATE(f.data_criacao) = CURDATE() AS eh_de_hoje
@@ -281,7 +321,7 @@ class DailyQuestionOpenAI
 
     // Gera também a tradução da pergunta pro idioma nativo - a tela
     // funciona como um flashcard (frente = pergunta gerada, verso = tradução).
-    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome, ?string $nivelNome = null, ?array $categoriaIds = null): array
+    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome, ?string $nivelNome = null, ?array $categoriaIds = null, array $conectivosObrigatorios = []): array
     {
         $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
@@ -369,7 +409,24 @@ class DailyQuestionOpenAI
         // "combine quando for plausível" (testado de novo com o mesmo lote:
         // mais categorias representadas), mantendo as mesmas travas de
         // coerência (lugar/tempo/interlocutor) como exceção, não como regra.
-        $systemPrompt = "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome}, pra um aluno de "
+        // Perguntas recentes (qualquer categoria) - evita convergir sempre
+        // no mesmo TEMA mesmo usando frases-fonte diferentes a cada vez
+        // (ver JANELA_ANTI_REPETICAO_TEMA e getUltimasPerguntas). Fica ANTES
+        // do prompt principal de propósito, pra IA já "descartar" esses
+        // temas antes de decidir o que montar, não depois.
+        $ultimasPerguntas = self::getUltimasPerguntas($pdo, $user_id);
+        $instrucaoAntiRepeticao = "";
+        if (!empty($ultimasPerguntas)) {
+            $listaAnteriores = implode(' / ', array_map(fn($p) => "\"{$p}\"", $ultimasPerguntas));
+            $instrucaoAntiRepeticao = "IMPORTANTE: as perguntas mais recentes já geradas pra esse aluno foram: "
+                . "{$listaAnteriores}. A pergunta nova tem que ser sobre um ASSUNTO CLARAMENTE DIFERENTE dessas - "
+                . "não repita o mesmo tema, mesmo com palavras diferentes. Se a maioria das frases disponíveis "
+                . "levar pro mesmo assunto de novo, escolha deliberadamente um trecho ou ângulo diferente das "
+                . "frases fornecidas pra fugir disso. ";
+        }
+
+        $systemPrompt = $instrucaoAntiRepeticao
+            . "Você é um professor de idiomas. Crie UMA pergunta simples em {$idiomaNome}, pra um aluno de "
             . "nível {$nivelNome}, respondível oralmente em uma frase, e também a tradução dela em {$idiomaNativoNome}. "
             . "Ajuste o vocabulário e a complexidade gramatical da pergunta pro nível do aluno - iniciante pede "
             . "uma pergunta CURTA e direta, com estruturas simples e vocabulário básico (evite orações "
@@ -428,8 +485,23 @@ class DailyQuestionOpenAI
             . "idiomática, não literal palavra por palavra, mas fiel ao sentido. CUIDADO: mantenha a MESMA "
             . "pessoa gramatical em TODOS os verbos da tradução, sem trocar no meio por engano (ex: uma pergunta "
             . "toda na 2ª pessoa não pode ter um verbo isolado conjugado na 3ª pessoa). Revise cada verbo da "
-            . "tradução antes de responder. "
-            . 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
+            . "tradução antes de responder. ";
+
+        // Uma das categorias que o aluno escolheu à mão só tem palavras de
+        // conexão (sem tema/cena próprios pra virar assunto de pergunta,
+        // ex: "however"/"instead"/"although") - sem essa instrução direta a
+        // IA nunca usa esse grupo mesmo estando no pool oferecido, porque
+        // não tem "sobre o quê" perguntar usando só um conectivo (testado
+        // com 5 gerações reais seguidas, 0 usaram - a diferença aqui é do
+        // tipo de tarefa: numa frase corrida um conectivo encaixa natural,
+        // numa PERGUNTA não tem assunto pra puxar dele sozinho, a IA
+        // simplesmente ignora esse grupo sem essa instrução).
+        if (!empty($conectivosObrigatorios)) {
+            $listaConectivos = implode(', ', array_map(fn($c) => "\"{$c}\"", $conectivosObrigatorios));
+            $systemPrompt .= "IMPORTANTE: o aluno escolheu, DE PROPÓSITO, um grupo de frases que são só palavras/expressões de conexão (sem cena ou tema próprio): {$listaConectivos}. Ele quer esse grupo representado também, não só o outro - tente de verdade, não descarte essa parte só porque é mais fácil ignorar. Regras rígidas: (1) use NO MÁXIMO 1 (UMA SÓ) dessas palavras/expressões na pergunta inteira - NUNCA duas ou mais juntas, mesmo que pareçam combinar (isso deixa a pergunta confusa/empilhada); (2) só encaixe se ficar GRAMATICALMENTE NATURAL, como conectivo entre duas partes da pergunta, nunca como assunto principal (elas não descrevem uma cena); (3) se, depois de tentar, nenhuma encaixar de forma natural e fluente, é melhor não usar nenhuma do que produzir uma pergunta estranha ou confusa - a fluência final vem antes de garantir esse grupo representado. ";
+        }
+
+        $systemPrompt .= 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
 
         // A IA nem sempre respeita o limite de caracteres à primeira tentativa -
         // tenta encurtar a MESMA pergunta (até MAX_TENTATIVAS_GERACAO vezes)
