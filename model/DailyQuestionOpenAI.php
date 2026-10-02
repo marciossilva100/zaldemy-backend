@@ -496,9 +496,51 @@ class DailyQuestionOpenAI
         // tipo de tarefa: numa frase corrida um conectivo encaixa natural,
         // numa PERGUNTA não tem assunto pra puxar dele sozinho, a IA
         // simplesmente ignora esse grupo sem essa instrução).
+        // Dentro do grupo de conectivos, evita sempre sugerir o mesmo (ex:
+        // "So far") só porque é o mais fácil de encaixar como abertura de
+        // frase - reaproveita $ultimasPerguntas (já buscado acima) pra tirar
+        // da lista oferecida qualquer conectivo que já apareceu numa das
+        // últimas gerações, mesmo que a pergunta fosse de assunto diferente.
+        // Confirmado com dado real de produção: 13 de 20 perguntas com essa
+        // mesma categoria escolhida abriam com "So far", os outros 7
+        // conectivos quase não apareciam - sem essa exclusão, a IA sempre
+        // pega o mesmo item "fácil" da lista, do jeito que já tinha
+        // acontecido com o TEMA inteiro antes dessa correção existir. Se
+        // TODOS já foram usados recentemente (vocabulário pequeno demais
+        // pra sempre ter opção nova), libera a lista inteira de novo - é
+        // melhor repetir um conectivo do que nunca representar a categoria.
+        $conectivosUsadosRecentemente = [];
+        if (!empty($conectivosObrigatorios) && !empty($ultimasPerguntas)) {
+            $naoUsadosRecentemente = array_values(array_filter($conectivosObrigatorios, function ($conectivo) use ($ultimasPerguntas) {
+                foreach ($ultimasPerguntas as $perguntaAnterior) {
+                    if (mb_stripos($perguntaAnterior, $conectivo) !== false) {
+                        return false;
+                    }
+                }
+                return true;
+            }));
+
+            if (!empty($naoUsadosRecentemente)) {
+                $conectivosUsadosRecentemente = array_values(array_diff($conectivosObrigatorios, $naoUsadosRecentemente));
+                $conectivosObrigatorios = $naoUsadosRecentemente;
+            }
+        }
+
         if (!empty($conectivosObrigatorios)) {
             $listaConectivos = implode(', ', array_map(fn($c) => "\"{$c}\"", $conectivosObrigatorios));
             $systemPrompt .= "IMPORTANTE: o aluno escolheu, DE PROPÓSITO, um grupo de frases que são só palavras/expressões de conexão (sem cena ou tema próprio): {$listaConectivos}. Ele quer esse grupo representado também, não só o outro - tente de verdade, não descarte essa parte só porque é mais fácil ignorar. Regras rígidas: (1) use NO MÁXIMO 1 (UMA SÓ) dessas palavras/expressões na pergunta inteira - NUNCA duas ou mais juntas, mesmo que pareçam combinar (isso deixa a pergunta confusa/empilhada); (2) só encaixe se ficar GRAMATICALMENTE NATURAL, como conectivo entre duas partes da pergunta, nunca como assunto principal (elas não descrevem uma cena); (3) se, depois de tentar, nenhuma encaixar de forma natural e fluente, é melhor não usar nenhuma do que produzir uma pergunta estranha ou confusa - a fluência final vem antes de garantir esse grupo representado. ";
+
+            // A lista acima já exclui os conectivos recém-usados, MAS eles
+            // ainda podem estar soltos no pool geral de frases (campo
+            // "frases fornecidas" mais abaixo) - sem essa proibição
+            // explícita, a IA às vezes pegava um deles de lá mesmo assim,
+            // ignorando a lista "sugerida" (confirmado com dado real: 13 de
+            // 20 perguntas repetiam "So far" mesmo depois da 1ª correção só
+            // sugerir alternativas, sem proibir o que já tinha sido usado).
+            if (!empty($conectivosUsadosRecentemente)) {
+                $listaProibidos = implode(', ', array_map(fn($c) => "\"{$c}\"", $conectivosUsadosRecentemente));
+                $systemPrompt .= "PROIBIDO usar {$listaProibidos} dessa vez, mesmo que apareçam soltos entre as frases fornecidas mais abaixo - já foram usados nas últimas perguntas desse mesmo aluno, use outro conectivo da lista acima no lugar. ";
+            }
         }
 
         $systemPrompt .= 'Responda em JSON: {"pergunta": "...", "traducao": "..."}';
