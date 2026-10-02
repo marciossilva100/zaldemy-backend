@@ -553,8 +553,11 @@ class DailyQuestionController
         // conectivos, sem tema/cena próprios pra virar assunto de pergunta)
         // - oferecer no pool não basta, a IA precisa ser instruída a usar
         // um desses conectivos de propósito (ver comentário na propriedade
-        // $conectivosObrigatorios). Cap de 5 - só precisa de exemplos
-        // suficientes pra IA escolher 1, não a lista inteira.
+        // $conectivosObrigatorios). Manda a lista INTEIRA (sem cortar aqui) -
+        // obterPergunta() filtra os já usados recentemente antes de montar o
+        // prompt; cortar pra só 5 aqui (como antes) podia descartar logo de
+        // cara justo os que ainda não foram usados, se calharem de vir
+        // depois na lista.
         foreach ($categoriasComConteudo as $categoriaId) {
             $temFraseComTema = false;
             foreach ($porCategoria[$categoriaId] as $frase) {
@@ -564,7 +567,7 @@ class DailyQuestionController
                 }
             }
             if (!$temFraseComTema) {
-                $this->conectivosObrigatorios = array_slice($porCategoria[$categoriaId], 0, 5);
+                $this->conectivosObrigatorios = $porCategoria[$categoriaId];
             }
         }
 
