@@ -114,20 +114,28 @@ class DailyQuestionOpenAI
         return ["success" => false, "premium_necessario" => true, "message" => "Perguntas diárias por IA são um recurso exclusivo do plano Premium."];
     }
 
-    // O seletor de categoria aparece toda vez que o aluno entra na tela (não
-    // só 1x por dia) - pedido explícito do usuário pra poder trocar de
-    // assunto a qualquer momento, não só "no treino do dia seguinte". Só não
-    // mostra quando o acesso já está bloqueado (premium necessário ou limite
-    // diário atingido) - nesse caso o seletor não teria pra onde ir mesmo.
-    // Reescolher uma pergunta ainda pendente (não respondida) de uma
-    // categoria diferente da nova escolha abandona ela (ver
-    // abandonarPendenteSeCategoriaDiferente, chamado pelo controller antes
-    // de gerar) - do mesmo jeito que "pular" já fazia, então NÃO estoura o
-    // limite diário: quem já usou todas as tentativas de hoje simplesmente
-    // não consegue mais gerar (verificarAcesso acima cobre isso).
+    // Volta a só mostrar o seletor quando NÃO existe pendente de hoje -
+    // revertido de propósito (tinha ficado "sempre mostra, não só 1x por
+    // dia", pedido anterior do usuário pra poder trocar de assunto a
+    // qualquer momento). Na prática incomodava mais do que ajudava: o caso
+    // comum reportado é o aluno gerar a pergunta, sair pra Home (de
+    // propósito ou sem querer) e voltar pouco depois só pra responder a
+    // MESMA pergunta - não decidiu trocar de categoria, só queria continuar
+    // de onde parou, e tinha que passar pelo seletor de novo à toa toda
+    // vez. abandonarPendenteSeCategoriaDiferente() fica no código (não
+    // remove) - só deixa de ser alcançável pelo fluxo normal do seletor,
+    // mas é inofensivo e serve de rede de segurança caso algo volte a
+    // mandar category_ids explícito com uma pendente ainda aberta.
     public static function precisaEscolherCategoria(PDO $pdo, int $user_id, int $plano): bool
     {
-        return self::verificarAcesso($pdo, $user_id, $plano) === null;
+        if (self::verificarAcesso($pdo, $user_id, $plano) !== null) {
+            return false;
+        }
+
+        $pendente = self::getPendente($pdo, $user_id);
+        $temPendenteValida = $pendente && !empty($pendente['question_traducao']) && !empty($pendente['eh_de_hoje']);
+
+        return !$temPendenteValida;
     }
 
     // Só considera pendente do PAR DE IDIOMAS ATUAL do usuário (JOIN com
