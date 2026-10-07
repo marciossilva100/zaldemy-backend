@@ -50,29 +50,20 @@ class Idioma
     public function setIdiomaNativo($user_id): array
     {
 
-        //print_r($_SESSION);exit;
         global $pdo; // 👈 precisa disso
 
-        $sql = "
-            SELECT id
-            FROM usuarios
-            WHERE step > 0 AND id = :id
-        ";
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
-        $stmt->execute();
-
-        $result = $stmt->fetch();
-
-        if (!empty($result['id'])) {
-            // $sql = 'UPDATE FROM idioma_referencia SET idioma_nativo = :idioma_nativo WHERE id = :id LIMIT 1';
-            
-            // $stmt = $pdo->prepare($sql);
-            // $stmt->bindValue(':id', $_SESSION['user_id'], PDO::PARAM_STR);
-            // $stmt->execute();
-            return [];
-        }
+        // Bug real encontrado: havia uma guarda aqui que, quando
+        // usuarios.step já era > 0 (ou seja, o usuário tinha passado por
+        // essa tela antes), retornava [] sem tocar em idioma_referencia -
+        // "código comentado, nunca implementado" no lugar do UPDATE. Isso
+        // quebrava silenciosamente o fluxo de "voltar e escolher outro
+        // idioma nativo" (EscolherIdiomaNativo.jsx com fromBack=true): o
+        // frontend achava que tinha salvo (sem data.erro), mas o
+        // checkAuth(true) seguinte trazia de volta o idioma antigo do
+        // banco, nunca atualizado. O upsert abaixo (INSERT ... ON
+        // DUPLICATE KEY UPDATE) já cobre corretamente tanto a primeira
+        // escolha quanto uma re-escolha depois, então essa guarda era
+        // redundante além de quebrada.
 
         // alguns fluxos (ex: login com Google) já criam a linha em idioma_referencia
         // (com idioma_nativo/idioma_aprender NULL) antes desse passo. Usa upsert
@@ -124,29 +115,14 @@ class Idioma
     public function setIdiomaAprender($user_id): array
     {
 
-        //  print_r($_SESSION);exit;
         global $pdo; // 👈 precisa disso
 
-        $sql = "
-            SELECT id
-            FROM usuarios
-            WHERE step > 1 AND step < 3 AND id = :id
-        ";
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':id', $user_id, PDO::PARAM_STR);
-        $stmt->execute();
-
-        $result = $stmt->fetch();
-
-        if (!empty($result['id'])) {
-            // $sql = 'UPDATE FROM idioma_referencia SET idioma_nativo = :idioma_nativo WHERE id = :id LIMIT 1';
-            
-            // $stmt = $pdo->prepare($sql);
-            // $stmt->bindValue(':id', $_SESSION['user_id'], PDO::PARAM_STR);
-            // $stmt->execute();
-            return [];
-        }
+        // Mesmo bug de setIdiomaNativo() (ver comentário lá): guarda morta
+        // que retornava [] sem atualizar idioma_referencia quando o usuário
+        // já tinha step>1, quebrando a re-escolha do idioma a aprender ao
+        // voltar nessa tela. Removida - o UPDATE abaixo já cobre o caso de
+        // re-escolha normalmente (idioma_referencia já existe nesse ponto,
+        // criada no passo do idioma nativo).
 
         $sql = 'UPDATE idioma_referencia SET idioma_aprender = :idioma_aprender 
         WHERE id_user = :id_user AND idioma_nativo > 0 LIMIT 1';
