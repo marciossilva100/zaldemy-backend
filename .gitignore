@@ -1,5 +1,6 @@
 .env
 .env.*
 .env-*
+firebase-service-account.json
 /cache/
 /cache_openai/
