@@ -8,6 +8,12 @@ use Minishlink\WebPush\Subscription;
 // web-push) manda a mensagem de verdade; esse model cuida do CRUD de
 // subscription, do envio propriamente dito e das consultas de quem é
 // elegível pra cada tipo de notificação.
+//
+// App nativo (Capacitor/Android) não recebe Web Push de dentro da WebView -
+// usa Firebase Cloud Messaging (FCM) em paralelo, token em vez de
+// subscription (ver fcm_tokens, métodos *FcmToken* e enviarFcm* abaixo). Os
+// dois mecanismos convivem: um mesmo usuário pode ter subscriptions Web
+// Push (PWA/desktop) e tokens FCM (app Android) simultaneamente.
 class PushNotification
 {
     // Um usuário pode ter mais de uma subscription (vários dispositivos/
@@ -58,12 +64,117 @@ class PushNotification
         $stmt->execute([':id' => $id]);
     }
 
-    // Envia pra TODAS as subscriptions do usuário - remove do banco
-    // qualquer subscription que a resposta indique expirada/inválida
-    // (404/410), sem interromper o envio pros outros dispositivos do mesmo
-    // usuário.
-    public static function enviarParaUsuario(PDO $pdo, WebPush $webPush, int $user_id, string $titulo, string $corpo, string $url): void
+    // ===================== FCM (app nativo Android) =====================
+
+    // Upsert pelo token em si (não por user_id+token) - token é único
+    // globalmente, uma instalação do app. Se o mesmo token aparecer de novo
+    // associado a outro user_id (ex: logout e login com outra conta no
+    // mesmo aparelho), a linha passa a pertencer ao novo usuário em vez de
+    // duplicar.
+    public static function salvarFcmToken(PDO $pdo, int $user_id, string $token, ?string $userAgent): void
     {
+        $sql = "INSERT INTO fcm_tokens (user_id, token, user_agent)
+                VALUES (:user_id, :token, :user_agent)
+                ON DUPLICATE KEY UPDATE
+                    user_id = VALUES(user_id),
+                    user_agent = VALUES(user_agent)";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':user_id' => $user_id,
+            ':token' => $token,
+            ':user_agent' => $userAgent,
+        ]);
+    }
+
+    public static function removerFcmToken(PDO $pdo, int $user_id, string $token): void
+    {
+        $stmt = $pdo->prepare("DELETE FROM fcm_tokens WHERE user_id = :user_id AND token = :token");
+        $stmt->execute([':user_id' => $user_id, ':token' => $token]);
+    }
+
+    public static function listarFcmTokens(PDO $pdo, int $user_id): array
+    {
+        $stmt = $pdo->prepare("SELECT id, token FROM fcm_tokens WHERE user_id = :user_id");
+        $stmt->execute([':user_id' => $user_id]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    private static function removerFcmTokenPorId(PDO $pdo, int $id): void
+    {
+        $stmt = $pdo->prepare("DELETE FROM fcm_tokens WHERE id = :id");
+        $stmt->execute([':id' => $id]);
+    }
+
+    // $fcmSender null (conta de serviço do Firebase ainda não configurada
+    // nesse ambiente) - não faz nada, silenciosamente, igual um usuário sem
+    // token nenhum.
+    private static function enviarFcmParaUsuario(PDO $pdo, ?FcmSender $fcmSender, int $user_id, string $titulo, string $corpo, string $url): void
+    {
+        if (!$fcmSender) {
+            return;
+        }
+
+        foreach (self::listarFcmTokens($pdo, $user_id) as $tok) {
+            try {
+                $resultado = $fcmSender->enviar($tok['token'], $titulo, $corpo, $url);
+
+                if ($resultado['tokenInvalido']) {
+                    self::removerFcmTokenPorId($pdo, (int) $tok['id']);
+                } elseif (!$resultado['sucesso']) {
+                    error_log(sprintf(
+                        '[push-fcm] falha não-invalidada user_id=%d token_id=%d motivo=%s',
+                        $user_id,
+                        (int) $tok['id'],
+                        $resultado['motivo']
+                    ));
+                }
+            } catch (\Throwable $e) {
+                error_log(sprintf('[push-fcm] exceção ao enviar user_id=%d token_id=%d: %s', $user_id, (int) $tok['id'], $e->getMessage()));
+            }
+        }
+    }
+
+    private static function enviarFcmParaUsuarioComDiagnostico(PDO $pdo, ?FcmSender $fcmSender, int $user_id, string $titulo, string $corpo, string $url): array
+    {
+        if (!$fcmSender) {
+            return [];
+        }
+
+        $resultados = [];
+
+        foreach (self::listarFcmTokens($pdo, $user_id) as $tok) {
+            try {
+                $resultado = $fcmSender->enviar($tok['token'], $titulo, $corpo, $url);
+
+                if ($resultado['tokenInvalido']) {
+                    self::removerFcmTokenPorId($pdo, (int) $tok['id']);
+                }
+
+                $resultados[] = [
+                    'canal' => 'fcm',
+                    'sucesso' => $resultado['sucesso'],
+                    'motivo' => $resultado['motivo'],
+                    'expirada' => $resultado['tokenInvalido'],
+                ];
+            } catch (\Throwable $e) {
+                $resultados[] = ['canal' => 'fcm', 'sucesso' => false, 'motivo' => $e->getMessage(), 'expirada' => false];
+            }
+        }
+
+        return $resultados;
+    }
+
+    // Envia pra TODAS as subscriptions Web Push E tokens FCM do usuário -
+    // remove do banco qualquer subscription/token que a resposta indique
+    // expirado/inválido, sem interromper o envio pros outros dispositivos
+    // do mesmo usuário. $fcmSender é opcional - chamador sem conta de
+    // serviço configurada ainda passa null e só o Web Push funciona.
+    public static function enviarParaUsuario(PDO $pdo, WebPush $webPush, int $user_id, string $titulo, string $corpo, string $url, ?FcmSender $fcmSender = null): void
+    {
+        self::enviarFcmParaUsuario($pdo, $fcmSender, $user_id, $titulo, $corpo, $url);
+
         $subscriptions = self::listarSubscriptions($pdo, $user_id);
 
         if (empty($subscriptions)) {
@@ -122,16 +233,17 @@ class PushNotification
     // silenciosamente - usado só pela action de teste (enviar_teste), pra
     // dar um diagnóstico de verdade em vez de sempre dizer "enviado" mesmo
     // quando o envio falhou.
-    public static function enviarParaUsuarioComDiagnostico(PDO $pdo, WebPush $webPush, int $user_id, string $titulo, string $corpo, string $url): array
+    public static function enviarParaUsuarioComDiagnostico(PDO $pdo, WebPush $webPush, int $user_id, string $titulo, string $corpo, string $url, ?FcmSender $fcmSender = null): array
     {
+        $resultados = self::enviarFcmParaUsuarioComDiagnostico($pdo, $fcmSender, $user_id, $titulo, $corpo, $url);
+
         $subscriptions = self::listarSubscriptions($pdo, $user_id);
 
         if (empty($subscriptions)) {
-            return [];
+            return $resultados;
         }
 
         $payload = json_encode(['titulo' => $titulo, 'corpo' => $corpo, 'url' => $url]);
-        $resultados = [];
 
         foreach ($subscriptions as $sub) {
             $subscription = Subscription::create([
@@ -147,6 +259,7 @@ class PushNotification
                 }
 
                 $resultados[] = [
+                    'canal' => 'webpush',
                     'sucesso' => $report->isSuccess(),
                     'motivo' => $report->getReason(),
                     'expirada' => $report->isSubscriptionExpired(),
@@ -154,6 +267,7 @@ class PushNotification
             } catch (\Throwable $e) {
                 self::removerSubscriptionPorId($pdo, (int) $sub['id']);
                 $resultados[] = [
+                    'canal' => 'webpush',
                     'sucesso' => false,
                     'motivo' => $e->getMessage(),
                     'expirada' => false,

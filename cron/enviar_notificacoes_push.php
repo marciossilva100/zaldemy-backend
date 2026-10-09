@@ -15,6 +15,7 @@ chdir(__DIR__);
 require_once __DIR__ . '/../server.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../model/PushNotification.php';
+require_once __DIR__ . '/../model/FcmSender.php';
 require_once __DIR__ . '/../model/Metricas.php';
 
 use Minishlink\WebPush\WebPush;
@@ -34,6 +35,19 @@ $webPush = new WebPush([
         'privateKey' => $_ENV['VAPID_PRIVATE_KEY'],
     ],
 ]);
+
+// Conta de serviço do Firebase é opcional - enquanto o arquivo não existir
+// nesse servidor, $fcmSender fica null e só o Web Push é enviado (ver
+// PushNotification::enviarFcmParaUsuario).
+$caminhoFcm = $_ENV['FIREBASE_SERVICE_ACCOUNT_PATH'] ?? (__DIR__ . '/../firebase-service-account.json');
+$fcmSender = null;
+if (file_exists($caminhoFcm)) {
+    try {
+        $fcmSender = new FcmSender($caminhoFcm);
+    } catch (\Throwable $e) {
+        fwrite(STDERR, "[push-fcm] falha ao inicializar FcmSender: {$e->getMessage()}\n");
+    }
+}
 
 $enviados = 0;
 
@@ -66,7 +80,8 @@ if ($tipo === 'treino_disponivel') {
             $userId,
             'Seu treino de hoje está esperando!',
             $corpo,
-            '/home'
+            '/home',
+            $fcmSender
         );
         PushNotification::registrarNotificacaoEnviada($pdo, $userId, $tipo);
         $enviados++;
@@ -94,7 +109,8 @@ if ($tipo === 'streak_risco') {
             $userId,
             'Sua sequência está em risco!',
             "Você tem uma sequência de {$streak} dia(s) - estude hoje pra não perder.",
-            '/home'
+            '/home',
+            $fcmSender
         );
         PushNotification::registrarNotificacaoEnviada($pdo, $userId, $tipo);
         $enviados++;
@@ -118,7 +134,8 @@ if ($tipo === 'reengajamento') {
             $userId,
             'Sentimos sua falta!',
             'Faz um tempo que você não estuda. Volte quando quiser continuar de onde parou.',
-            '/home'
+            '/home',
+            $fcmSender
         );
         PushNotification::registrarNotificacaoEnviada($pdo, $userId, $tipo);
         $enviados++;
