@@ -133,12 +133,23 @@ class FraseDoDia
             if (self::contarHoje($pdo, $user_id) >= self::LIMITE_DIARIO_PREMIUM) {
                 return ["success" => false, "limite_atingido" => true, "message" => "Você já fez a frase do dia de hoje. Volte amanhã!"];
             }
+            // Mesmo gate de contarFrasesEstudadas() aplicado lá embaixo em
+            // obterFraseDoDia() - sem repetir aqui, o selo "disponível hoje"
+            // (Home/ModalIA) aparecia mesmo sem nenhuma frase estudada no
+            // par de idioma atual (ex: acabou de trocar o idioma nativo),
+            // só pra bloquear depois que o aluno já tinha entrado na tela.
+            if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
+                return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine pelo menos 3 frases nos flashcards para desbloquear a frase do dia."];
+            }
             return null;
         }
 
         if ($plano === 3) {
             if (self::contarTotal($pdo, $user_id) >= self::LIMITE_VITALICIO_LIMITADO || self::temPendenteExpirada($pdo, $user_id)) {
                 return ["success" => false, "limite_atingido" => true, "message" => "Você já usou sua amostra grátis da frase do dia. Vire premium para ter acesso diário."];
+            }
+            if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
+                return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine pelo menos 3 frases nos flashcards para desbloquear a frase do dia."];
             }
             return null;
         }
