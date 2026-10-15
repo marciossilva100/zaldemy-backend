@@ -322,6 +322,17 @@ class Assinatura
             return;
         }
 
+        self::avisarPagamentoFalhouParaUsuario($pdo, $usuario);
+    }
+
+    // Extraído de notificarPagamentoFalhou() pra ser reaproveitado por
+    // model/RevenueCat.php (BILLING_ISSUE) - mesmo aviso (push + email, no
+    // máx 1x/dia), só muda como o usuário foi resolvido antes de chegar
+    // aqui (por stripe_customer_id lá, por id direto no RevenueCat, já que
+    // app_user_id JÁ é o nosso id). $usuario precisa ter id, nome, email,
+    // idioma_nativo (mesmo formato das duas queries que chamam isso).
+    public static function avisarPagamentoFalhouParaUsuario(PDO $pdo, array $usuario): void
+    {
         $userId = (int) $usuario['id'];
         $tipo = 'pagamento_falhou';
 

@@ -60,12 +60,23 @@ class TraducaoReversaOpenAI
             if (self::contarHoje($pdo, $user_id) >= self::LIMITE_DIARIO_PREMIUM) {
                 return ["success" => false, "limite_atingido" => true, "message" => "Você já traduziu " . self::LIMITE_DIARIO_PREMIUM . " textos hoje. Volte amanhã!"];
             }
+            // Mesmo gate de contarFrasesEstudadas() aplicado lá embaixo em
+            // obterTexto() - sem repetir aqui, o selo "disponível hoje"
+            // (Home/ModalIA) aparecia mesmo sem nenhuma frase estudada no
+            // par de idioma atual (ex: acabou de trocar o idioma nativo),
+            // só pra bloquear depois que o aluno já tinha entrado na tela.
+            if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
+                return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine pelo menos 3 frases nos flashcards para desbloquear a Tradução Reversa com IA."];
+            }
             return null;
         }
 
         if ($plano === 3) {
             if (self::contarHoje($pdo, $user_id) >= self::LIMITE_DIARIO_LIMITADO) {
                 return ["success" => false, "limite_atingido" => true, "message" => "Você já traduziu " . self::LIMITE_DIARIO_LIMITADO . " texto" . (self::LIMITE_DIARIO_LIMITADO > 1 ? "s" : "") . " hoje. Volte amanhã ou vire premium para mais traduções por dia."];
+            }
+            if (self::contarFrasesEstudadas($pdo, $user_id) < 3) {
+                return ["success" => false, "conteudo_insuficiente" => true, "message" => "Treine pelo menos 3 frases nos flashcards para desbloquear a Tradução Reversa com IA."];
             }
             return null;
         }
