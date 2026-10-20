@@ -656,13 +656,21 @@ class TraducaoReversaOpenAI
         ], true, 900);
 
         if ($correcaoResult['erro']) {
-            return ["success" => false, "message" => "Não foi possível corrigir: " . $correcaoResult['mensagem']];
+            // Falha técnica pontual da API (ex: resposta vazia por estouro de
+            // reasoning tokens) - geralmente some ao tentar de novo. Motivo
+            // real só vai pro log; correcao_indisponivel deixa o front
+            // mostrar mensagem amigável traduzida em vez do texto cru daqui
+            // (só em português - mesmo cuidado já tomado nos outros campos
+            // estruturados de erro).
+            error_log("[traducao-reversa] falha ao corrigir: " . $correcaoResult['mensagem']);
+            return ["success" => false, "correcao_indisponivel" => true, "message" => $correcaoResult['mensagem']];
         }
 
         $correcao = json_decode($correcaoResult['texto'], true);
 
         if (!is_array($correcao) || !isset($correcao['nota'])) {
-            return ["success" => false, "message" => "Resposta inválida da IA."];
+            error_log("[traducao-reversa] JSON de correção inválido: " . $correcaoResult['texto']);
+            return ["success" => false, "correcao_indisponivel" => true, "message" => "Resposta inválida da IA."];
         }
 
         $nota = max(0, min(10, (int) $correcao['nota']));
