@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-$ANDROID_MIN_VERSION_CODE = 27;
+$ANDROID_MIN_VERSION_CODE = 28;
 
 echo json_encode([
     "android_min_version_code" => $ANDROID_MIN_VERSION_CODE,
