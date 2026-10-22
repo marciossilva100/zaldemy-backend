@@ -625,6 +625,12 @@ class DailyQuestionOpenAI
             $traducao = $traducaoCandidata;
         }
 
+        // Garante a conexão viva antes de escrever - ver garantirConexaoViva()
+        // em server.php (loop acima pode ter levado dezenas de segundos em
+        // chamadas à OpenAI, tempo suficiente pra derrubar uma conexão MySQL
+        // ociosa em hospedagem compartilhada).
+        garantirConexaoViva($pdo);
+
         // Grava junto o par de idiomas atual (via subquery em idioma_referencia)
         // pra getPendente() conseguir filtrar por ele depois - ver comentário lá.
         // categoria_ids_escolhidos: só preenche quando o aluno escolheu à mão
@@ -964,6 +970,8 @@ class DailyQuestionOpenAI
     {
         $esgotou = $tentativaAtual >= self::MAX_TENTATIVAS_POR_PERGUNTA;
 
+        garantirConexaoViva($pdo);
+
         $stmt = $pdo->prepare("
             UPDATE perguntas_ia
             SET status_id = :status_id, tentativas = :tentativas, transcricao = :transcricao
@@ -1193,6 +1201,8 @@ class DailyQuestionOpenAI
         $passou = $nota >= 5 && $correto;
         $esgotouTentativas = $tentativaAtual >= self::MAX_TENTATIVAS_POR_PERGUNTA;
         $statusFinal = ($passou || $esgotouTentativas) ? 1 : 0;
+
+        garantirConexaoViva($pdo);
 
         $stmt = $pdo->prepare("
             UPDATE perguntas_ia

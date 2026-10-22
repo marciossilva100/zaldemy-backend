@@ -31,3 +31,33 @@ try {
     ]);
     exit;
 }
+
+// Reconecta se a conexão "morreu" (MySQL error 2006 "server has gone away")
+// enquanto o PHP ficava esperando uma chamada externa lenta (ex: OpenAI,
+// que pode levar dezenas de segundos) antes da próxima query - bug real
+// reportado pelo usuário em produção (Frase do Dia: SQLSTATE[HY000]:
+// General error: 2006 MySQL server has gone away, resolvido só ao clicar
+// "tentar novamente"). Hospedagem compartilhada costuma ter wait_timeout
+// bem mais agressivo que o padrão do MySQL. Chamar ANTES de qualquer
+// escrita no banco que vem logo depois de uma chamada de API externa
+// lenta - ver uso em FraseDoDia.php/DailyQuestionOpenAI.php/
+// TraducaoReversaOpenAI.php logo após $chat->completar(...).
+function garantirConexaoViva(PDO &$pdo): void
+{
+    global $host, $port, $db, $user, $pass;
+
+    try {
+        $pdo->query('SELECT 1');
+    } catch (PDOException $e) {
+        $pdo = new PDO(
+            "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4",
+            $user,
+            $pass,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+            ]
+        );
+        $pdo->exec("SET time_zone = '-03:00'");
+    }
+}

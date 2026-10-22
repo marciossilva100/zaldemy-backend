@@ -1,9 +1,5 @@
 <?php
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
 $allowedOrigins = [
     "http://localhost:5173",
     "https://zaldemy.com",
@@ -227,11 +223,15 @@ try {
     echo json_encode(["success" => false, "message" => "Action inválida"]);
 
 } catch (Throwable $e) {
+    // Nunca devolve $e->getMessage()/file/line pro cliente - erro técnico
+    // cru (ex: "SQLSTATE[HY000]: General error: 2006 MySQL server has gone
+    // away") chegando direto na tela foi reportado pelo usuário como bug
+    // real. O motivo verdadeiro só vai pro log do servidor; o front já
+    // mostra a mensagem genérica traduzida (t("unexpected_error")) quando
+    // "message" não vem no payload.
+    error_log("[frase-do-dia] erro inesperado: " . $e->getMessage() . " em " . $e->getFile() . ":" . $e->getLine());
     http_response_code(500);
     echo json_encode([
         "success" => false,
-        "message" => $e->getMessage(),
-        "file" => $e->getFile(),
-        "line" => $e->getLine()
     ]);
 }

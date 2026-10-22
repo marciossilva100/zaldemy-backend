@@ -520,6 +520,12 @@ class FraseDoDia
             $traducao = $traducaoCandidata;
         }
 
+        // Garante a conexão viva antes de escrever - o loop acima pode ter
+        // levado dezenas de segundos em chamadas à OpenAI, tempo suficiente
+        // pra hospedagem derrubar uma conexão MySQL ociosa (ver
+        // garantirConexaoViva() em server.php).
+        garantirConexaoViva($pdo);
+
         // Grava junto o par de idiomas atual (via subquery em idioma_referencia)
         // pra getPendente() conseguir filtrar por ele depois - ver comentário lá.
         // categoria_ids_escolhidos: só preenche quando o aluno escolheu à mão
@@ -889,6 +895,8 @@ class FraseDoDia
     {
         $esgotou = $tentativaAtual >= self::MAX_TENTATIVAS_POR_FRASE;
 
+        garantirConexaoViva($pdo);
+
         $stmt = $pdo->prepare("
             UPDATE frase_dia_ia
             SET status_id = :status_id, tentativas = :tentativas, transcricao = :transcricao
@@ -1031,6 +1039,8 @@ class FraseDoDia
         // antes disso, status_id continua 0 e getPendente() devolve essa
         // mesma frase de novo, deixando o usuário tentar melhorar a nota.
         $esgotouTentativas = $tentativaAtual >= self::MAX_TENTATIVAS_POR_FRASE;
+
+        garantirConexaoViva($pdo);
 
         $stmt = $pdo->prepare("
             UPDATE frase_dia_ia
