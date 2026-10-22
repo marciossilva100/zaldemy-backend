@@ -110,6 +110,7 @@ class Auth {
             $stmt->execute();
 
             enviarEmailNotificacaoNovoCadastro($nome, $email);
+            enviarEmailBoasVindasGoogle($email, $nome, $google->locale ?? null);
 
         } else {
 

@@ -394,3 +394,122 @@ function enviarEmailNotificacaoNovoCadastro($nome, $email) {
         return false;
     }
 }
+
+// Único email que o usuário recebe no cadastro via "Entrar com Google" -
+// esse fluxo não tem email de verificação (o Google já verifica) nem
+// qualquer outro contato automático, então sem isso o usuário nunca recebia
+// nada no cadastro. Idioma do usuário ainda não existe nesse momento
+// (idioma_referencia só é escolhido no onboarding, logo depois) - usa o
+// campo "locale" que o próprio Google devolve no userinfo pra decidir só
+// entre pt/en (não o conjunto completo de 16 idiomas do resto do produto,
+// que dependeria de uma escolha que o usuário ainda não fez).
+function enviarEmailBoasVindasGoogle($email, $nome, ?string $googleLocale = null) {
+
+    $mail = new PHPMailer(true);
+
+    try {
+
+        $mail->isSMTP();
+        $mail->CharSet    = 'UTF-8';
+        $mail->Host       = $_ENV['MAIL_HOST'] ?? 'smtp.hostinger.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $_ENV['MAIL_USERNAME'] ?? 'adm@zaldemy.com';
+        $mail->Password   = $_ENV['MAIL_PASSWORD'] ?? '';
+        $mail->SMTPSecure = $_ENV['MAIL_ENCRYPTION'] ?? 'ssl';
+        $mail->Port       = $_ENV['MAIL_PORT'] ?? 465;
+
+        $fromEmail = $_ENV['MAIL_FROM_ADDRESS'] ?? 'adm@zaldemy.com';
+        $fromName  = $_ENV['MAIL_FROM_NAME'] ?? 'Zaldemy';
+        $appUrl    = rtrim($_ENV['APP_URL'] ?? 'https://zaldemy.com', '/');
+
+        $mail->setFrom($fromEmail, $fromName);
+        $mail->addAddress($email);
+
+        $ehIngles = $googleLocale !== null && stripos($googleLocale, 'pt') !== 0;
+
+        $t = $ehIngles ? [
+            'subject' => 'Welcome to Zaldemy!',
+            'saudacao_nome' => 'Hi, %s!', 'saudacao_sem_nome' => 'Hi!',
+            'p1' => 'Your Zaldemy account is ready. Zaldemy is the language-learning app where you build your own categories and sentences, practice with real audio, and learn at your own pace.',
+            'p2' => "Open the app to pick your native and target languages and start your first category.",
+            'botao' => 'Open Zaldemy',
+            'rodape' => "This is an automated email - please don't reply to it.",
+        ] : [
+            'subject' => 'Bem-vindo ao Zaldemy!',
+            'saudacao_nome' => 'Olá, %s!', 'saudacao_sem_nome' => 'Olá!',
+            'p1' => 'Sua conta no Zaldemy já está pronta. O Zaldemy é o app de aprendizado de idiomas onde você monta suas próprias categorias e frases, treina com áudio real e pratica do seu jeito.',
+            'p2' => 'Abra o app pra escolher seu idioma nativo e o que quer aprender, e já começar sua primeira categoria.',
+            'botao' => 'Abrir o Zaldemy',
+            'rodape' => 'Este é um email automático - não é possível responder a ele.',
+        ];
+
+        $primeiroNome = trim(explode(' ', (string) $nome)[0] ?? '');
+        $saudacao = $primeiroNome !== ''
+            ? sprintf($t['saudacao_nome'], $primeiroNome)
+            : $t['saudacao_sem_nome'];
+        $logo = "$appUrl/icon-192.png";
+
+        $mail->isHTML(true);
+        $mail->Subject = $t['subject'];
+        $mail->Body    = <<<HTML
+            <!DOCTYPE html>
+            <html lang="ltr" dir="ltr">
+            <body style="margin:0; padding:0; background-color:#0d1425; font-family:Arial, Helvetica, sans-serif;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0d1425; padding:32px 16px;">
+                    <tr>
+                        <td align="center">
+                            <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px; width:100%; background-color:#151f30; border:1px solid #2a3547; border-radius:16px; overflow:hidden;">
+                                <tr>
+                                    <td align="center" style="padding:28px 32px 0 32px;">
+                                        <img src="{$logo}" width="48" height="48" alt="Zaldemy" style="display:block; border-radius:12px;">
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding:16px 32px 0 32px;">
+                                        <div style="width:56px; height:56px; line-height:56px; border-radius:50%; background-color:#0f3a3d; font-size:28px;">🎉</div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding:16px 32px 0 32px;">
+                                        <h1 style="margin:0; color:#ffffff; font-size:20px; font-weight:600;">{$t['subject']}</h1>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:16px 32px 0 32px; color:#c3cbda; font-size:14px; line-height:22px;">
+                                        <p style="margin:0 0 12px 0;">{$saudacao}</p>
+                                        <p style="margin:0 0 12px 0;">{$t['p1']}</p>
+                                        <p style="margin:0;">{$t['p2']}</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding:24px 32px 8px 32px;">
+                                        <table role="presentation" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td align="center" style="border-radius:999px; background-color:#4cb8c4;">
+                                                    <a href="{$appUrl}" target="_blank" style="display:inline-block; padding:12px 28px; color:#062229; font-size:14px; font-weight:700; text-decoration:none; border-radius:999px;">{$t['botao']}</a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:24px 32px 28px 32px; border-top:1px solid #2a3547; margin-top:8px;">
+                                        <p style="margin:16px 0 0 0; color:#6b7688; font-size:12px; line-height:18px; text-align:center;">{$t['rodape']}<br>Zaldemy</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+            HTML;
+
+        $mail->send();
+
+        return true;
+
+    } catch (Exception $e) {
+        return false;
+    }
+}
