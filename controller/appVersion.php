@@ -36,9 +36,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-$ANDROID_MIN_VERSION_CODE = 28;
+// Dois níveis, de propósito - a maioria das atualizações é só "recomendada"
+// (banner dispensável, não atrapalha quem tá usando); "obrigatória" é pra
+// quando um bug é grave o suficiente pra valer travar o app até atualizar
+// (ex: o bug de regressão de onboarding corrigido em 22/10/2026 - se essa
+// ferramenta já existisse, teria sido um bom caso de uso). 0 = nenhuma
+// versão é bloqueada ainda.
+$ANDROID_MIN_VERSION_RECOMENDADO = 28;
+$ANDROID_MIN_VERSION_OBRIGATORIO = 0;
 
 echo json_encode([
-    "android_min_version_code" => $ANDROID_MIN_VERSION_CODE,
+    "android_min_version_code" => $ANDROID_MIN_VERSION_RECOMENDADO,
+    "android_min_version_code_obrigatorio" => $ANDROID_MIN_VERSION_OBRIGATORIO,
     "android_play_store_url" => "https://play.google.com/store/apps/details?id=com.zaldemy.app",
 ]);
