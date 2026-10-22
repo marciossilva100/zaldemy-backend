@@ -414,6 +414,12 @@ class TraducaoReversaOpenAI
             $gabarito = $gabaritoCandidato;
         }
 
+        // Garante a conexão viva antes de escrever - ver garantirConexaoViva()
+        // em server.php (loop acima pode ter levado dezenas de segundos em
+        // chamadas à OpenAI, tempo suficiente pra derrubar uma conexão MySQL
+        // ociosa em hospedagem compartilhada).
+        garantirConexaoViva($pdo);
+
         // Grava junto o par de idiomas atual (via subquery em idioma_referencia)
         // pra getPendente() conseguir filtrar por ele depois - ver comentário lá.
         // categoria_ids_escolhidos: só preenche quando o aluno escolheu à mão
@@ -482,6 +488,8 @@ class TraducaoReversaOpenAI
     private static function registrarTentativaSemNota(PDO $pdo, int $id, int $tentativaAtual, string $resposta): bool
     {
         $esgotou = $tentativaAtual >= self::MAX_TENTATIVAS_POR_TEXTO;
+
+        garantirConexaoViva($pdo);
 
         $stmt = $pdo->prepare("
             UPDATE traducao_reversa_ia
@@ -684,6 +692,8 @@ class TraducaoReversaOpenAI
         $passou = $nota >= 5 && $correto;
         $esgotouTentativas = $tentativaAtual >= self::MAX_TENTATIVAS_POR_TEXTO;
         $statusFinal = ($passou || $esgotouTentativas) ? 1 : 0;
+
+        garantirConexaoViva($pdo);
 
         $stmt = $pdo->prepare("
             UPDATE traducao_reversa_ia
