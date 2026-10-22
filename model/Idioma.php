@@ -86,7 +86,16 @@ class Idioma
         // categorias de interesse no onboarding (EscolherCategoriasInteresse.jsx
         // + CategoriaIA::criarParaOnboarding) - não cadastra mais nada aqui.
 
-        $sql = 'UPDATE usuarios SET step = 1 WHERE id = :id LIMIT 1';
+        // GREATEST(...) de propósito - nunca pode REGREDIR o step de um
+        // usuário que já passou do onboarding. Bug real descoberto: antes
+        // fazia "SET step = 1" sem condição nenhuma, e qualquer chamada
+        // depois do onboarding (botão de inverter idiomas, "voltar e trocar
+        // idioma nativo", ou até um teste reenviando o mesmo valor) jogava
+        // o step de volta pra 1 - fazendo o AuthGate.jsx (step <= 2) e o
+        // redirect em cascata de EscolherIdiomaNativo.jsx mandarem um
+        // usuário real de volta pro fluxo de onboarding do zero na próxima
+        // vez que abrisse o app, mesmo com toda a conta/histórico intactos.
+        $sql = 'UPDATE usuarios SET step = GREATEST(COALESCE(step, 0), 1) WHERE id = :id LIMIT 1';
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
         $stmt->execute();
@@ -132,7 +141,9 @@ class Idioma
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
         $stmt->execute();
 
-        $sql = 'UPDATE usuarios SET step = 2 WHERE id = :id LIMIT 1';
+        // Mesmo raciocínio do GREATEST em setIdiomaNativo() acima - nunca
+        // regride o step de quem já passou do onboarding.
+        $sql = 'UPDATE usuarios SET step = GREATEST(COALESCE(step, 0), 2) WHERE id = :id LIMIT 1';
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
         $stmt->execute();
