@@ -62,7 +62,7 @@ require_once '../model/Nivel.php';
 try {
 
     $stmt = $pdo->prepare("
-        SELECT id, nome, email, apelido, apelido_definido_pelo_usuario, foto_perfil, step, plano, nivel, interesses_definidos, guia_categoria_dispensado, guia_treino_dispensado, assinatura_cancelamento_previsto, assinatura_status
+        SELECT id, nome, email, apelido, apelido_definido_pelo_usuario, foto_perfil, step, plano, nivel, interesses_definidos, guia_categoria_dispensado, guia_treino_dispensado, assinatura_cancelamento_previsto, assinatura_status, stripe_subscription_id, revenuecat_original_transaction_id
         FROM usuarios
         WHERE auth_token = :token
         LIMIT 1
@@ -150,6 +150,16 @@ try {
             // pagamento" em vez de "Assinatura ativa" - sem esse campo o
             // front não tinha como saber que a cobrança estava falhando.
             "assinatura_status" => $usuario['assinatura_status'] ?? null,
+            // Diz qual plataforma processou a assinatura atual - front usa
+            // isso pra decidir se mostra os botões de cancelar/reativar/
+            // atualizar pagamento (que só funcionam via Stripe) ou uma
+            // instrução pra gerenciar pela Play Store. Bug real: usuário
+            // Android (RevenueCat) via "Cancelar assinatura" normal em
+            // Configurações, clicava e recebia "Nenhuma assinatura ativa
+            // encontrada" - o backend só sabia procurar stripe_subscription_id.
+            "assinatura_origem" => !empty($usuario['stripe_subscription_id'])
+                ? 'stripe'
+                : (!empty($usuario['revenuecat_original_transaction_id']) ? 'revenuecat' : null),
             "native_language" => $idioma_referencia['idioma_nativo'] ?? null,
             // Nome do idioma nativo (ex: "Português", "Inglês") - usado no
             // front pra montar dinamicamente o rótulo "Palavra ou frase em
