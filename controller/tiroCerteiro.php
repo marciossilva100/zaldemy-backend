@@ -1,8 +1,5 @@
 <?php
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
 
 $allowedOrigins = [
     "http://localhost:5173",
@@ -193,9 +190,9 @@ try {
     echo json_encode(["success" => false, "message" => "Action inválida"]);
 
 } catch (Throwable $e) {
+    error_log("[tiro-certeiro] erro inesperado: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         "success" => false,
-        "message" => $e->getMessage(),
     ]);
 }

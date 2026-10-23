@@ -1,7 +1,4 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
 $allowedOrigins = [
     "http://localhost:5173",
     "https://zaldemy.com",
@@ -173,12 +170,9 @@ try {
     echo json_encode(["error" => "Action inválida"]);
 
  } catch (Throwable $e) {
+    error_log("[configuracoes] erro inesperado: " . $e->getMessage() . " em " . $e->getFile() . ":" . $e->getLine());
     http_response_code(500);
-    // Retorna o erro real para debug
     echo json_encode([
         "error" => "Erro no servidor",
-        "message" => $e->getMessage(),
-        "file" => $e->getFile(),
-        "line" => $e->getLine()
     ]);
 }

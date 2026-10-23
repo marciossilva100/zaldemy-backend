@@ -1,8 +1,5 @@
 <?php
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
 
 // =========================
 // 🔐 LOAD .ENV
@@ -384,8 +381,9 @@ try {
     header('Content-Type: application/json');
     http_response_code(500);
 
+    error_log("[tts] erro inesperado: " . $e->getMessage());
+
     echo json_encode([
         "erro" => true,
-        "mensagem" => $e->getMessage()
     ]);
 }

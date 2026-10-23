@@ -388,10 +388,11 @@ try {
 
 } catch (Throwable $e) {
 
+    error_log("[auth] erro inesperado: " . $e->getMessage());
     http_response_code(500);
 
     echo json_encode([
-        "erro_real" => $e->getMessage()
+        "erro" => "Erro no servidor",
     ]);
 
     exit;
