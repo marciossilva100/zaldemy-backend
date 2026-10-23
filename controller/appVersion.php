@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // (ex: o bug de regressão de onboarding corrigido em 22/10/2026 - se essa
 // ferramenta já existisse, teria sido um bom caso de uso). 0 = nenhuma
 // versão é bloqueada ainda.
-$ANDROID_MIN_VERSION_RECOMENDADO = 29;
+$ANDROID_MIN_VERSION_RECOMENDADO = 30;
 $ANDROID_MIN_VERSION_OBRIGATORIO = 0;
 
 echo json_encode([
