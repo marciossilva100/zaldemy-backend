@@ -79,10 +79,9 @@ try {
     echo json_encode(["error" => "Action inválida"]);
 
  } catch (Throwable $e) {
+    error_log("[language] erro inesperado: " . $e->getMessage());
     http_response_code(500);
-    // Retorna o erro real para debug
     echo json_encode([
         "error" => "Erro no servidor",
-        "message" => $e->getMessage(),
     ]);
 }

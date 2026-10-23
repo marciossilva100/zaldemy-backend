@@ -67,9 +67,9 @@ try {
     echo json_encode(["error" => "Action inválida"]);
 
 } catch (Throwable $e) {
+    error_log("[nivel] erro inesperado: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         "error" => "Erro no servidor",
-        "message" => $e->getMessage(),
     ]);
 }

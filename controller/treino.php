@@ -301,12 +301,9 @@ try {
     echo json_encode(["error" => "Action inválida"]);
 
  } catch (Throwable $e) {
+    error_log("[treino] erro inesperado: " . $e->getMessage() . " em " . $e->getFile() . ":" . $e->getLine());
     http_response_code(500);
-    // Retorna o erro real para debug
     echo json_encode([
         "error" => "Erro no servidor",
-        "message" => $e->getMessage(),
-        "file" => $e->getFile(),
-        "line" => $e->getLine()
     ]);
 }
