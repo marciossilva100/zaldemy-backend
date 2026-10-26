@@ -353,11 +353,22 @@ class PushNotification
     // usadas pelos respectivos contarHoje() de cada model.
     public static function usuariosComTreinoDisponivel(PDO $pdo): array
     {
+        // EXISTS em push_subscriptions OU fcm_tokens (não INNER JOIN só em
+        // push_subscriptions) - bug real reportado: usuário que ativa
+        // notificação só pelo app Android nativo (fcm_tokens) nunca
+        // aparecia em nenhuma das 3 listas de notificação diária, porque
+        // INNER JOIN exigia uma subscription de Web Push, que ele nunca
+        // tem. O teste manual (controller/pushNotifications.php,
+        // enviar_teste) funcionava porque busca nas duas tabelas direto
+        // pelo user_id, sem passar por essa lista de elegibilidade.
         $sql = "SELECT DISTINCT u.id
                 FROM usuarios u
-                INNER JOIN push_subscriptions ps ON ps.user_id = u.id
                 WHERE u.plano IN (1, 3)
                   AND (u.status_id IS NULL OR u.status_id <> 0)
+                  AND (
+                    EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id)
+                    OR EXISTS (SELECT 1 FROM fcm_tokens ft WHERE ft.user_id = u.id)
+                  )
                   AND (
                     NOT EXISTS (SELECT 1 FROM frase_dia_ia f WHERE f.user_id = u.id AND f.status_id = 1 AND DATE(f.data_criacao) = CURDATE())
                     OR NOT EXISTS (SELECT 1 FROM perguntas_ia p WHERE p.user_id = u.id AND p.status_id = 1 AND DATE(p.data_criacao) = CURDATE())
@@ -375,10 +386,15 @@ class PushNotification
     // em vez de duplicar a lógica recursiva aqui.
     public static function candidatosStreakEmRisco(PDO $pdo): array
     {
+        // Mesmo fix de usuariosComTreinoDisponivel() acima - EXISTS em
+        // push_subscriptions OU fcm_tokens, não INNER JOIN só na primeira.
         $sql = "SELECT DISTINCT u.id
                 FROM usuarios u
-                INNER JOIN push_subscriptions ps ON ps.user_id = u.id
                 WHERE (u.status_id IS NULL OR u.status_id <> 0)
+                  AND (
+                    EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id)
+                    OR EXISTS (SELECT 1 FROM fcm_tokens ft WHERE ft.user_id = u.id)
+                  )
                   AND NOT EXISTS (
                     SELECT 1 FROM metricas m WHERE m.user_id = u.id AND DATE(m.created_at) = CURDATE()
                   )";
@@ -392,11 +408,16 @@ class PushNotification
     // registra login, não sessões de estudo).
     public static function usuariosInativos(PDO $pdo, int $dias): array
     {
+        // Mesmo fix de usuariosComTreinoDisponivel() acima - EXISTS em
+        // push_subscriptions OU fcm_tokens, não INNER JOIN só na primeira.
         $stmt = $pdo->prepare(
             "SELECT DISTINCT u.id
              FROM usuarios u
-             INNER JOIN push_subscriptions ps ON ps.user_id = u.id
              WHERE (u.status_id IS NULL OR u.status_id <> 0)
+               AND (
+                 EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id)
+                 OR EXISTS (SELECT 1 FROM fcm_tokens ft WHERE ft.user_id = u.id)
+               )
                AND NOT EXISTS (
                  SELECT 1 FROM metricas m WHERE m.user_id = u.id AND m.created_at >= DATE_SUB(CURDATE(), INTERVAL :dias DAY)
                )"
