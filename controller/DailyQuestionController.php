@@ -53,8 +53,10 @@ class DailyQuestionController
     const MINIMO_GARANTIDO_POR_CATEGORIA = 2;
 
     // Máximo de categorias que o aluno pode escolher à mão como assunto da
-    // pergunta - mesmo padrão/mesmo limite de FraseDoDia::MAX_CATEGORIAS_ESCOLHA_MANUAL.
-    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 2;
+    // pergunta - mesmo padrão/mesmo limite de FraseDoDia::MAX_CATEGORIAS_ESCOLHA_MANUAL
+    // (reduzido de 2 pra 1 - misturar categorias gerava perguntas sem
+    // coesão/concordância, sem assunto único de verdade).
+    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 1;
 
     private $pdo;
     private $chat;

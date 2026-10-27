@@ -3,22 +3,33 @@
 class OpenAiTts {
 
     private $apiKey;
-    private $model = "gpt-4o-mini-tts";
+    // tts-1-hd (não gpt-4o-mini-tts) de propósito - relatado em produção
+    // que o gpt-4o-mini-tts, por ser um modelo generativo/autorregressivo
+    // (não decodifica o texto letra por letra), às vezes "foge" do texto no
+    // meio do áudio em frases mais longas/complexas (ex: perguntas de
+    // treino em inglês com vocabulário técnico) - começa lendo certo e
+    // deriva pra outro conteúdo. tts-1-hd é o modelo clássico da OpenAI,
+    // sempre fiel ao texto de entrada, ao custo de uma voz um pouco menos
+    // natural/expressiva.
+    private $model = "tts-1-hd";
     private $cacheDir;
 
-    // Vozes nativas do gpt-4o-mini-tts - mesma lista de Configuracoes::VOZES_TTS_VALIDAS.
-    const VOZES_VALIDAS = [
-        'alloy', 'ash', 'ballad', 'cedar', 'coral', 'echo', 'fable',
-        'marin', 'nova', 'onyx', 'sage', 'shimmer', 'verse'
-    ];
+    // Vozes nativas do tts-1-hd - só 6 (lista fixa da OpenAI pra esse
+    // modelo), diferente das vozes mais novas do gpt-4o-mini-tts (ver
+    // Configuracoes::VOZES_TTS_VALIDAS).
+    const VOZES_VALIDAS = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
     const VOZ_PADRAO = 'nova';
 
     public function __construct($apiKey) {
         $this->apiKey = $apiKey;
-        // Cache separado do ElevenLabs de propósito - evita que um mesmo
-        // texto sirva áudio de um provedor diferente do configurado no
-        // momento, caso a gente volte a trocar de provedor no futuro.
-        $this->cacheDir = __DIR__ . "/../cache_openai/";
+        // Pasta NOVA (não cache_openai/) de propósito - a troca de
+        // gpt-4o-mini-tts pra tts-1-hd (ver comentário em $model acima) não
+        // muda a chave de cache (md5 de texto+idioma+voz, sem o nome do
+        // modelo), então manter a pasta antiga serviria pra sempre os
+        // áudios já cacheados com a fuga/alucinação do modelo antigo,
+        // mesmo depois da troca. Pasta nova = cache sempre gerado do zero
+        // com o modelo fiel ao texto.
+        $this->cacheDir = __DIR__ . "/../cache_openai_tts1hd/";
 
         if (!is_dir($this->cacheDir)) {
             mkdir($this->cacheDir, 0777, true);

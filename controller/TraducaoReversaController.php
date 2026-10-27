@@ -49,8 +49,10 @@ class TraducaoReversaController
     const MINIMO_GARANTIDO_POR_CATEGORIA = 2;
 
     // Máximo de categorias que o aluno pode escolher à mão como assunto do
-    // texto - mesmo padrão de FraseDoDia::MAX_CATEGORIAS_ESCOLHA_MANUAL.
-    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 2;
+    // texto - mesmo padrão de FraseDoDia::MAX_CATEGORIAS_ESCOLHA_MANUAL
+    // (reduzido de 2 pra 1 - misturar categorias gerava textos sem
+    // coesão/concordância, sem assunto único de verdade).
+    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 1;
 
     private $pdo;
     private $chat;
@@ -87,6 +89,31 @@ class TraducaoReversaController
             $stmt->execute([':user_id' => $user_id]);
 
             $this->json(['success' => true]);
+        } catch (Exception $e) {
+            $this->error($e);
+        }
+    }
+
+    /* ===============================
+       NÃO SEI
+    =============================== */
+    public function naoSei()
+    {
+        try {
+            $user_id = $this->getUserId();
+            $id = (int) ($_POST['id'] ?? 0);
+
+            if (!$id) {
+                throw new Exception('id obrigatório.');
+            }
+
+            $resultado = TraducaoReversaOpenAI::naoSei($this->pdo, $id, $user_id);
+
+            if ($resultado['success']) {
+                PlanoLimitado::verificarEDowngradear($this->pdo, $user_id, $this->getPlano());
+            }
+
+            $this->json($resultado);
         } catch (Exception $e) {
             $this->error($e);
         }
@@ -598,6 +625,8 @@ try {
 
         if ($action === 'skip') {
             $controller->skip();
+        } elseif ($action === 'nao_sei') {
+            $controller->naoSei();
         } elseif ($action === 'responder_texto') {
             $controller->responderTexto();
         } else {

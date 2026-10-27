@@ -2,9 +2,12 @@
 
 class Configuracoes
 {
-    // Subconjunto curado das vozes nativas do gpt-4o-mini-tts, com nome
-    // amigável exibido no app (Emma/Sophia/David/Michael).
-    const VOZES_TTS_VALIDAS = ['coral', 'nova', 'onyx', 'ash'];
+    // Vozes do tts-1-hd (ver api/OpenAiTts.php), com nome amigável exibido
+    // no app (Emma/Sophia/David/Michael). Eram coral/nova/onyx/ash (do
+    // gpt-4o-mini-tts) - trocado pra shimmer/echo porque coral e ash não
+    // existem no tts-1-hd (ver migration_tts_voz_tts1hd.sql, que remapeia
+    // quem já tinha escolhido uma dessas duas).
+    const VOZES_TTS_VALIDAS = ['shimmer', 'nova', 'onyx', 'echo'];
     const VOZ_TTS_PADRAO = 'nova';
 
     const VELOCIDADES_TTS_VALIDAS = [0.75, 1.00, 1.25, 1.50];

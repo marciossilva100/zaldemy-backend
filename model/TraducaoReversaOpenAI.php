@@ -576,6 +576,32 @@ class TraducaoReversaOpenAI
         return self::avaliarESalvarResposta($pdo, $chat, $id, $row, $tentativaAtual, $respostaTexto, $idiomaNativoNome, $idiomaAprendendoNome, false);
     }
 
+    // "Não sei" - aluno desiste do texto pendente sem tentar responder.
+    // Diferente de skip() (pula pro próximo sem mostrar nada), aqui o
+    // gabarito (já gerado junto com o texto em obterTexto, nunca exposto
+    // antes da hora) é revelado de volta pro aluno ver a resposta certa.
+    // Conta como tentativa esgotada (status_id=1, sem nota - mesmo estado
+    // de um texto pulado, ver comentário em getHistorico) pra não ficar
+    // pendente pra sempre nem contar de novo no limite diário.
+    public static function naoSei(PDO $pdo, int $id, int $user_id): array
+    {
+        $row = self::buscarPendente($pdo, $id, $user_id);
+
+        if (!$row) {
+            return ["success" => false, "message" => "Texto não encontrado ou já respondido."];
+        }
+
+        garantirConexaoViva($pdo);
+
+        $stmt = $pdo->prepare("UPDATE traducao_reversa_ia SET status_id = 1 WHERE id = :id");
+        $stmt->execute([':id' => $id]);
+
+        return [
+            "success" => true,
+            "traducao_gabarito" => $row['texto_traduzido_gabarito'],
+        ];
+    }
+
     private static function buscarPendente(PDO $pdo, int $id, int $user_id): ?array
     {
         $stmt = $pdo->prepare("SELECT texto_nativo, texto_traduzido_gabarito, tentativas FROM traducao_reversa_ia WHERE id = :id AND user_id = :user_id AND status_id = 0");

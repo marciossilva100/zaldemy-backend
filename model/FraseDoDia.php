@@ -1112,17 +1112,15 @@ class FraseDoDia
     // Frases do próprio usuário, só do par de idioma (nativo/aprendendo)
     // ATUAL - mesmo filtro usado em DailyQuestionController::getUserPhrases,
     // pra não misturar frases de um idioma que o usuário já trocou.
-    // Máximo de categorias que o aluno pode escolher à mão - mais que isso
-    // reintroduz o mesmo risco de mistura sem coerência que motivou limitar
-    // o sorteio automático a 3 (ver MAX_CATEGORIAS_POR_GERACAO). 2 é
-    // suficiente pra combinar 2 assuntos de propósito (ex: viagem + comida)
-    // sem virar uma lista de temas soltos.
-    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 2;
+    // Máximo de categorias que o aluno pode escolher à mão - reduzido de 2
+    // pra 1 (pedido do usuário): misturar categorias gerava frases sem
+    // coesão/concordância, sem assunto único de verdade.
+    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 1;
 
     // $categoriaIds: null/vazio = comportamento padrão (sorteia entre as
-    // categorias elegíveis, ver balancearPorCategoria). Quando informado (1
-    // ou 2 categorias, nunca mais que MAX_CATEGORIAS_ESCOLHA_MANUAL),
-    // restringe a busca só a elas e divide o pool IGUALMENTE entre as
+    // categorias elegíveis, ver balancearPorCategoria). Quando informado (só
+    // 1 categoria, nunca mais que MAX_CATEGORIAS_ESCOLHA_MANUAL),
+    // restringe a busca só a ela e divide o pool IGUALMENTE entre as
     // escolhidas (ver dividirIgualmenteEntreCategorias) - pedido do usuário
     // pra poder escolher o assunto da frase em vez de deixar sempre por
     // conta do sorteio, sem que uma das categorias escolhidas afogue a
