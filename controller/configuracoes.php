@@ -65,25 +65,6 @@ try {
         exit;
     }
 
-    if ($action === 'atualizar_gerar_frase_diaria_categorias') {
-        $ativo = $input['gerar_frase_diaria_categorias'] ?? null;
-
-        if ($ativo === null) {
-            http_response_code(400);
-            echo json_encode(["error" => "gerar_frase_diaria_categorias obrigatório"]);
-            exit;
-        }
-
-        $dados = Configuracoes::atualizarGerarFraseDiariaCategorias($pdo, $user_id, (bool) $ativo, $user['plano']);
-
-        if (!$dados['success']) {
-            http_response_code(400);
-        }
-
-        echo json_encode($dados);
-        exit;
-    }
-
     if ($action === 'atualizar_velocidade_tts') {
         $velocidade = $input['velocidade_tts'] ?? null;
 

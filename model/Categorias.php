@@ -41,6 +41,7 @@ class Categorias
                 c.categoria,
                 c.public,
                 c.tipo,
+                c.gerar_frase_diaria,
                 COUNT(f.id) AS total_frases,
                 COUNT(CASE WHEN f.id_treino >= 2 THEN 1 END) AS total_treinadas,
                 COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
@@ -66,7 +67,7 @@ class Categorias
             // ao longo da sessão) - esconde da Home qualquer categoria com
             // "tipo" preenchido, sem afetar nenhum outro usuário.
             . ((int) $user_id === 47 ? " AND c.tipo IS NULL" : "") . "
-            GROUP BY c.id, c.categoria, c.public, c.tipo, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
+            GROUP BY c.id, c.categoria, c.public, c.tipo, c.gerar_frase_diaria, idioma_nativo_ref.sigla, idioma_aprendendo_ref.sigla
             ORDER BY c.id ASC;
         ";
 
@@ -544,7 +545,13 @@ class Categorias
         ];
     }
 
-    public static function editarCategoria(PDO $pdo, int $id, string $categoria, int $user_id, $categoria_publica = null ): array
+    // $gerarFraseDiaria/$plano: liga/desliga a frase diária automática por
+    // IA dessa categoria (ver CategoriaFraseDiariaIA.php) - só premium
+    // (plano=1) pode ligar; pra qualquer outro plano força 0, mesmo que o
+    // valor mandado seja true (evita um request forjado contornar o
+    // controle de acesso, já que isso aqui não bloqueia o resto da edição
+    // do nome/compartilhamento, só ignora esse campo específico).
+    public static function editarCategoria(PDO $pdo, int $id, string $categoria, int $user_id, $categoria_publica = null, $gerarFraseDiaria = null, $plano = null): array
     {
 
         // limite de caracteres
@@ -555,16 +562,20 @@ class Categorias
             ];
         }
 
+        $gerarFraseDiariaFinal = ($gerarFraseDiaria && (int) $plano === 1) ? 1 : 0;
+
         // atualiza direto
         $sql = "UPDATE categorias
                 SET categoria = :categoria,
-                    public = :categoria_publica
+                    public = :categoria_publica,
+                    gerar_frase_diaria = :gerar_frase_diaria
                 WHERE id = :id
                 AND id_user = :id_user";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':categoria', $categoria, PDO::PARAM_STR);
         $stmt->bindValue(':categoria_publica', (int) ($categoria_publica ?? 0), PDO::PARAM_INT);
+        $stmt->bindValue(':gerar_frase_diaria', $gerarFraseDiariaFinal, PDO::PARAM_INT);
         $stmt->bindValue(':id', $id, PDO::PARAM_INT);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
 
@@ -584,6 +595,21 @@ class Categorias
         ];
     }
 
+    // "Desativar todas" em Configurações - atalho pra não precisar entrar
+    // categoria por categoria desligando uma a uma (ver
+    // CategoriaFraseDiariaIA.php). Sem checagem de plano aqui de propósito:
+    // desligar é sempre permitido, não é a ação que precisa de premium.
+    public static function desativarTodasFraseDiaria(PDO $pdo, int $user_id): array
+    {
+        $stmt = $pdo->prepare("UPDATE categorias SET gerar_frase_diaria = 0 WHERE id_user = :id_user AND gerar_frase_diaria = 1");
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'success' => true,
+            'desativadas' => $stmt->rowCount(),
+        ];
+    }
 
     public static function cadastrarCategoria(PDO $pdo, string $categoria,$user_id,$categoria_id = null,$categoria_publica = 0,$tipo = null,$idioma_nativo = null,$idioma_aprendendo = null): array
     {

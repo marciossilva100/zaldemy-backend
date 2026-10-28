@@ -59,7 +59,7 @@ class Configuracoes
         // garante que existe uma configuração antes de buscar
         self::setConfiguracoes($pdo, $user_id);
 
-        $sql = "SELECT quantidade_frases_aprender, voz_tts, velocidade_tts, velocidade_tts_padrao, gerar_frase_diaria_categorias
+        $sql = "SELECT quantidade_frases_aprender, voz_tts, velocidade_tts, velocidade_tts_padrao
                 FROM configuracoes
                 WHERE user_id = :user_id
                 LIMIT 1";
@@ -78,7 +78,6 @@ class Configuracoes
             // independentes - antes compartilhavam a mesma coluna/preferência.
             'velocidade_tts' => isset($configuracao['velocidade_tts']) ? (float) $configuracao['velocidade_tts'] : self::VELOCIDADE_TTS_PADRAO,
             'velocidade_tts_padrao' => isset($configuracao['velocidade_tts_padrao']) ? (float) $configuracao['velocidade_tts_padrao'] : self::VELOCIDADE_TTS_PADRAO,
-            'gerar_frase_diaria_categorias' => (bool) ($configuracao['gerar_frase_diaria_categorias'] ?? false),
         ];
     }
 
@@ -228,36 +227,6 @@ class Configuracoes
             'success' => true,
             'message' => 'Quantidade atualizada com sucesso.',
             'quantidade_frases_aprender' => $quantidade
-        ];
-    }
-
-    // Só premium (plano=1) - ver comentário em
-    // CategoriaFraseDiariaIA::usuariosElegiveis sobre por que esse recurso
-    // não libera pro limitado como os outros treinos de IA. $plano vem do
-    // $user já carregado pelo authMiddleware, não precisa reconsultar.
-    public static function atualizarGerarFraseDiariaCategorias(PDO $pdo, $user_id, $ativo, $plano): array
-    {
-        if ((int) $plano !== 1) {
-            return [
-                'success' => false,
-                'message' => 'Frase diária automática por categoria é um recurso exclusivo do plano Premium.'
-            ];
-        }
-
-        self::setConfiguracoes($pdo, $user_id);
-
-        $sql = "UPDATE configuracoes
-                SET gerar_frase_diaria_categorias = :ativo
-                WHERE user_id = :user_id";
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':ativo', $ativo ? 1 : 0, PDO::PARAM_INT);
-        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
-        $stmt->execute();
-
-        return [
-            'success' => true,
-            'gerar_frase_diaria_categorias' => (bool) $ativo
         ];
     }
 

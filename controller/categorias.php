@@ -156,6 +156,7 @@ try {
         $categoria_id = $input['categoria_id'] ?? null;
         $categoria = $input['categoria'] ?? null;
         $categoria_publica = $input['categoria_publica'] ?? null;
+        $gerar_frase_diaria = $input['gerar_frase_diaria'] ?? null;
 
         if (!$categoria) {
             http_response_code(400);
@@ -169,9 +170,17 @@ try {
         }
 
         // Agora retorna frases já com a URL do áudio
-        $frases = Categorias::editarCategoria($pdo,$categoria_id,$categoria,$user_id,$categoria_publica);
+        $frases = Categorias::editarCategoria($pdo,$categoria_id,$categoria,$user_id,$categoria_publica,$gerar_frase_diaria,$user['plano']);
 
         echo json_encode($frases);
+        exit;
+    }
+
+    // "Desativar todas" em Configurações (ver Categorias::desativarTodasFraseDiaria).
+    if ($action === 'desativar_todas_frase_diaria') {
+        $resultado = Categorias::desativarTodasFraseDiaria($pdo, $user_id);
+
+        echo json_encode($resultado);
         exit;
     }
 
