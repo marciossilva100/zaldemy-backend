@@ -38,9 +38,23 @@ class CategoriaFraseDiariaIA
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
+    // Só considera "estudando de verdade" uma categoria com pelo menos 1
+    // frase TREINADA (id_treino >= 2, mesmo critério já usado em
+    // TraducaoReversaOpenAI::contarFrasesEstudadas) e atualizada dentro
+    // dessa janela - não id_treino=1 (frase só cadastrada/semeada na
+    // criação da categoria, nunca praticada de verdade: addFrases() grava
+    // essa linha com id_treino=1 na hora da criação, então usar só
+    // "atualizado recentemente" sem o id_treino>=2 deixaria passar
+    // categoria recém-criada que o usuário nunca abriu pra treinar).
+    const JANELA_INATIVIDADE_DIAS = 7;
+
     // Categorias ativas do usuário que ainda não receberam frase hoje (ver
     // categoria_frase_diaria_ia, mesmo padrão de dedup de
-    // notificacoes_enviadas - protege contra o cron rodar 2x no mesmo dia).
+    // notificacoes_enviadas - protege contra o cron rodar 2x no mesmo dia)
+    // E que o usuário treinou de verdade nos últimos
+    // JANELA_INATIVIDADE_DIAS dias - pedido explícito do usuário: categoria
+    // que ele criou mas nem está estudando não deve ficar recebendo frase
+    // nova todo dia à toa.
     public static function categoriasElegiveis(PDO $pdo, int $user_id): array
     {
         $sql = "SELECT c.id, c.categoria, c.idioma_nativo, c.idioma_aprendendo
@@ -50,6 +64,14 @@ class CategoriaFraseDiariaIA
                 AND NOT EXISTS (
                     SELECT 1 FROM categoria_frase_diaria_ia g
                     WHERE g.categoria_id = c.id AND g.data_geracao = CURDATE()
+                )
+                AND EXISTS (
+                    SELECT 1 FROM frases f
+                    INNER JOIN treino_data_atualizacao t ON t.id_frase = f.id
+                    WHERE f.categoria_id = c.id
+                    AND f.status_id > 0
+                    AND t.id_treino >= 2
+                    AND t.data_atualizacao >= DATE_SUB(NOW(), INTERVAL " . self::JANELA_INATIVIDADE_DIAS . " DAY)
                 )";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
