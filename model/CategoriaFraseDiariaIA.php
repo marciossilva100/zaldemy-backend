@@ -1,8 +1,9 @@
 <?php
 
-// Frase diária automática por categoria (plano Premium, opt-in via
-// configuracoes.gerar_frase_diaria_categorias) - resolve o relato do
-// usuário: a IA só gera frases no momento em que a categoria é criada
+// Frase diária automática por categoria (plano Premium, opt-in por
+// categoria - ver categorias.gerar_frase_diaria, ligado/desligado na edição
+// de cada categoria) - resolve o relato do usuário: a IA só gera frases no
+// momento em que a categoria é criada
 // (CategoriaIA::criarComIA/criarParaOnboarding), nunca mais depois disso.
 // Roda via cron (ver cron/gerar_frase_diaria_categorias.php), 1x por dia,
 // adicionando 1 frase nova a cada categoria ativa de quem ativou a opção.
@@ -26,13 +27,18 @@ class CategoriaFraseDiariaIA
     // um usuário limitado pode ter várias categorias, então não dá pra
     // replicar o mesmo padrão de "cota menor" sem ainda crescer sem limite
     // junto com o número de categorias. Decisão confirmada com o usuário.
+    // Usuários com pelo menos 1 categoria ligada (categorias.gerar_frase_diaria
+    // já é forçado a 0 pra não-premium em Categorias::editarCategoria, mas
+    // confere de novo aqui pro caso de upgrade->downgrade de plano deixar
+    // alguma categoria "presa" ligada).
     public static function usuariosElegiveis(PDO $pdo): array
     {
-        $sql = "SELECT u.id
+        $sql = "SELECT DISTINCT u.id
                 FROM usuarios u
-                INNER JOIN configuracoes c ON c.user_id = u.id
+                INNER JOIN categorias c ON c.id_user = u.id
                 WHERE u.plano = 1
-                AND c.gerar_frase_diaria_categorias = 1";
+                AND c.gerar_frase_diaria = 1
+                AND c.status_id > 0";
         $stmt = $pdo->query($sql);
 
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -48,19 +54,21 @@ class CategoriaFraseDiariaIA
     // categoria recém-criada que o usuário nunca abriu pra treinar).
     const JANELA_INATIVIDADE_DIAS = 7;
 
-    // Categorias ativas do usuário que ainda não receberam frase hoje (ver
-    // categoria_frase_diaria_ia, mesmo padrão de dedup de
+    // Categorias do usuário com o recurso LIGADO (categorias.gerar_frase_diaria,
+    // ver Categorias::editarCategoria) que ainda não receberam frase hoje
+    // (ver categoria_frase_diaria_ia, mesmo padrão de dedup de
     // notificacoes_enviadas - protege contra o cron rodar 2x no mesmo dia)
     // E que o usuário treinou de verdade nos últimos
-    // JANELA_INATIVIDADE_DIAS dias - pedido explícito do usuário: categoria
-    // que ele criou mas nem está estudando não deve ficar recebendo frase
-    // nova todo dia à toa.
+    // JANELA_INATIVIDADE_DIAS dias - pedido explícito do usuário: mesmo com
+    // o recurso ligado nela, uma categoria que ele não está estudando não
+    // deve ficar recebendo frase nova todo dia à toa.
     public static function categoriasElegiveis(PDO $pdo, int $user_id): array
     {
         $sql = "SELECT c.id, c.categoria, c.idioma_nativo, c.idioma_aprendendo
                 FROM categorias c
                 WHERE c.id_user = :user_id
                 AND c.status_id > 0
+                AND c.gerar_frase_diaria = 1
                 AND NOT EXISTS (
                     SELECT 1 FROM categoria_frase_diaria_ia g
                     WHERE g.categoria_id = c.id AND g.data_geracao = CURDATE()
