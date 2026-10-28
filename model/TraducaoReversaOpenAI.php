@@ -15,6 +15,14 @@ class TraducaoReversaOpenAI
     const MAX_TENTATIVAS_POR_TEXTO = 3;
     const MAX_TENTATIVAS_GERACAO = 5;
 
+    // Mesmo mecanismo/mesma janela validada em DailyQuestionOpenAI
+    // (JANELA_ANTI_REPETICAO_TEMA) - sem isso, a IA converge sempre na
+    // mesma abertura de cena fácil de encaixar com qualquer frase-fonte
+    // (reportado com dado real do usuário: textos seguidos abrindo com
+    // "Na semana passada..."), do mesmo jeito que perguntas.php convergia
+    // sempre no mesmo tema/conectivo antes dessa correção existir lá.
+    const JANELA_ANTI_REPETICAO_ABERTURA = 10;
+
     // Mesma lógica de FraseDoDia/DailyQuestionOpenAI: CJK é muito mais denso
     // em significado por caractere, então usa um teto bem menor pra manter
     // a complexidade equivalente.
@@ -120,6 +128,24 @@ class TraducaoReversaOpenAI
         $stmt->execute([':user_id' => $user_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    // Mesmo padrão de DailyQuestionOpenAI::getUltimasPerguntas - só do PAR
+    // DE IDIOMAS atual do usuário, mais recentes primeiro.
+    private static function getUltimosTextos(PDO $pdo, int $user_id): array
+    {
+        $sql = "SELECT f.texto_nativo
+                FROM traducao_reversa_ia f
+                INNER JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprender
+                    AND ir.id_user = :user_id
+                WHERE f.user_id = :user_id
+                ORDER BY f.id DESC LIMIT " . self::JANELA_ANTI_REPETICAO_ABERTURA;
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
     // Chamado pelo controller antes de gerar, quando o aluno reabriu a tela
@@ -297,7 +323,26 @@ class TraducaoReversaOpenAI
         // Trocado o padrão pra "combine quando for plausível" (testado de
         // novo: mais categorias representadas), mantendo as mesmas travas
         // de coerência (lugar/tempo/interlocutor) como exceção, não regra.
-        $systemPrompt = "Você é um professor de idiomas. Crie UM pequeno texto (1 a 2 frases), em {$idiomaNativoNome}, "
+        // Textos recentes (qualquer categoria) - evita convergir sempre na
+        // mesma abertura de cena (ex: "Na semana passada...") mesmo usando
+        // frases-fonte diferentes a cada vez. Mesmo mecanismo/mesma posição
+        // (ANTES do prompt principal) de DailyQuestionOpenAI::obterPergunta -
+        // ver JANELA_ANTI_REPETICAO_ABERTURA e getUltimosTextos.
+        $ultimosTextos = self::getUltimosTextos($pdo, $user_id);
+        $instrucaoAntiRepeticao = "";
+        if (!empty($ultimosTextos)) {
+            $listaAnteriores = implode(' / ', array_map(fn($t) => "\"{$t}\"", $ultimosTextos));
+            $instrucaoAntiRepeticao = "IMPORTANTE: os textos mais recentes já gerados pra esse aluno foram: "
+                . "{$listaAnteriores}. O texto novo tem que ter um ASSUNTO e uma ABERTURA/ESTRUTURA DE FRASE "
+                . "claramente diferentes desses - nunca comece com a mesma expressão de tempo/lugar usada neles "
+                . "(ex: \"na semana passada\", \"ontem\", \"todo dia\"), mesmo que o resto do texto mude. Se a "
+                . "maioria das frases disponíveis levar pro mesmo assunto ou pra mesma forma de abrir o texto de "
+                . "novo, escolha deliberadamente um trecho, ângulo ou tempo verbal diferente das frases fornecidas "
+                . "pra fugir disso. ";
+        }
+
+        $systemPrompt = $instrucaoAntiRepeticao
+            . "Você é um professor de idiomas. Crie UM pequeno texto (1 a 2 frases), em {$idiomaNativoNome}, "
             . "pra um aluno de nível {$nivelNome} praticar tradução do {$idiomaNativoNome} para {$idiomaAprendendoNome}. "
             . "Ajuste o vocabulário e a complexidade gramatical do texto pro nível do aluno - iniciante pede frases "
             . "curtas e diretas, com estruturas simples (evite orações subordinadas ou múltiplas ideias na mesma "
