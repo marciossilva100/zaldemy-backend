@@ -44,6 +44,7 @@ class Categorias
                 c.gerar_frase_diaria,
                 COUNT(f.id) AS total_frases,
                 COUNT(CASE WHEN f.id_treino >= 2 THEN 1 END) AS total_treinadas,
+                MAX(CASE WHEN f.gerada_ia_diaria = 1 AND f.data_criacao >= (NOW() - INTERVAL 3 DAY) THEN f.id END) AS frase_nova_id,
                 COALESCE(idioma_nativo_ref.sigla, '') AS idioma_nativo,
                 COALESCE(idioma_aprendendo_ref.sigla, '') AS idioma_aprendendo
             FROM categorias c
