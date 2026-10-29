@@ -53,7 +53,9 @@ class Frases
             f.id,
             f.texto_nativo,
             f.texto_traduzido,
-            f.categoria_id
+            f.categoria_id,
+            f.data_criacao,
+            f.gerada_ia_diaria
         FROM frases f
         INNER JOIN categorias c ON c.id = f.categoria_id
         WHERE f.categoria_id = :categoria_id

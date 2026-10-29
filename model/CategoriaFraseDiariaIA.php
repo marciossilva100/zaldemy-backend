@@ -183,7 +183,7 @@ class CategoriaFraseDiariaIA
             'idioma_aprendendo' => $categoria['idioma_aprendendo'],
         ], $geracao['frases']);
 
-        $resultado = Categorias::addFrases($pdo, $user_id, $frasesParaInserir, (int) $categoria['id']);
+        $resultado = Categorias::addFrases($pdo, $user_id, $frasesParaInserir, (int) $categoria['id'], true);
 
         // Registra MESMO quando a IA devolveu uma frase que acabou ignorada
         // por dedup (ex: coincidência com uma já existente) - o objetivo é
