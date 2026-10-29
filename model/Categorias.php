@@ -105,7 +105,7 @@ class Categorias
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-     public static function addFrases(PDO $pdo,$user_id, array $frases,$categoria_id): array
+     public static function addFrases(PDO $pdo,$user_id, array $frases,$categoria_id, bool $geradaIaDiaria = false): array
     {
         date_default_timezone_set('America/Sao_Paulo');
 
@@ -150,9 +150,9 @@ class Categorias
             }
 
             // insert frase
-            $sql = "INSERT INTO frases 
-            (usuario_id, texto_nativo, texto_traduzido, idioma_nativo, idioma_aprendendo, categoria_id, id_treino, status_id)
-            VALUES (:user_id, :texto_nativo, :texto_traduzido, :idioma_nativo, :idioma_aprendendo, :categoria_id, 1, 1)";
+            $sql = "INSERT INTO frases
+            (usuario_id, texto_nativo, texto_traduzido, idioma_nativo, idioma_aprendendo, categoria_id, id_treino, status_id, gerada_ia_diaria)
+            VALUES (:user_id, :texto_nativo, :texto_traduzido, :idioma_nativo, :idioma_aprendendo, :categoria_id, 1, 1, :gerada_ia_diaria)";
 
             $stmt = $pdo->prepare($sql);
             $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
@@ -161,6 +161,7 @@ class Categorias
             $stmt->bindValue(':idioma_nativo', $frase['idioma_nativo'], PDO::PARAM_INT);
             $stmt->bindValue(':idioma_aprendendo', $frase['idioma_aprendendo'], PDO::PARAM_INT);
             $stmt->bindValue(':categoria_id', $categoria_id, PDO::PARAM_INT);
+            $stmt->bindValue(':gerada_ia_diaria', $geradaIaDiaria ? 1 : 0, PDO::PARAM_INT);
             $stmt->execute();
 
             $id_frase = (int) $pdo->lastInsertId();
