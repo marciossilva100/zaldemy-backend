@@ -241,13 +241,12 @@ class TraducaoReversaOpenAI
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     }
 
+    // Nível de proficiência do usuário NO PAR DE IDIOMA ativo agora
+    // (Nivel::registrar, por par) - usado no prompt pra ajustar a
+    // complexidade do texto gerado.
     public static function getNivelNome(PDO $pdo, int $user_id): string
     {
-        $stmt = $pdo->prepare("SELECT nivel FROM usuarios WHERE id = :id");
-        $stmt->execute([':id' => $user_id]);
-        $nivel = $stmt->fetch(PDO::FETCH_ASSOC)['nivel'] ?? null;
-
-        return Nivel::nomeParaPrompt($nivel !== null ? (int) $nivel : null);
+        return Nivel::obterNomeDoUsuario($pdo, $user_id);
     }
 
     // $phrases já vem filtrado pelo controller com f.id_treino >= 2

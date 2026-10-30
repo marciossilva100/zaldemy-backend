@@ -327,15 +327,12 @@ class DailyQuestionOpenAI
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 
-    // Nível de proficiência informado pelo usuário no cadastro (Nivel::registrar)
-    // - usado no prompt pra ajustar a complexidade da pergunta gerada.
+    // Nível de proficiência do usuário NO PAR DE IDIOMA ativo agora
+    // (Nivel::registrar, por par) - usado no prompt pra ajustar a
+    // complexidade da pergunta gerada.
     public static function getNivelNome(PDO $pdo, int $user_id): string
     {
-        $stmt = $pdo->prepare("SELECT nivel FROM usuarios WHERE id = :id");
-        $stmt->execute([':id' => $user_id]);
-        $nivel = $stmt->fetch(PDO::FETCH_ASSOC)['nivel'] ?? null;
-
-        return Nivel::nomeParaPrompt($nivel !== null ? (int) $nivel : null);
+        return Nivel::obterNomeDoUsuario($pdo, $user_id);
     }
 
     // Gera também a tradução da pergunta pro idioma nativo - a tela
