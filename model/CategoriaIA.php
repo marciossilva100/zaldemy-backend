@@ -155,7 +155,7 @@ class CategoriaIA
             return ["success" => false, "message" => "Selecione seu idioma nativo e de aprendizagem antes de continuar."];
         }
 
-        $nivelNome = Nivel::obterNomeDoUsuario($pdo, $user_id);
+        $nivelNome = Nivel::obterNomeDoUsuario($pdo, $user_id, (int) $idiomas['nativo_id'], (int) $idiomas['aprendendo_id']);
         $geracao = self::gerarFrases($chat, $topico, $idiomas['nativo_nome'], $idiomas['aprendendo_nome'], $nivelNome);
 
         if ($geracao['erro']) {
@@ -203,7 +203,7 @@ class CategoriaIA
             return ["success" => false, "message" => "Selecione seu idioma nativo e de aprendizagem antes de continuar."];
         }
 
-        $nivelNome = Nivel::obterNomeDoUsuario($pdo, $user_id);
+        $nivelNome = Nivel::obterNomeDoUsuario($pdo, $user_id, (int) $idiomas['nativo_id'], (int) $idiomas['aprendendo_id']);
         $geracao = self::gerarFrases($chat, $topico, $idiomas['nativo_nome'], $idiomas['aprendendo_nome'], $nivelNome);
 
         if ($geracao['erro']) {

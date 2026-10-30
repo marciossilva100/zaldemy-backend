@@ -166,7 +166,13 @@ class CategoriaFraseDiariaIA
             return null;
         }
 
-        $nivelNome = Nivel::obterNomeDoUsuario($pdo, $user_id);
+        // Par de idioma DESSA categoria especificamente, não o par "ativo"
+        // agora nas bandeiras da Home - esse cron roda em lote pra todas as
+        // categorias com gerar_frase_diaria=1 do usuário, que podem ser de
+        // pares de idioma diferentes do que ele está estudando no momento
+        // (ex: intermediário em inglês, mas essa categoria é de alemão
+        // iniciante - usar o par errado geraria conteúdo no nível errado).
+        $nivelNome = Nivel::obterNomeDoUsuario($pdo, $user_id, (int) $categoria['idioma_nativo'], (int) $categoria['idioma_aprendendo']);
         $frasesExistentes = self::frasesExistentes($pdo, (int) $categoria['id']);
 
         $geracao = self::gerarFrase($chat, $categoria['categoria'], $frasesExistentes, $idiomaNativoNome, $idiomaAprendendoNome, $nivelNome);

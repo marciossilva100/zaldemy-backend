@@ -1,6 +1,7 @@
 <?php
 
 require_once '../server.php';
+require_once '../model/Nivel.php';
 
 session_start();
 
@@ -226,9 +227,25 @@ class Idioma
             $_SESSION['learning_language'] = $resultado['sigla'];
         }
 
+        // Par definitivo depois do UPDATE acima - idioma_nativo pode não ter
+        // sido alterado nesta chamada (troca só do lado "aprendendo"), então
+        // relê em vez de assumir $this->idioma_nativo. O nível volta na
+        // resposta pro front atualizar Configurações/indicador da Home na
+        // hora, sem precisar de uma segunda chamada - cada par de idioma tem
+        // seu próprio nível (Nivel::obterNivel), nunca o de outro par.
+        $stmt = $pdo->prepare("SELECT idioma_nativo, idioma_aprender FROM idioma_referencia WHERE id_user = :id_user LIMIT 1");
+        $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+        $parAtual = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $nivel = $parAtual
+            ? Nivel::obterNivel($pdo, $user_id, (int) $parAtual['idioma_nativo'], (int) $parAtual['idioma_aprender'])
+            : null;
+
         return [
             'success' => true,
-            'message' => 'Idioma atualizado com sucesso'
+            'message' => 'Idioma atualizado com sucesso',
+            'nivel' => $nivel,
         ];
     }
 

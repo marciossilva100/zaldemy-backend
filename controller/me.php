@@ -137,7 +137,19 @@ try {
             "foto_perfil" => $usuario['foto_perfil'] ?? null,
             "step" =>  $usuario['step'] ?? null,
             "plano" => $usuario['plano'] ?? null,
-            "nivel" => $usuario['nivel'] ?? null,
+            // Nível do PAR DE IDIOMA ativo agora (idioma_referencia), não o
+            // bruto de usuarios.nivel - sem isso, trocar de par de idioma
+            // (bandeiras da Home) continuava mostrando o nível do par
+            // anterior em Configurações/Home até o usuário mexer nele de
+            // novo.
+            "nivel" => Nivel::obterNivel($pdo, (int) $usuario['id']),
+            // Diferente de "nivel" acima (que sempre tem um valor, default
+            // iniciante) - diz se o usuário JÁ escolheu um nível pra esse par
+            // alguma vez. EscolherNivel.jsx (onboarding) usa isso pra saber
+            // se pula a etapa ou ainda precisa perguntar - sem essa
+            // distinção, todo par novo "já vinha com nível" (o default) e a
+            // etapa nunca aparecia.
+            "nivel_definido" => Nivel::nivelDefinido($pdo, (int) $usuario['id']),
             "nivel_sugerido" => $nivelSugerido,
             "interesses_definidos" => (bool) ($usuario['interesses_definidos'] ?? false),
             "guia_categoria_dispensado" => (bool) ($usuario['guia_categoria_dispensado'] ?? false),
