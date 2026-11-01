@@ -128,7 +128,9 @@ class Frases
                 f.id,
                 f.texto_nativo,
                 f.texto_traduzido,
-                f.categoria_id
+                f.categoria_id,
+                f.data_criacao,
+                f.gerada_ia_diaria
             FROM frases f
             INNER JOIN categorias c ON c.id = f.categoria_id
             INNER JOIN idioma_referencia ir
@@ -187,7 +189,9 @@ class Frases
                 f.id,
                 f.texto_nativo,
                 f.texto_traduzido,
-                f.categoria_id
+                f.categoria_id,
+                f.data_criacao,
+                f.gerada_ia_diaria
             FROM frases f
             INNER JOIN categorias c ON c.id = f.categoria_id
             INNER JOIN idioma_referencia ir
