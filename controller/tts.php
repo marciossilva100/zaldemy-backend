@@ -48,11 +48,11 @@ require_once 'authMiddleware.php';
 require_once '../model/Configuracoes.php';
 require_once '../model/PlanoLimitado.php';
 
-// Voz natural (OpenAI TTS) é liberada sem limite pro plano premium (ver
-// comentário em verificarAcessoAudioIa sobre por que o limite DIÁRIO foi
-// removido) e, como amostra grátis, pro plano limitado - esse continua com
-// teto vitalício (depois de usado, só virando premium pra continuar usando
-// voz natural).
+// Voz natural (OpenAI TTS) é liberada pro plano premium (limite diário, pra
+// manter o custo por chamada da API sob controle) e, como amostra grátis,
+// pro plano limitado (limite vitalício único - depois disso só virando
+// premium pra continuar usando voz natural).
+const AUDIO_IA_LIMITE_DIARIO = 200;
 const AUDIO_IA_LIMITE_VITALICIO_LIMITADO = 10;
 
 // O custo é por caractere, não por chamada - sem esse teto, o limite de
@@ -60,6 +60,19 @@ const AUDIO_IA_LIMITE_VITALICIO_LIMITADO = 10;
 // texto gigante custaria muito mais que o previsto). Aplica pra todo
 // mundo que tiver acesso, mesmo cap independente do plano.
 const AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA = 300;
+
+function usoAudioIaHoje(PDO $pdo, int $userId): int
+{
+    $sql = "SELECT COUNT(*) as total
+            FROM audio_ia_uso
+            WHERE user_id = :user_id
+              AND DATE(data_criacao) = CURDATE()";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':user_id' => $userId]);
+
+    return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+}
 
 function usoAudioIaTotal(PDO $pdo, int $userId): int
 {
@@ -79,21 +92,16 @@ function registrarUsoAudioIa(PDO $pdo, int $userId): void
     $stmt->execute([':user_id' => $userId]);
 }
 
-// Verifica se o plano do usuário pode usar voz natural. O limite DIÁRIO do
-// premium foi removido de propósito: quando o usuário estourava a cota,
-// caía pra voz do Google, e a troca de voz "vazava" a velocidade configurada
-// (a config de velocidade é só da voz natural - ver
-// DigitarTexto/TraducaoReversa/etc.) pro dia seguinte, mesmo depois de
-// voltar a ter acesso à voz natural de novo no dia seguinte. O limite
-// VITALÍCIO do limitado continua de propósito - é a amostra grátis, não um
-// controle de custo recorrente, então não sofre do mesmo bug (uma vez
-// estourado, o usuário nunca mais volta a ter acesso à voz natural nesse
-// plano, não tem "dia seguinte" pra voltar e vazar velocidade nenhuma).
+// Verifica se o plano do usuário pode usar voz natural e, se puder, se ainda
+// está dentro do limite (diário pro premium, vitalício pro limitado).
 // Retorna null se pode prosseguir, ou o array de resposta JSON pra retornar
 // direto (bloqueando o acesso).
 function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload = false): ?array
 {
     if ($plano === 1) {
+        if (usoAudioIaHoje($pdo, $userId) >= AUDIO_IA_LIMITE_DIARIO) {
+            return ["erro" => false, "limite_atingido" => true];
+        }
         return null;
     }
 
