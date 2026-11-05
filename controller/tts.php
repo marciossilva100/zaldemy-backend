@@ -48,20 +48,9 @@ require_once 'authMiddleware.php';
 require_once '../model/Configuracoes.php';
 require_once '../model/PlanoLimitado.php';
 
-// Voz natural (OpenAI TTS) é liberada pro plano premium (limite diário, pra
-// manter o custo por chamada da API sob controle) e, como amostra grátis,
-// pro plano limitado (limite vitalício único - depois disso só virando
-// premium pra continuar usando voz natural).
-const AUDIO_IA_LIMITE_DIARIO = 120;
-const AUDIO_IA_LIMITE_VITALICIO_LIMITADO = 10;
-
-// Preload (Flashcards/DigitarTexto/TiroCerteiro) busca o áudio antes do
-// usuário pedir, sem saber se ele vai chegar a ouvir - perto do fim da cota
-// diária, reserva essa quantidade de gerações só pra quando o usuário
-// realmente clicar em ouvir, pra não gastar os últimos slots do dia em
-// áudio que talvez nunca seja escutado. Não se aplica ao limitado (cota
-// vitalícia de amostra, não diária).
-const AUDIO_IA_RESERVA_PRELOAD_PREMIUM = 5;
+// Voz natural (OpenAI TTS) é liberada pro plano premium e, como amostra
+// grátis, pro plano limitado - sem limite diário/vitalício (ver comentário
+// em verificarAcessoAudioIa sobre por que o limite foi removido).
 
 // O custo é por caractere, não por chamada - sem esse teto, o limite de
 // chamadas acima não protege o custo de verdade (uma única chamada com
@@ -69,67 +58,24 @@ const AUDIO_IA_RESERVA_PRELOAD_PREMIUM = 5;
 // mundo que tiver acesso, mesmo cap independente do plano.
 const AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA = 300;
 
-function usoAudioIaHoje(PDO $pdo, int $userId): int
-{
-    $sql = "SELECT COUNT(*) as total
-            FROM audio_ia_uso
-            WHERE user_id = :user_id
-              AND DATE(data_criacao) = CURDATE()";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([':user_id' => $userId]);
-
-    return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-}
-
-function usoAudioIaTotal(PDO $pdo, int $userId): int
-{
-    $sql = "SELECT COUNT(*) as total
-            FROM audio_ia_uso
-            WHERE user_id = :user_id";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([':user_id' => $userId]);
-
-    return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-}
-
 function registrarUsoAudioIa(PDO $pdo, int $userId): void
 {
     $stmt = $pdo->prepare("INSERT INTO audio_ia_uso (user_id) VALUES (:user_id)");
     $stmt->execute([':user_id' => $userId]);
 }
 
-// Verifica se o plano do usuário pode usar voz natural e, se puder, se ainda
-// está dentro do limite (diário pro premium, vitalício pro limitado).
-// Retorna null se pode prosseguir, ou o array de resposta JSON pra retornar
-// direto (bloqueando o acesso). $isPreload distingue uma busca antecipada
-// (sem garantia de que o áudio será ouvido) de uma reprodução pedida de
-// verdade - só a segunda pode consumir os últimos slots reservados do dia.
+// Verifica se o plano do usuário pode usar voz natural. O limite diário
+// (premium) e vitalício (amostra do limitado) foram removidos de propósito:
+// quando o usuário estourava a cota, caía pra voz do Google, e a troca de
+// voz "vazava" a velocidade configurada (a config de velocidade é só da voz
+// natural - ver DigitarTexto/TraducaoReversa/etc.) pro dia seguinte, mesmo
+// depois de voltar a ter acesso à voz natural de novo. Sem cota pra estourar,
+// esse vazamento não acontece mais. Retorna null se pode prosseguir, ou o
+// array de resposta JSON pra retornar direto (bloqueando o acesso) - hoje só
+// acontece pra quem não tem plano nenhum que dê acesso à voz natural.
 function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload = false): ?array
 {
-    if ($plano === 1) {
-        $usoHoje = usoAudioIaHoje($pdo, $userId);
-
-        if ($usoHoje >= AUDIO_IA_LIMITE_DIARIO) {
-            return ["erro" => false, "limite_atingido" => true];
-        }
-
-        if ($isPreload && (AUDIO_IA_LIMITE_DIARIO - $usoHoje) <= AUDIO_IA_RESERVA_PRELOAD_PREMIUM) {
-            // Não é o limite de verdade (por isso não usa "limite_atingido",
-            // que marcaria a cota como esgotada no cliente) - só recusa essa
-            // busca antecipada específica pra sobrar cota pra um clique real
-            // em "ouvir" mais tarde hoje.
-            return ["erro" => false, "preload_reservado" => true];
-        }
-
-        return null;
-    }
-
-    if ($plano === 3) {
-        if (usoAudioIaTotal($pdo, $userId) >= AUDIO_IA_LIMITE_VITALICIO_LIMITADO) {
-            return ["erro" => false, "limite_atingido" => true];
-        }
+    if ($plano === 1 || $plano === 3) {
         return null;
     }
 
