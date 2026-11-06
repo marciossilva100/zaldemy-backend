@@ -44,6 +44,15 @@ class TraducaoReversaOpenAI
             return $ehCjk ? 40 : 100;
         }
 
+        // Intermediário tinha o MESMO limite do avançado (220/90) - mesmo
+        // ajuste feito em DailyQuestionOpenAI::limiteCaracteresPara, pelo
+        // mesmo motivo (reportado como texto "muito grande" pra esse nível).
+        $ehIntermediario = $nivelNome !== null && mb_stripos($nivelNome, 'intermedi') !== false;
+
+        if ($ehIntermediario) {
+            return $ehCjk ? 65 : 160;
+        }
+
         return $ehCjk ? 90 : 220;
     }
 

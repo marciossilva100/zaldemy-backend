@@ -575,9 +575,7 @@ class DailyQuestionController
         $selecionadas = [];
 
         foreach ($categoriasComConteudo as $categoriaId) {
-            $frasesCategoria = $porCategoria[$categoriaId];
-            shuffle($frasesCategoria);
-            $selecionadas = array_merge($selecionadas, array_slice($frasesCategoria, 0, $cota));
+            $selecionadas = array_merge($selecionadas, $this->selecionarComDiversidade($porCategoria[$categoriaId], $cota));
         }
 
         shuffle($selecionadas);
@@ -628,15 +626,101 @@ class DailyQuestionController
             }
         }
 
-        shuffle($restante);
         $selecionadas = $reservadas;
         $faltam = self::MAX_FRASES_PROMPT - count($selecionadas);
 
         if ($faltam > 0) {
-            $selecionadas = array_merge($selecionadas, array_slice($restante, 0, $faltam));
+            $selecionadas = array_merge($selecionadas, $this->selecionarComDiversidade($restante, $faltam));
         }
 
         return array_slice($selecionadas, 0, self::MAX_FRASES_PROMPT);
+    }
+
+    // Quando uma categoria acumula muita frase que é, na prática, a MESMA
+    // história/fato contado de formas diferentes (ex: várias reformulações
+    // de "corrigi um bug na API e documentei a correção"), um sorteio
+    // puramente aleatório tende a entregar o pool inteiro dominado por essas
+    // variações - mesmo a pergunta saindo com palavras diferentes a cada
+    // vez, o SENTIDO converge sempre pro mesmo fato, porque é basicamente a
+    // única matéria-prima disponível (reportado como "perguntas diferentes
+    // mas com mesmo sentido", confirmado com dado real: categoria com 109
+    // frases, ~70 só reformulando o mesmo fato, questions geradas sempre em
+    // torno dele). Isso NÃO altera o prompt nem a instrução de coerência
+    // enviada à IA - só decide quais frases-fonte entram no pool, pra sobrar
+    // espaço pras frases de outros assuntos da mesma categoria que ficavam
+    // afogadas numericamente.
+    // Comparação é só por palavras em comum (4+ letras) - não entende
+    // idioma nem sentido de verdade, então duas frases sobre o mesmo fato
+    // mas com vocabulário bem diferente entre si podem não ser agrupadas;
+    // aceito como limite conhecido por ser simples e não ter risco de
+    // quebrar nada.
+    const MAX_FRASES_POR_GRUPO_SIMILAR = 3;
+    const SIMILARIDADE_MINIMA_PALAVRAS = 0.35;
+
+    private function selecionarComDiversidade(array $frases, int $quantidade): array
+    {
+        if (count($frases) <= $quantidade) {
+            return $frases;
+        }
+
+        shuffle($frases);
+
+        $palavrasPorFrase = array_map(fn($f) => $this->palavrasDeConteudo($f), $frases);
+
+        $selecionadas = [];
+        $indicesSelecionados = [];
+        $sobra = [];
+
+        foreach ($frases as $i => $frase) {
+            if (count($selecionadas) >= $quantidade) {
+                $sobra[] = $frase;
+                continue;
+            }
+
+            $parecidas = 0;
+            foreach ($indicesSelecionados as $j) {
+                if ($this->similaridadePalavras($palavrasPorFrase[$i], $palavrasPorFrase[$j]) >= self::SIMILARIDADE_MINIMA_PALAVRAS) {
+                    $parecidas++;
+                }
+            }
+
+            if ($parecidas >= self::MAX_FRASES_POR_GRUPO_SIMILAR) {
+                $sobra[] = $frase;
+                continue;
+            }
+
+            $selecionadas[] = $frase;
+            $indicesSelecionados[] = $i;
+        }
+
+        // Não tinha material distinto suficiente pra preencher a cota -
+        // melhor completar repetindo tema (comportamento de hoje) do que
+        // entregar um pool menor que o normal, o que reduziria a qualidade
+        // da pergunta gerada por falta de matéria-prima.
+        $faltam = $quantidade - count($selecionadas);
+        if ($faltam > 0 && !empty($sobra)) {
+            $selecionadas = array_merge($selecionadas, array_slice($sobra, 0, $faltam));
+        }
+
+        return $selecionadas;
+    }
+
+    private function palavrasDeConteudo(string $frase): array
+    {
+        preg_match_all('/[\p{L}\p{N}\'’]+/u', mb_strtolower(str_replace('’', "'", $frase)), $m);
+        return array_values(array_unique(array_filter($m[0], fn($p) => mb_strlen($p) >= 4)));
+    }
+
+    private function similaridadePalavras(array $a, array $b): float
+    {
+        if (empty($a) || empty($b)) {
+            return 0.0;
+        }
+
+        $comuns = count(array_intersect($a, $b));
+        $menor = min(count($a), count($b));
+
+        return $menor > 0 ? $comuns / $menor : 0.0;
     }
 
     private function getIdiomaAprendendo($user_id): string
