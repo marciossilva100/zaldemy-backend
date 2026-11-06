@@ -98,6 +98,98 @@ class Dashboard
         return $resultado;
     }
 
+    // Usuários únicos por dia em 3 grupos de atividade - pra responder
+    // "estão treinando diariamente, jogando, treinando no modo IA?" de
+    // forma visual. Treino "geral" cobre Flashcards e os outros modos que
+    // só avançam o estágio da frase (treino_data_atualizacao não distingue
+    // QUAL tela, só que alguma atualização de treino aconteceu); jogos e
+    // treino com IA têm log próprio por chamada (ver migrations
+    // jogo_chuva_uso, tiro_certeiro_uso, perguntas_ia, frase_dia_ia,
+    // traducao_reversa_ia).
+    public function getAtividadeDiariaPorTipo(PDO $pdo, int $dias = 30): array
+    {
+        $dias = max(1, $dias);
+
+        $porDiaGeral = $this->contarUsuariosUnicosPorDia($pdo, "
+            SELECT DATE(t.data_atualizacao) AS dia, f.usuario_id AS user_id
+            FROM treino_data_atualizacao t
+            JOIN frases f ON f.id = t.id_frase
+            WHERE t.data_atualizacao >= CURDATE() - INTERVAL {$dias} DAY
+        ");
+
+        $porDiaJogos = $this->contarUsuariosUnicosPorDia($pdo, "
+            SELECT DATE(data_criacao) AS dia, user_id FROM jogo_chuva_uso WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT DATE(data_criacao) AS dia, user_id FROM tiro_certeiro_uso WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+        ");
+
+        $porDiaIa = $this->contarUsuariosUnicosPorDia($pdo, "
+            SELECT DATE(data_criacao) AS dia, user_id FROM perguntas_ia WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT DATE(data_criacao) AS dia, user_id FROM frase_dia_ia WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT DATE(data_criacao) AS dia, user_id FROM traducao_reversa_ia WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+        ");
+
+        $resultado = [];
+        for ($i = $dias - 1; $i >= 0; $i--) {
+            $data = date('Y-m-d', strtotime("-$i days"));
+            $resultado[] = [
+                'data' => date('d/m', strtotime($data)),
+                'treino_geral' => $porDiaGeral[$data] ?? 0,
+                'jogos' => $porDiaJogos[$data] ?? 0,
+                'treino_ia' => $porDiaIa[$data] ?? 0,
+            ];
+        }
+
+        return $resultado;
+    }
+
+    // $sqlDiaEUsuario precisa devolver as colunas `dia` e `user_id` (1 linha
+    // por evento) - agrupa aqui por COUNT(DISTINCT user_id) por dia.
+    private function contarUsuariosUnicosPorDia(PDO $pdo, string $sqlDiaEUsuario): array
+    {
+        $sql = "SELECT dia, COUNT(DISTINCT user_id) AS total FROM ({$sqlDiaEUsuario}) base GROUP BY dia";
+        $porDia = [];
+        foreach ($pdo->query($sql)->fetchAll() as $row) {
+            $porDia[$row['dia']] = (int) $row['total'];
+        }
+        return $porDia;
+    }
+
+    // Total de interações por modo de treino especifico no período - mesmos
+    // grupos do gráfico diário, mas aqui detalhado por tela em vez de só
+    // "geral/jogos/IA", pra responder "e outros" (qual jogo, qual treino de
+    // IA especificamente).
+    public function getUsoPorModoTreino(PDO $pdo, int $dias = 30): array
+    {
+        $dias = max(1, $dias);
+
+        $sql = "
+            SELECT 'Flashcards e treino geral' AS name, COUNT(*) AS total
+                FROM treino_data_atualizacao WHERE data_atualizacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Chuva de Frases', COUNT(*) FROM jogo_chuva_uso WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Tiro Certeiro', COUNT(*) FROM tiro_certeiro_uso WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Perguntas com IA', COUNT(*) FROM perguntas_ia WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Frase do Dia (IA)', COUNT(*) FROM frase_dia_ia WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Tradução Reversa (IA)', COUNT(*) FROM traducao_reversa_ia WHERE data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+        ";
+
+        $resultado = [];
+        foreach ($pdo->query($sql)->fetchAll() as $row) {
+            $resultado[] = ['name' => $row['name'], 'value' => (int) $row['total']];
+        }
+
+        usort($resultado, fn($a, $b) => $b['value'] - $a['value']);
+
+        return $resultado;
+    }
+
     public function getIdiomasMaisAprendidos(PDO $pdo, int $limite = 6): array
     {
         $sql = "

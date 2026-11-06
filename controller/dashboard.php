@@ -27,14 +27,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once '../model/Dashboard.php';
 require_once '../model/PaisesLiberados.php';
-require_once 'authMiddleware.php';
+require_once '../model/DashboardAuth.php';
 
-// Dashboard administrativo: acesso restrito a e-mails autorizados
-$adminEmails = [
-    'marciosunico18@gmail.com',
-];
+// Dashboard administrativo: login PRÓPRIO (dashboardAuth.php), não o token
+// de usuário do app - de propósito, pra ficar protegido mesmo se a conta
+// pessoal do Zaldemy for comprometida. Ver DashboardAuth::validarSessaoAtiva.
+$headers = getallheaders();
+$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? $_SERVER['HTTP_AUTHORIZATION'] ?? null;
+$adminToken = $authHeader ? str_replace('Bearer ', '', $authHeader) : null;
 
-if (!in_array($user['email'] ?? '', $adminEmails, true)) {
+if (!$adminToken || !DashboardAuth::validarSessaoAtiva($pdo, $adminToken)) {
     http_response_code(403);
     echo json_encode(["error" => "Acesso não autorizado"]);
     exit;
@@ -58,6 +60,8 @@ try {
             'usuarios_por_plano' => $dashboardModel->getUsuariosPorPlano($pdo),
             'canais_aquisicao' => $dashboardModel->getCanaisAquisicao($pdo),
             'idiomas_mais_aprendidos' => $dashboardModel->getIdiomasMaisAprendidos($pdo),
+            'atividade_diaria' => $dashboardModel->getAtividadeDiariaPorTipo($pdo, $dias),
+            'uso_por_modo_treino' => $dashboardModel->getUsoPorModoTreino($pdo, $dias),
         ];
     } elseif ($action === 'listar_paises') {
         $response = ['paises' => PaisesLiberados::listar($pdo)];
