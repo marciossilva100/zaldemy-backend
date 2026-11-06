@@ -26,7 +26,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once '../server.php';
 require_once '../model/Dashboard.php';
-require_once '../model/PaisesLiberados.php';
 require_once '../model/DashboardAuth.php';
 
 // Dashboard administrativo: login PRÓPRIO (dashboardAuth.php), não o token
@@ -63,33 +62,31 @@ try {
             'atividade_diaria' => $dashboardModel->getAtividadeDiariaPorTipo($pdo, $dias),
             'uso_por_modo_treino' => $dashboardModel->getUsoPorModoTreino($pdo, $dias),
         ];
-    } elseif ($action === 'listar_paises') {
-        $response = ['paises' => PaisesLiberados::listar($pdo)];
+    } elseif ($action === 'listar_usuarios') {
+        $pagina = (int) ($input['pagina'] ?? 1);
+        $porPagina = (int) ($input['por_pagina'] ?? 20);
+        $busca = trim((string) ($input['busca'] ?? ''));
 
-    } elseif ($action === 'adicionar_pais') {
-        $codigo = trim($input['codigo'] ?? '');
-        $nome = trim($input['nome'] ?? '');
+        $response = $dashboardModel->getUsuarios($pdo, $pagina, $porPagina, $busca);
 
-        if (strlen($codigo) !== 2 || $nome === '') {
+    } elseif ($action === 'detalhes_usuario') {
+        $userId = (int) ($input['user_id'] ?? 0);
+
+        if ($userId <= 0) {
             http_response_code(422);
-            echo json_encode(["error" => "Informe código (2 letras) e nome do país"]);
+            echo json_encode(["error" => "user_id obrigatório"]);
             exit;
         }
 
-        PaisesLiberados::adicionar($pdo, $codigo, $nome);
-        $response = ['paises' => PaisesLiberados::listar($pdo)];
+        $detalhes = $dashboardModel->getDetalhesUsuario($pdo, $userId, 30);
 
-    } elseif ($action === 'remover_pais') {
-        $codigo = trim($input['codigo'] ?? '');
-
-        if ($codigo === '') {
-            http_response_code(422);
-            echo json_encode(["error" => "Informe o código do país"]);
+        if (!$detalhes) {
+            http_response_code(404);
+            echo json_encode(["error" => "Usuário não encontrado"]);
             exit;
         }
 
-        PaisesLiberados::remover($pdo, $codigo);
-        $response = ['paises' => PaisesLiberados::listar($pdo)];
+        $response = $detalhes;
 
     } else {
         http_response_code(400);
