@@ -1,7 +1,6 @@
 <?php
 date_default_timezone_set('America/Sao_Paulo');
 require_once 'Categorias.php';
-require_once 'PaisesLiberados.php';
 require_once 'Apelido.php';
 
 class Auth {
@@ -75,13 +74,6 @@ class Auth {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
-
-            if (PaisesLiberados::cadastroBloqueado($this->pdo)) {
-                return [
-                    "sucesso" => false,
-                    "erro" => "O Zaldemy ainda não está disponível no seu país. Em breve!"
-                ];
-            }
 
             // cria usuário automaticamente - Google não fornece apelido,
             // então sempre gera um automático (editável depois em

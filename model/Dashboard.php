@@ -211,4 +211,169 @@ class Dashboard
         }
         return $resultado;
     }
+
+    // Lista paginada de usuários pro admin conseguir abrir qualquer um e ver
+    // detalhes - o dashboard até agora só tinha números agregados, nunca um
+    // usuário individual. Busca por nome/apelido/e-mail opcional.
+    public function getUsuarios(PDO $pdo, int $pagina = 1, int $porPagina = 20, string $busca = ''): array
+    {
+        $pagina = max(1, $pagina);
+        $porPagina = max(1, min(100, $porPagina));
+        $offset = ($pagina - 1) * $porPagina;
+
+        $buscaLike = '%' . $busca . '%';
+        $filtroBusca = $busca !== ''
+            ? "AND (u.nome LIKE :busca OR u.email LIKE :busca OR u.apelido LIKE :busca)"
+            : "";
+
+        $sql = "
+            SELECT u.id, u.nome, u.apelido, u.email, u.create_date, u.email_verified,
+                   COALESCE(p.plano, 'sem plano') AS plano_nome,
+                   (SELECT COUNT(*) FROM categorias c WHERE c.id_user = u.id AND c.status_id > 0) AS total_categorias,
+                   (SELECT COUNT(*) FROM frases f WHERE f.usuario_id = u.id AND f.status_id > 0) AS total_frases
+            FROM usuarios u
+            LEFT JOIN planos p ON p.id = u.plano
+            WHERE (u.status_id IS NULL OR u.status_id <> 0)
+            {$filtroBusca}
+            ORDER BY u.create_date DESC
+            LIMIT :limite OFFSET :offset
+        ";
+        $stmt = $pdo->prepare($sql);
+        if ($busca !== '') {
+            $stmt->bindValue(':busca', $buscaLike, PDO::PARAM_STR);
+        }
+        $stmt->bindValue(':limite', $porPagina, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $sqlTotal = "SELECT COUNT(*) FROM usuarios u WHERE (u.status_id IS NULL OR u.status_id <> 0) {$filtroBusca}";
+        $stmtTotal = $pdo->prepare($sqlTotal);
+        if ($busca !== '') {
+            $stmtTotal->bindValue(':busca', $buscaLike, PDO::PARAM_STR);
+        }
+        $stmtTotal->execute();
+        $total = (int) $stmtTotal->fetchColumn();
+
+        foreach ($usuarios as &$u) {
+            $u['id'] = (int) $u['id'];
+            $u['email_verified'] = (bool) $u['email_verified'];
+            $u['total_categorias'] = (int) $u['total_categorias'];
+            $u['total_frases'] = (int) $u['total_frases'];
+        }
+
+        return [
+            'usuarios' => $usuarios,
+            'total' => $total,
+            'pagina' => $pagina,
+            'por_pagina' => $porPagina,
+            'total_paginas' => (int) ceil($total / $porPagina),
+        ];
+    }
+
+    // Detalhe de 1 usuário - "evolução" dele: em que estágio de treino estão
+    // as frases (nao_conheco/memorizando/em_treino/memorizado), quanto
+    // categoria/frase tem, e atividade recente nos mesmos 3 grupos do
+    // gráfico geral (treino, jogos, IA), pra ver se esse usuário específico
+    // está engajado ou sumiu.
+    public function getDetalhesUsuario(PDO $pdo, int $userId, int $dias = 30): ?array
+    {
+        $stmt = $pdo->prepare("
+            SELECT u.id, u.nome, u.apelido, u.email, u.create_date, u.email_verified,
+                   COALESCE(p.plano, 'sem plano') AS plano_nome,
+                   inat.idioma AS idioma_nativo, iapr.idioma AS idioma_aprendendo
+            FROM usuarios u
+            LEFT JOIN planos p ON p.id = u.plano
+            LEFT JOIN idioma_referencia ir ON ir.id_user = u.id
+            LEFT JOIN idiomas inat ON inat.id = ir.idioma_nativo
+            LEFT JOIN idiomas iapr ON iapr.id = ir.idioma_aprender
+            WHERE u.id = :id AND (u.status_id IS NULL OR u.status_id <> 0)
+            LIMIT 1
+        ");
+        $stmt->execute([':id' => $userId]);
+        $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$usuario) {
+            return null;
+        }
+
+        $usuario['id'] = (int) $usuario['id'];
+        $usuario['email_verified'] = (bool) $usuario['email_verified'];
+
+        $totais = $pdo->prepare("
+            SELECT
+                (SELECT COUNT(*) FROM categorias c WHERE c.id_user = :id1 AND c.status_id > 0) AS total_categorias,
+                (SELECT COUNT(*) FROM frases f WHERE f.usuario_id = :id2 AND f.status_id > 0) AS total_frases
+        ");
+        $totais->execute([':id1' => $userId, ':id2' => $userId]);
+        $totaisRow = $totais->fetch(PDO::FETCH_ASSOC);
+
+        $distribuicaoStmt = $pdo->prepare("
+            SELECT t.status, COUNT(*) AS total
+            FROM frases f
+            JOIN treino t ON t.id = f.id_treino
+            WHERE f.usuario_id = :id AND f.status_id > 0
+            GROUP BY t.status, t.id
+            ORDER BY t.id ASC
+        ");
+        $distribuicaoStmt->execute([':id' => $userId]);
+        // treino.status vem em snake_case (nao_conheco/memorizando/em_treino/
+        // memorizado) - traduz pro rótulo que o admin vê, em vez de mostrar
+        // o valor cru da coluna.
+        $rotulosTreino = [
+            'nao_conheco' => 'Não conheço',
+            'memorizando' => 'Memorizando',
+            'em_treino' => 'Em treino',
+            'memorizado' => 'Memorizado',
+        ];
+        $distribuicao = [];
+        foreach ($distribuicaoStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $distribuicao[] = ['name' => $rotulosTreino[$row['status']] ?? $row['status'], 'value' => (int) $row['total']];
+        }
+
+        $ultimoTreinoStmt = $pdo->prepare("
+            SELECT MAX(t.data_atualizacao) AS ultimo
+            FROM treino_data_atualizacao t
+            JOIN frases f ON f.id = t.id_frase
+            WHERE f.usuario_id = :id
+        ");
+        $ultimoTreinoStmt->execute([':id' => $userId]);
+        $ultimoTreino = $ultimoTreinoStmt->fetchColumn();
+
+        $dias = max(1, $dias);
+        $usoPorModoStmt = $pdo->prepare("
+            SELECT 'Flashcards e treino geral' AS name, COUNT(*) AS total
+                FROM treino_data_atualizacao t JOIN frases f ON f.id = t.id_frase
+                WHERE f.usuario_id = :id1 AND t.data_atualizacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Chuva de Frases', COUNT(*) FROM jogo_chuva_uso WHERE user_id = :id2 AND data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Tiro Certeiro', COUNT(*) FROM tiro_certeiro_uso WHERE user_id = :id3 AND data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Perguntas com IA', COUNT(*) FROM perguntas_ia WHERE user_id = :id4 AND data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Frase do Dia (IA)', COUNT(*) FROM frase_dia_ia WHERE user_id = :id5 AND data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+            UNION ALL
+            SELECT 'Tradução Reversa (IA)', COUNT(*) FROM traducao_reversa_ia WHERE user_id = :id6 AND data_criacao >= CURDATE() - INTERVAL {$dias} DAY
+        ");
+        $usoPorModoStmt->execute([
+            ':id1' => $userId, ':id2' => $userId, ':id3' => $userId,
+            ':id4' => $userId, ':id5' => $userId, ':id6' => $userId,
+        ]);
+        $usoPorModo = [];
+        foreach ($usoPorModoStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $usoPorModo[] = ['name' => $row['name'], 'value' => (int) $row['total']];
+        }
+        usort($usoPorModo, fn($a, $b) => $b['value'] - $a['value']);
+
+        return [
+            'usuario' => $usuario,
+            'total_categorias' => (int) $totaisRow['total_categorias'],
+            'total_frases' => (int) $totaisRow['total_frases'],
+            'distribuicao_treino' => $distribuicao,
+            'ultimo_treino' => $ultimoTreino,
+            'uso_por_modo' => $usoPorModo,
+            'dias_considerados' => $dias,
+        ];
+    }
 }
