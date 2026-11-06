@@ -74,6 +74,16 @@ class DailyQuestionOpenAI
             return $ehCjk ? 40 : 100;
         }
 
+        // Intermediário tinha o MESMO limite do avançado (220/90) - reportado
+        // como pergunta "muito grande" pra quem está nesse nível. Fica no meio
+        // do caminho entre iniciante e avançado, em vez de pular direto pro
+        // teto do avançado.
+        $ehIntermediario = $nivelNome !== null && mb_stripos($nivelNome, 'intermedi') !== false;
+
+        if ($ehIntermediario) {
+            return $ehCjk ? 65 : 160;
+        }
+
         return $ehCjk ? 90 : 220;
     }
 
