@@ -181,12 +181,11 @@ class DailyQuestionController
             $idioma = $this->getIdiomaAprendendo($user_id);
             $idiomaNativo = $this->getIdiomaNativo($user_id);
             $nivel = DailyQuestionOpenAI::getNivelNome($this->pdo, $user_id);
+            $plano = $this->getPlano();
 
-            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chatGeracao, $user_id, $phrases, $idioma, $idiomaNativo, $nivel, $categoriaIds, $this->conectivosObrigatorios);
+            $resultado = DailyQuestionOpenAI::obterPergunta($this->pdo, $this->chatGeracao, $user_id, $phrases, $idioma, $idiomaNativo, $nivel, $categoriaIds, $this->conectivosObrigatorios, $plano);
 
             if ($resultado['success']) {
-                $plano = $this->getPlano();
-
                 if ($plano === 1) {
                     $resultado['numero'] = DailyQuestionOpenAI::contarHoje($this->pdo, $user_id) + 1;
                     $resultado['total'] = DailyQuestionOpenAI::LIMITE_DIARIO_PREMIUM;

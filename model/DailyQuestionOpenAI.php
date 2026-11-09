@@ -56,7 +56,14 @@ class DailyQuestionOpenAI
     // Iniciante recebe um limite bem menor - pergunta curta e direta é mais
     // fácil de entender e responder oralmente em uma frase pra quem ainda tá
     // começando; o limite maior (220/90) fica pra intermediário/avançado.
-    private static function limiteCaracteresPara(string $idiomaNome, ?string $nivelNome = null): int
+    // $plano (1=premium, 3=limitado) encurta o avançado pro limitado - a API
+    // não-oficial do Google TTS (fallback quando a cota de voz natural,
+    // ilimitada só pro premium nesse treino, acaba) rejeita texto acima de
+    // ~200 caracteres (confirmado direto: 169 funciona, 207 retorna erro
+    // 400). Sem isso, o áudio do limitado falhava em silêncio no avançado
+    // assim que a amostra vitalícia (sempre só 1) era usada. Iniciante/
+    // intermediário já ficam abaixo desse teto em qualquer plano.
+    private static function limiteCaracteresPara(string $idiomaNome, ?string $nivelNome = null, int $plano = 1): int
     {
         $cjk = ['chin', 'japon', 'corean'];
         $ehCjk = false;
@@ -84,6 +91,9 @@ class DailyQuestionOpenAI
             return $ehCjk ? 65 : 160;
         }
 
+        if ($plano === 3 && !$ehCjk) {
+            return 180;
+        }
         return $ehCjk ? 90 : 220;
     }
 
@@ -347,7 +357,7 @@ class DailyQuestionOpenAI
 
     // Gera também a tradução da pergunta pro idioma nativo - a tela
     // funciona como um flashcard (frente = pergunta gerada, verso = tradução).
-    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome, ?string $nivelNome = null, ?array $categoriaIds = null, array $conectivosObrigatorios = []): array
+    public static function obterPergunta(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNome, string $idiomaNativoNome, ?string $nivelNome = null, ?array $categoriaIds = null, array $conectivosObrigatorios = [], int $plano = 1): array
     {
         $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
@@ -411,7 +421,7 @@ class DailyQuestionOpenAI
         // destaque - o destaque só deve marcar o que a IA realmente viu.
         $phrasesOriginais = $phrases;
 
-        $maxPergunta = self::limiteCaracteresPara($idiomaNome, $nivelNome);
+        $maxPergunta = self::limiteCaracteresPara($idiomaNome, $nivelNome, $plano);
         $limiteTraducao = self::limiteTraducaoPara($idiomaNativoNome);
         $phrases = array_map(fn($p) => mb_substr($p, 0, $maxPergunta), $phrases);
         $phrasesText = implode("\n", $phrases);

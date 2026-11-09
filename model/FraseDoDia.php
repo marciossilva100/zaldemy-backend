@@ -55,6 +55,15 @@ class FraseDoDia
     // idênticas em tamanho e complexidade pros dois níveis; um pouco mais de
     // espaço ajuda a instrução de vocabulário/estrutura mais elaborada (ver
     // systemPrompt) a se manifestar de verdade, não só na teoria do prompt.
+    // Sem distinção de plano de propósito - a Frase do Dia do limitado é uma
+    // amostra VITALÍCIA única (usa 1 vez na vida, nunca mais até virar
+    // premium, ver LIMITE_VITALICIO_LIMITADO) - diferente de Perguntas/
+    // Tradução Reversa (cota DIÁRIA, se repete todo dia pro limitado), não
+    // existe exposição de custo recorrente aqui que justifique encurtar o
+    // texto ou limitar a voz natural só dessa única vez (pedido explícito
+    // do usuário - ver também CONTEXTOS_AUDIO_SEM_LIMITE_QUALQUER_PLANO em
+    // controller/tts.php, que libera a voz natural sem cota pra qualquer
+    // plano nessa tela específica).
     private static function faixaCaracteresPara(string $idiomaNome, ?string $nivelNome = null): array
     {
         $cjk = ['chin', 'japon', 'corean'];

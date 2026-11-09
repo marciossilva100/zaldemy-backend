@@ -26,7 +26,15 @@ class TraducaoReversaOpenAI
     // Mesma lógica de FraseDoDia/DailyQuestionOpenAI: CJK é muito mais denso
     // em significado por caractere, então usa um teto bem menor pra manter
     // a complexidade equivalente.
-    private static function limiteCaracteresPara(string $idiomaNome, ?string $nivelNome = null): int
+    // $plano (1=premium, 3=limitado) encurta o avançado pro limitado - a API
+    // não-oficial do Google TTS (fallback quando a cota de voz natural,
+    // ilimitada só pro premium nesse treino, acaba) rejeita texto acima de
+    // ~200 caracteres (confirmado direto: 169 funciona, 207 retorna erro
+    // 400). Sem isso, o áudio do gabarito (só ele toca som, só depois do
+    // "Não sei" - o texto nativo nunca tem botão de ouvir) falhava em
+    // silêncio pro limitado no avançado. Iniciante/intermediário já ficam
+    // abaixo desse teto em qualquer plano.
+    private static function limiteCaracteresPara(string $idiomaNome, ?string $nivelNome = null, int $plano = 1): int
     {
         $cjk = ['chin', 'japon', 'corean'];
         $ehCjk = false;
@@ -53,12 +61,27 @@ class TraducaoReversaOpenAI
             return $ehCjk ? 65 : 160;
         }
 
+        if ($plano === 3 && !$ehCjk) {
+            return 180;
+        }
         return $ehCjk ? 90 : 220;
     }
 
-    private static function limiteTraducaoPara(string $idiomaNome): int
+    private static function limiteTraducaoPara(string $idiomaNome, ?string $nivelNome = null, int $plano = 1): int
     {
-        return (int) round(self::limiteCaracteresPara($idiomaNome) * 1.3);
+        $limite = (int) round(self::limiteCaracteresPara($idiomaNome, $nivelNome, $plano) * 1.3);
+
+        // O ×1.3 sozinho ainda estourava os ~200 caracteres do Google pro
+        // limitado no intermediário (160 × 1.3 = 208) - limiteCaracteresPara
+        // só aplica o teto do limitado no ramo "avançado" (default), não no
+        // intermediário, que tem seu próprio valor fixo. Trava o resultado
+        // FINAL aqui em vez de espalhar a checagem de plano em cada ramo de
+        // nível - cobre qualquer combinação.
+        if ($plano === 3 && mb_stripos($idiomaNome, 'chin') === false && mb_stripos($idiomaNome, 'japon') === false && mb_stripos($idiomaNome, 'corean') === false) {
+            $limite = min($limite, 180);
+        }
+
+        return $limite;
     }
 
     public static function contarHoje(PDO $pdo, int $user_id): int
@@ -262,7 +285,7 @@ class TraducaoReversaOpenAI
     // OBRIGATÓRIO (sem fallback relaxado, diferente de Perguntas/Frase do
     // Dia) - pedido explícito do usuário: o conteúdo tem que vir de frases
     // que ele já estudou de verdade, sem exceção.
-    public static function obterTexto(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNativoNome, string $idiomaAprendendoNome, ?string $nivelNome = null, ?array $categoriaIds = null): array
+    public static function obterTexto(PDO $pdo, OpenAiChat $chat, int $user_id, array $phrases, string $idiomaNativoNome, string $idiomaAprendendoNome, ?string $nivelNome = null, ?array $categoriaIds = null, int $plano = 1): array
     {
         $nivelNome = $nivelNome ?? Nivel::nomeParaPrompt(null);
         $pendente = self::getPendente($pdo, $user_id);
@@ -314,7 +337,12 @@ class TraducaoReversaOpenAI
         $phrasesOriginais = $phrases;
 
         $maxTexto = self::limiteCaracteresPara($idiomaNativoNome, $nivelNome);
-        $limiteGabarito = self::limiteTraducaoPara($idiomaAprendendoNome);
+        // $limiteGabarito nunca recebeu $nivelNome antes (só o idioma) -
+        // sempre caía no teto solto do "avançado" (220×1.3≈286) pra
+        // qualquer nível. Corrigido aqui de passagem, já que a função
+        // precisava do nível de qualquer forma pra aplicar o teto do
+        // limitado certo.
+        $limiteGabarito = self::limiteTraducaoPara($idiomaAprendendoNome, $nivelNome, $plano);
         $phrases = array_map(fn($p) => mb_substr($p, 0, $maxTexto), $phrases);
         $phrasesText = implode("\n", $phrases);
 
