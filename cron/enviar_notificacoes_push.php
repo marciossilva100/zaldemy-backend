@@ -134,8 +134,13 @@ if ($tipo === 'treino_disponivel') {
         // notificação mostra ela em vez do texto genérico - desperta mais
         // curiosidade que só "você tem conteúdo disponível" (decisão de
         // produto, ver conversa com o usuário). Sem frase nesse estágio
-        // ainda, cai pro texto genérico de sempre.
-        $frase = PushNotification::fraseEmTreinoMaisAtrasada($pdo, $userId);
+        // ainda, cai pro texto genérico de sempre. Sorteia entre as até 5
+        // mais atrasadas (não sempre a mesma única mais atrasada) - sem
+        // isso, quem nunca treina uma frase específica via sempre ELA,
+        // todo dia, até treinar (reportado pelo usuário: mesma frase há
+        // dias, mesmo já variando o título/corpo da mensagem).
+        $frases = PushNotification::frasesEmTreinoMaisAtrasadas($pdo, $userId);
+        $frase = $frases ? $frases[array_rand($frases)] : null;
 
         if ($frase) {
             $texto = mb_strlen($frase['texto_nativo']) > 60

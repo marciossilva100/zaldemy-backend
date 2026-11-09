@@ -327,7 +327,13 @@ class PushNotification
     // alguém que já trocou de idioma via frase de um idioma que nem está
     // estudando mais. Null quando o usuário não tem nenhuma frase nesse
     // estágio ainda (cai pra mensagem genérica no cron).
-    public static function fraseEmTreinoMaisAtrasada(PDO $pdo, int $user_id): ?array
+    // Retorna várias (não só a mais atrasada) pra quem chama poder sortear
+    // uma diferente a cada notificação - com só a mais atrasada (como era
+    // antes), quem nunca treina essa frase específica via sempre a MESMA
+    // notificação todo dia até resolvê-la, o que na prática é "nunca" pra
+    // quem já parou de abrir o app por causa disso (reportado pelo
+    // usuário: mesma frase aparecendo há dias).
+    public static function frasesEmTreinoMaisAtrasadas(PDO $pdo, int $user_id, int $limite = 5): array
     {
         $stmt = $pdo->prepare(
             "SELECT f.texto_nativo, f.texto_traduzido
@@ -340,12 +346,11 @@ class PushNotification
                AND f.status_id > 0
                AND f.id_treino = 3
              ORDER BY f.data_atualizacao ASC
-             LIMIT 1"
+             LIMIT " . max(1, $limite)
         );
         $stmt->execute([':user_id' => $user_id]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $row ?: null;
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // Usuários (premium ou limitado, com subscription ativa) que ainda não
