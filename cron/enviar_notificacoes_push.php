@@ -49,6 +49,77 @@ if (file_exists($caminhoFcm)) {
     }
 }
 
+// Pools de variações por tipo - sem isso, os 3 tipos mandavam sempre o
+// MESMO título/corpo (só o número de dias de streak ou a frase em treino
+// mudavam, quando existiam) - notificação idêntica toda semana treina o
+// usuário a ignorar/silenciar (reportado pelo usuário). array_rand() sorteia
+// 1 de cada vez; não precisa de controle de "não repetir a última" porque
+// esses envios já são espaçados (1x/dia no máximo, 1x/semana no
+// reengajamento) - a chance de pegar a mesma 2x seguidas é baixa e inofensiva.
+function escolher(array $pool): string
+{
+    return $pool[array_rand($pool)];
+}
+
+$TITULOS_TREINO_DISPONIVEL = [
+    'Seu treino de hoje está esperando!',
+    'Ainda dá tempo de praticar hoje!',
+    'Um treino rápido te espera',
+    'Hoje tem treino disponível pra você',
+    'Bora praticar um pouco?',
+];
+
+$CORPOS_TREINO_DISPONIVEL_GENERICO = [
+    'Você ainda tem conteúdo disponível hoje. Que tal praticar um pouco?',
+    'Separamos um treino rapidinho pra você continuar evoluindo.',
+    'Poucos minutos hoje já fazem diferença no seu aprendizado.',
+    'Ainda dá tempo de manter o ritmo hoje.',
+    'Seu próximo treino está pronto quando você quiser.',
+];
+
+// {texto} = frase em treino mais atrasada, com aspas já aplicadas no lugar
+// certo pela interpolação abaixo.
+$CORPOS_TREINO_DISPONIVEL_COM_FRASE = [
+    'Lembra como se diz "%s"? Pratique hoje!',
+    'Ainda lembra "%s"? Vamos revisar?',
+    '"%s" ainda está esperando por você no treino de hoje.',
+    'Que tal revisar "%s" agora?',
+    'Não esqueça de treinar "%s" hoje!',
+];
+
+$TITULOS_STREAK_RISCO = [
+    'Sua sequência está em risco!',
+    'Não deixe sua sequência quebrar!',
+    'Falta pouco pra perder sua sequência',
+    'Sua ofensiva está por um fio!',
+    'Hoje é o dia de manter sua sequência',
+];
+
+// %d = dias de sequência atual.
+$CORPOS_STREAK_RISCO = [
+    'Você tem uma sequência de %d dia(s) - estude hoje pra não perder.',
+    '%d dia(s) de sequência até agora. Não deixe acabar hoje!',
+    'Faltam só alguns minutos pra manter seus %d dia(s) de sequência.',
+    'Sua sequência de %d dia(s) está esperando só mais um treino hoje.',
+    'Você construiu %d dia(s) de sequência - vale a pena continuar hoje.',
+];
+
+$TITULOS_REENGAJAMENTO = [
+    'Sentimos sua falta!',
+    'Faz tempo que a gente não se vê por aqui',
+    'Que tal voltar a estudar?',
+    'Seu progresso está te esperando',
+    'Bora continuar de onde parou?',
+];
+
+$CORPOS_REENGAJAMENTO = [
+    'Faz um tempo que você não estuda. Volte quando quiser continuar de onde parou.',
+    'Seu conteúdo continua te esperando, sem pressa nenhuma.',
+    'Alguns minutos hoje já ajudam a retomar o ritmo.',
+    'Você já tinha avançado bastante - que tal continuar?',
+    'Nada foi perdido - seu progresso está salvo e te esperando.',
+];
+
 $enviados = 0;
 
 // Ainda sobra pelo menos 1 dos 4 recursos diários (frase do dia, perguntas,
@@ -63,22 +134,28 @@ if ($tipo === 'treino_disponivel') {
         // notificação mostra ela em vez do texto genérico - desperta mais
         // curiosidade que só "você tem conteúdo disponível" (decisão de
         // produto, ver conversa com o usuário). Sem frase nesse estágio
-        // ainda, cai pro texto genérico de sempre.
-        $frase = PushNotification::fraseEmTreinoMaisAtrasada($pdo, $userId);
-        $corpo = 'Você ainda tem conteúdo disponível hoje. Que tal praticar um pouco?';
+        // ainda, cai pro texto genérico de sempre. Sorteia entre as até 5
+        // mais atrasadas (não sempre a mesma única mais atrasada) - sem
+        // isso, quem nunca treina uma frase específica via sempre ELA,
+        // todo dia, até treinar (reportado pelo usuário: mesma frase há
+        // dias, mesmo já variando o título/corpo da mensagem).
+        $frases = PushNotification::frasesEmTreinoMaisAtrasadas($pdo, $userId);
+        $frase = $frases ? $frases[array_rand($frases)] : null;
 
         if ($frase) {
             $texto = mb_strlen($frase['texto_nativo']) > 60
                 ? mb_substr($frase['texto_nativo'], 0, 60) . '...'
                 : $frase['texto_nativo'];
-            $corpo = "Lembra como se diz \"{$texto}\"? Pratique hoje!";
+            $corpo = sprintf(escolher($CORPOS_TREINO_DISPONIVEL_COM_FRASE), $texto);
+        } else {
+            $corpo = escolher($CORPOS_TREINO_DISPONIVEL_GENERICO);
         }
 
         PushNotification::enviarParaUsuario(
             $pdo,
             $webPush,
             $userId,
-            'Seu treino de hoje está esperando!',
+            escolher($TITULOS_TREINO_DISPONIVEL),
             $corpo,
             '/home',
             $fcmSender
@@ -107,8 +184,8 @@ if ($tipo === 'streak_risco') {
             $pdo,
             $webPush,
             $userId,
-            'Sua sequência está em risco!',
-            "Você tem uma sequência de {$streak} dia(s) - estude hoje pra não perder.",
+            escolher($TITULOS_STREAK_RISCO),
+            sprintf(escolher($CORPOS_STREAK_RISCO), $streak),
             '/home',
             $fcmSender
         );
@@ -132,8 +209,8 @@ if ($tipo === 'reengajamento') {
             $pdo,
             $webPush,
             $userId,
-            'Sentimos sua falta!',
-            'Faz um tempo que você não estuda. Volte quando quiser continuar de onde parou.',
+            escolher($TITULOS_REENGAJAMENTO),
+            escolher($CORPOS_REENGAJAMENTO),
             '/home',
             $fcmSender
         );

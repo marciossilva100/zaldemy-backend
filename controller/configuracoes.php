@@ -103,6 +103,63 @@ try {
         exit;
     }
 
+    if ($action === 'atualizar_velocidade_card_frente') {
+        $velocidade = $input['velocidade_card_frente'] ?? null;
+
+        if ($velocidade === null) {
+            http_response_code(400);
+            echo json_encode(["error" => "velocidade_card_frente obrigatória"]);
+            exit;
+        }
+
+        $dados = Configuracoes::atualizarVelocidadeCardFrente($pdo, $user_id, $velocidade);
+
+        if (!$dados['success']) {
+            http_response_code(400);
+        }
+
+        echo json_encode($dados);
+        exit;
+    }
+
+    if ($action === 'atualizar_velocidade_card_verso') {
+        $velocidade = $input['velocidade_card_verso'] ?? null;
+
+        if ($velocidade === null) {
+            http_response_code(400);
+            echo json_encode(["error" => "velocidade_card_verso obrigatória"]);
+            exit;
+        }
+
+        $dados = Configuracoes::atualizarVelocidadeCardVerso($pdo, $user_id, $velocidade);
+
+        if (!$dados['success']) {
+            http_response_code(400);
+        }
+
+        echo json_encode($dados);
+        exit;
+    }
+
+    if ($action === 'atualizar_velocidade_voz_natural_ia') {
+        $velocidade = $input['velocidade_voz_natural_ia'] ?? null;
+
+        if ($velocidade === null) {
+            http_response_code(400);
+            echo json_encode(["error" => "velocidade_voz_natural_ia obrigatória"]);
+            exit;
+        }
+
+        $dados = Configuracoes::atualizarVelocidadeVozNaturalIa($pdo, $user_id, $velocidade);
+
+        if (!$dados['success']) {
+            http_response_code(400);
+        }
+
+        echo json_encode($dados);
+        exit;
+    }
+
     if ($action === 'atualizar_voz_tts') {
         $voz = $input['voz_tts'] ?? null;
 

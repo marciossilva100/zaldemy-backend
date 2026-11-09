@@ -36,9 +36,9 @@ class Configuracoes
 
         // inserir configuração padrão
         $sql = "INSERT INTO configuracoes
-                (quantidade_frases_aprender, user_id, voz_tts, velocidade_tts, velocidade_tts_padrao)
+                (quantidade_frases_aprender, user_id, voz_tts, velocidade_tts, velocidade_tts_padrao, velocidade_card_frente, velocidade_card_verso, velocidade_voz_natural_ia)
                 VALUES
-                (:quantidade_frases_aprender, :user_id, :voz_tts, :velocidade_tts, :velocidade_tts_padrao)";
+                (:quantidade_frases_aprender, :user_id, :voz_tts, :velocidade_tts, :velocidade_tts_padrao, :velocidade_card_frente, :velocidade_card_verso, :velocidade_voz_natural_ia)";
 
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':quantidade_frases_aprender', 8, PDO::PARAM_INT);
@@ -46,6 +46,9 @@ class Configuracoes
         $stmt->bindValue(':voz_tts', self::VOZ_TTS_PADRAO, PDO::PARAM_STR);
         $stmt->bindValue(':velocidade_tts', self::VELOCIDADE_TTS_PADRAO);
         $stmt->bindValue(':velocidade_tts_padrao', self::VELOCIDADE_TTS_PADRAO);
+        $stmt->bindValue(':velocidade_card_frente', self::VELOCIDADE_TTS_PADRAO);
+        $stmt->bindValue(':velocidade_card_verso', self::VELOCIDADE_TTS_PADRAO);
+        $stmt->bindValue(':velocidade_voz_natural_ia', self::VELOCIDADE_TTS_PADRAO);
         $stmt->execute();
 
         return [
@@ -59,7 +62,7 @@ class Configuracoes
         // garante que existe uma configuração antes de buscar
         self::setConfiguracoes($pdo, $user_id);
 
-        $sql = "SELECT quantidade_frases_aprender, voz_tts, velocidade_tts, velocidade_tts_padrao
+        $sql = "SELECT quantidade_frases_aprender, voz_tts, velocidade_tts, velocidade_tts_padrao, velocidade_card_frente, velocidade_card_verso, velocidade_voz_natural_ia
                 FROM configuracoes
                 WHERE user_id = :user_id
                 LIMIT 1";
@@ -78,6 +81,17 @@ class Configuracoes
             // independentes - antes compartilhavam a mesma coluna/preferência.
             'velocidade_tts' => isset($configuracao['velocidade_tts']) ? (float) $configuracao['velocidade_tts'] : self::VELOCIDADE_TTS_PADRAO,
             'velocidade_tts_padrao' => isset($configuracao['velocidade_tts_padrao']) ? (float) $configuracao['velocidade_tts_padrao'] : self::VELOCIDADE_TTS_PADRAO,
+            // Velocidade por lado do cartão (frente = idioma nativo, verso =
+            // idioma aprendendo) - vale em todo o app com cartão de flip
+            // (Flashcards, DigitarTexto etc.), EXCETO os treinos de IA logo
+            // abaixo, que têm sua própria configuração.
+            'velocidade_card_frente' => isset($configuracao['velocidade_card_frente']) ? (float) $configuracao['velocidade_card_frente'] : self::VELOCIDADE_TTS_PADRAO,
+            'velocidade_card_verso' => isset($configuracao['velocidade_card_verso']) ? (float) $configuracao['velocidade_card_verso'] : self::VELOCIDADE_TTS_PADRAO,
+            // Velocidade da voz natural especificamente nos treinos de IA
+            // (Frase do Dia, Perguntas, Tradução Reversa) - não é por lado de
+            // cartão lá (pedido explícito do usuário), é sempre voz natural
+            // (nunca cai pro padrão/Google por escolha, só se a API falhar).
+            'velocidade_voz_natural_ia' => isset($configuracao['velocidade_voz_natural_ia']) ? (float) $configuracao['velocidade_voz_natural_ia'] : self::VELOCIDADE_TTS_PADRAO,
         ];
     }
 
@@ -197,6 +211,103 @@ class Configuracoes
             'success' => true,
             'message' => 'Velocidade atualizada com sucesso.',
             'velocidade_tts_padrao' => $velocidade
+        ];
+    }
+
+    // Velocidade por lado do cartão nos Flashcards - independente das duas
+    // acima (voz natural/padrão, que continuam controlando as outras telas).
+    // Aplica na reprodução não importa qual voz tocar, ver
+    // audioPlayer.js::aplicarVelocidade.
+    public static function atualizarVelocidadeCardFrente(PDO $pdo, $user_id, $velocidade): array
+    {
+        $velocidade = (float) $velocidade;
+
+        if (!in_array($velocidade, self::VELOCIDADES_TTS_VALIDAS, true)) {
+            return [
+                'success' => false,
+                'message' => 'Velocidade inválida.'
+            ];
+        }
+
+        // garante que existe uma configuração antes de atualizar
+        self::setConfiguracoes($pdo, $user_id);
+
+        $sql = "UPDATE configuracoes
+                SET velocidade_card_frente = :velocidade_card_frente
+                WHERE user_id = :user_id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':velocidade_card_frente', $velocidade);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'success' => true,
+            'message' => 'Velocidade atualizada com sucesso.',
+            'velocidade_card_frente' => $velocidade
+        ];
+    }
+
+    public static function atualizarVelocidadeCardVerso(PDO $pdo, $user_id, $velocidade): array
+    {
+        $velocidade = (float) $velocidade;
+
+        if (!in_array($velocidade, self::VELOCIDADES_TTS_VALIDAS, true)) {
+            return [
+                'success' => false,
+                'message' => 'Velocidade inválida.'
+            ];
+        }
+
+        // garante que existe uma configuração antes de atualizar
+        self::setConfiguracoes($pdo, $user_id);
+
+        $sql = "UPDATE configuracoes
+                SET velocidade_card_verso = :velocidade_card_verso
+                WHERE user_id = :user_id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':velocidade_card_verso', $velocidade);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'success' => true,
+            'message' => 'Velocidade atualizada com sucesso.',
+            'velocidade_card_verso' => $velocidade
+        ];
+    }
+
+    // Velocidade da voz natural especificamente nos treinos de IA - não é
+    // por lado de cartão lá (pedido explícito do usuário), é uma
+    // configuração própria, independente de velocidade_card_frente/verso.
+    public static function atualizarVelocidadeVozNaturalIa(PDO $pdo, $user_id, $velocidade): array
+    {
+        $velocidade = (float) $velocidade;
+
+        if (!in_array($velocidade, self::VELOCIDADES_TTS_VALIDAS, true)) {
+            return [
+                'success' => false,
+                'message' => 'Velocidade inválida.'
+            ];
+        }
+
+        // garante que existe uma configuração antes de atualizar
+        self::setConfiguracoes($pdo, $user_id);
+
+        $sql = "UPDATE configuracoes
+                SET velocidade_voz_natural_ia = :velocidade_voz_natural_ia
+                WHERE user_id = :user_id";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':velocidade_voz_natural_ia', $velocidade);
+        $stmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'success' => true,
+            'message' => 'Velocidade atualizada com sucesso.',
+            'velocidade_voz_natural_ia' => $velocidade
         ];
     }
 
