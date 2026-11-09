@@ -233,7 +233,7 @@ class TraducaoReversaController
             $idiomaAprendendo = $this->getIdiomaAprendendo($user_id);
             $nivel = TraducaoReversaOpenAI::getNivelNome($this->pdo, $user_id);
 
-            $resultado = TraducaoReversaOpenAI::obterTexto($this->pdo, $this->chatGeracao, $user_id, $phrases, $idiomaNativo, $idiomaAprendendo, $nivel, $categoriaIds);
+            $resultado = TraducaoReversaOpenAI::obterTexto($this->pdo, $this->chatGeracao, $user_id, $phrases, $idiomaNativo, $idiomaAprendendo, $nivel, $categoriaIds, $this->getPlano());
 
             if ($resultado['success']) {
                 $resultado['idioma_alvo'] = $idiomaAprendendo;
