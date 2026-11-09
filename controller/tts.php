@@ -92,20 +92,34 @@ function registrarUsoAudioIa(PDO $pdo, int $userId): void
     $stmt->execute([':user_id' => $userId]);
 }
 
+// Textos no idioma que o aluno está aprendendo, nos treinos de IA (Frase do
+// Dia, Perguntas, Tradução Reversa) - pedido explícito do usuário: voz
+// natural SEMPRE nesses 3 treinos, independente da cota. O fallback de voz
+// padrão (API não-oficial do Google) rejeita qualquer texto acima de ~200
+// caracteres, e esses textos gerados por IA passam disso com frequência no
+// intermediário/avançado - cair pro fallback aí resultava em áudio nenhum
+// (reportado: "não consigo reproduzir o áudio" mesmo no premium). Only esse
+// contexto reconhecido pula o BLOQUEIO por cota - o uso continua sendo
+// registrado normalmente (ver reservarUsoAudioIa), só não impede.
+const CONTEXTOS_AUDIO_SEM_LIMITE = ['voz_natural_ia'];
+
 // Verifica se o plano do usuário pode usar voz natural e, se puder, se ainda
 // está dentro do limite (diário pro premium, vitalício pro limitado).
 // Retorna null se pode prosseguir, ou o array de resposta JSON pra retornar
 // direto (bloqueando o acesso).
-function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload = false): ?array
+function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload = false, bool $semLimite = false): ?array
 {
     if ($plano === 1) {
-        if (usoAudioIaHoje($pdo, $userId) >= AUDIO_IA_LIMITE_DIARIO) {
+        if (!$semLimite && usoAudioIaHoje($pdo, $userId) >= AUDIO_IA_LIMITE_DIARIO) {
             return ["erro" => false, "limite_atingido" => true];
         }
         return null;
     }
 
     if ($plano === 3) {
+        // $semLimite NÃO vale aqui de propósito - pedido explícito do
+        // usuário: a voz natural sem bloqueio de cota nos treinos de IA é só
+        // pro premium. O limitado continua com a cota vitalícia normal.
         if (usoAudioIaTotal($pdo, $userId) >= AUDIO_IA_LIMITE_VITALICIO_LIMITADO) {
             return ["erro" => false, "limite_atingido" => true];
         }
@@ -127,7 +141,7 @@ function verificarAcessoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPrelo
 // a reserva é desfeita (removida) pra não gastar cota por um erro.
 // Retorna null se conseguiu reservar (já registrado - chame
 // desfazerReservaAudioIa se a geração falhar), ou o array de bloqueio.
-function reservarUsoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload = false): ?array
+function reservarUsoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload = false, bool $semLimite = false): ?array
 {
     $chaveLock = "audio_ia_uso_{$userId}";
 
@@ -142,7 +156,7 @@ function reservarUsoAudioIa(PDO $pdo, int $userId, int $plano, bool $isPreload =
     }
 
     try {
-        $bloqueio = verificarAcessoAudioIa($pdo, $userId, $plano, $isPreload);
+        $bloqueio = verificarAcessoAudioIa($pdo, $userId, $plano, $isPreload, $semLimite);
 
         if ($bloqueio !== null) {
             return $bloqueio;
@@ -214,14 +228,21 @@ try {
     // =========================
     if ($action === "stream_audio") {
 
-        $texto  = $_GET['texto'] ?? ($input['texto'] ?? null);
-        $idioma = $_GET['idioma'] ?? ($input['idioma'] ?? "pt");
+        $texto    = $_GET['texto'] ?? ($input['texto'] ?? null);
+        $idioma   = $_GET['idioma'] ?? ($input['idioma'] ?? "pt");
+        $contexto = $_GET['contexto'] ?? ($input['contexto'] ?? null);
+        $semLimite = in_array($contexto, CONTEXTOS_AUDIO_SEM_LIMITE, true);
 
         if (!$texto) {
             throw new Exception("Texto não informado");
         }
 
-        if (mb_strlen($texto) > AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA) {
+        // Teto de custo por chamada não vale pros treinos de IA - a
+        // tradução gerada no avançado passa fácil dos 300 (260 × 1.3 ≈
+        // 338, ver FraseDoDia::limiteTraducaoPara), e o texto já vem
+        // sempre gerado pela própria IA (nunca input livre do usuário),
+        // então o tamanho já é inerentemente limitado pelo prompt.
+        if (!$semLimite && mb_strlen($texto) > AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA) {
             throw new Exception("Texto excede o limite de " . AUDIO_IA_LIMITE_CARACTERES_POR_CHAMADA . " caracteres por chamada de áudio.");
         }
 
@@ -239,7 +260,7 @@ try {
         // reservarUsoAudioIa) - antes de chamar a API de voz de verdade, pra
         // nenhuma requisição concorrente conseguir passar pela checagem
         // antes de outra registrar a sua.
-        $bloqueio = reservarUsoAudioIa($pdo, $user_id, $plano, $isPreload);
+        $bloqueio = reservarUsoAudioIa($pdo, $user_id, $plano, $isPreload, $semLimite);
 
         if ($bloqueio !== null) {
             // Sem isso, essa resposta (limite atingido) volta com HTTP 200 -
