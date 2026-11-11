@@ -101,7 +101,9 @@ class Auth {
             $stmt->bindParam(":user", $userId);
             $stmt->execute();
 
-            enviarEmailNotificacaoNovoCadastro($nome, $email);
+            // Notificação de novo cadastro é disparada mais tarde, em
+            // CanalAquisicao::registrarCanal - só ali o canal de aquisição
+            // já foi informado pelo usuário.
             enviarEmailBoasVindasGoogle($email, $nome, $google->locale ?? null);
 
         } else {

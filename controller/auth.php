@@ -155,7 +155,9 @@ try {
         $user_id = $pdo->lastInsertId();
 
         enviarEmailVerificacao($email, $token);
-        enviarEmailNotificacaoNovoCadastro($nome, $email);
+        // Notificação de novo cadastro é disparada mais tarde, em
+        // CanalAquisicao::registrarCanal - só ali o canal de aquisição
+        // já foi informado pelo usuário.
 
         echo json_encode([
             "sucesso" => true,
