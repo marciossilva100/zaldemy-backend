@@ -356,7 +356,7 @@ function enviarEmailPagamentoFalhou($email, $nome, ?string $idiomaSigla = 'pt') 
     }
 }
 
-function enviarEmailNotificacaoNovoCadastro($nome, $email) {
+function enviarEmailNotificacaoNovoCadastro($nome, $email, $canalAquisicao = null) {
 
     $mail = new PHPMailer(true);
 
@@ -384,10 +384,14 @@ function enviarEmailNotificacaoNovoCadastro($nome, $email) {
 
         $mail->isHTML(true);
         $mail->Subject = 'Novo usuário cadastrado - Zaldemy';
+        $linhaCanal = $canalAquisicao
+            ? "<p><strong>Canal de aquisição:</strong> $canalAquisicao</p>"
+            : "";
         $mail->Body    = "
             <h2>Novo cadastro no Zaldemy</h2>
             <p><strong>Nome:</strong> $nome</p>
             <p><strong>Email:</strong> $email</p>
+            $linhaCanal
         ";
 
         $mail->send();

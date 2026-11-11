@@ -2,6 +2,7 @@
 date_default_timezone_set('America/Sao_Paulo');
 
 require_once '../server.php';
+require_once '../controller/email.php';
 
 class CanalAquisicao
 {
@@ -87,6 +88,17 @@ class CanalAquisicao
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
         $stmt->execute();
+
+        // Notificação de cadastro só dispara aqui, e não no momento do
+        // cadastro em si, porque o canal de aquisição ainda não existe
+        // nesse momento - só é capturado nesse passo do onboarding.
+        $stmt = $pdo->prepare('SELECT nome, email FROM usuarios WHERE id = :id LIMIT 1');
+        $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
+        $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($usuario) {
+            enviarEmailNotificacaoNovoCadastro($usuario['nome'], $usuario['email'], $this->rede_social);
+        }
 
         return [
             'success' => true,
