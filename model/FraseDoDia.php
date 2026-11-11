@@ -136,8 +136,43 @@ class FraseDoDia
         return (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'] > 0;
     }
 
+    // Pendência de HOJE em outro par de idiomas (ex: gerou a frase em
+    // português->inglês e trocou pra português->francês antes de responder)
+    // - sem essa checagem, o limite diário/vitalício só conta quando a frase
+    // é respondida (status_id = 1), e getPendente() só olha o par ATUAL, então
+    // trocar de par repetidamente antes de responder deixava acumular 1
+    // pendente por par sem nenhuma contar pro limite.
+    private static function getPendenteOutroPar(PDO $pdo, int $user_id): ?array
+    {
+        $sql = "SELECT inat.sigla AS idioma_nativo_sigla, iapr.sigla AS idioma_aprender_sigla
+                FROM frase_dia_ia f
+                LEFT JOIN idioma_referencia ir
+                    ON ir.idioma_nativo = f.idioma_nativo
+                    AND ir.idioma_aprender = f.idioma_aprender
+                    AND ir.id_user = :user_id1
+                LEFT JOIN idiomas inat ON inat.id = f.idioma_nativo
+                LEFT JOIN idiomas iapr ON iapr.id = f.idioma_aprender
+                WHERE f.user_id = :user_id2 AND f.status_id = 0
+                  AND DATE(f.data_criacao) = CURDATE()
+                  AND ir.id IS NULL
+                ORDER BY f.id DESC LIMIT 1";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':user_id1' => $user_id, ':user_id2' => $user_id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public static function verificarAcesso(PDO $pdo, int $user_id, int $plano): ?array
     {
+        if (($plano === 1 || $plano === 3) && ($pendenteOutroPar = self::getPendenteOutroPar($pdo, $user_id))) {
+            return [
+                "success" => false,
+                "pendente_outro_par" => true,
+                "idioma_nativo_sigla" => $pendenteOutroPar['idioma_nativo_sigla'],
+                "idioma_aprender_sigla" => $pendenteOutroPar['idioma_aprender_sigla'],
+            ];
+        }
+
         if ($plano === 1) {
             if (self::contarHoje($pdo, $user_id) >= self::LIMITE_DIARIO_PREMIUM) {
                 return ["success" => false, "limite_atingido" => true, "message" => "Você já fez a frase do dia de hoje. Volte amanhã!"];
