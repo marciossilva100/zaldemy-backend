@@ -373,7 +373,11 @@ function enviarEmailNotificacaoNovoCadastro($nome, $email) {
 
         $fromEmail  = $_ENV['MAIL_FROM_ADDRESS'] ?? 'adm@zaldemy.com';
         $fromName   = $_ENV['MAIL_FROM_NAME'] ?? 'Zaldemy';
-        $adminEmail = $_ENV['ADMIN_NOTIFICATION_EMAIL'] ?? 'marciosunico18@gmail.com';
+        $adminEmail = $_ENV['ADMIN_NOTIFICATION_EMAIL'] ?? '';
+
+        if ($adminEmail === '') {
+            return false;
+        }
 
         $mail->setFrom($fromEmail, $fromName);
         $mail->addAddress($adminEmail);
