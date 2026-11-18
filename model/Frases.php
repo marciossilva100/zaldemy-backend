@@ -345,18 +345,18 @@ class Frases
 
 
             // limite de caracteres
-            if (mb_strlen($this->texto_nativo) > 100) {
+            if (mb_strlen($this->texto_nativo) > 150) {
                 return [
                     'success' => false,
-                    'message' => 'O texto nativo precisa ter no máximo 100 caracteres'
+                    'message' => 'O texto nativo precisa ter no máximo 150 caracteres'
                 ];
             }
 
              // limite de caracteres
-            if (mb_strlen($this->texto_traduzido) > 100) {
+            if (mb_strlen($this->texto_traduzido) > 150) {
                 return [
                     'success' => false,
-                    'message' => 'O texto traduzido precisa ter no máximo 100 caracteres'
+                    'message' => 'O texto traduzido precisa ter no máximo 150 caracteres'
                 ];
             }
 
@@ -409,17 +409,17 @@ class Frases
             ];
         }
 
-        if (mb_strlen($this->texto_nativo) > 100) {
+        if (mb_strlen($this->texto_nativo) > 150) {
             return [
                 'success' => false,
-                'message' => 'O texto nativo precisa ter no máximo 100 caracteres'
+                'message' => 'O texto nativo precisa ter no máximo 150 caracteres'
             ];
         }
 
-        if (mb_strlen($this->texto_traduzido) > 100) {
+        if (mb_strlen($this->texto_traduzido) > 150) {
             return [
                 'success' => false,
-                'message' => 'O texto traduzido precisa ter no máximo 100 caracteres'
+                'message' => 'O texto traduzido precisa ter no máximo 150 caracteres'
             ];
         }
 
