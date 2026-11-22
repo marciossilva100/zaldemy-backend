@@ -412,9 +412,8 @@ class DailyQuestionOpenAI
             return ["success" => false, "conteudo_insuficiente" => true, "frases_curtas" => true, "message" => "Treine frases mais completas nos flashcards (não só palavras soltas) para gerar perguntas melhores."];
         }
 
-        // $phrases já vem limitado (getUserPhrases) e ordenado por prioridade
-        // de treino - embaralha só a ordem de apresentação, sem mudar quais
-        // frases entram.
+        // $phrases já vem limitado e sorteado (getUserPhrases) - embaralha só
+        // a ordem de apresentação de novo aqui, sem mudar quais frases entram.
         shuffle($phrases);
 
         // Mesma lista (já filtrada e embaralhada) usada no prompt e no

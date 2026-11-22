@@ -43,10 +43,16 @@ class DailyQuestionController
 {
     // Limite de frases enviadas pro prompt da IA - mandar tudo que o usuário
     // já tem cadastrado gastaria tokens/tempo de processamento à toa,
-    // principalmente pra quem tem centenas de frases. Prioriza as mais bem
-    // estudadas (id_treino mais alto - "memorizado" antes de "em treino"
-    // antes de "memorizando"), nunca as ainda não estudadas (id_treino=1).
-    const MAX_FRASES_PROMPT = 50;
+    // principalmente pra quem tem centenas de frases. Reduzido de 50 pra 10
+    // (reportado: perguntas sempre "com o mesmo sentido") - com 50, qualquer
+    // categoria com até 50 frases elegíveis (a maioria) mandava SEMPRE a
+    // lista inteira e sem mudar pra IA, pouco importa quantas vezes gerasse
+    // de novo - só a exclusão de frases recém-usadas (RotacaoFrasesIA)
+    // dava alguma variedade, e só até sobrar menos de 3 frases depois dela.
+    // Com 10, a amostragem aleatória (ORDER BY RAND() abaixo, sem mais
+    // prioridade de id_treino) passa a valer de verdade pra praticamente
+    // toda categoria, trocando o pool a cada geração.
+    const MAX_FRASES_PROMPT = 10;
 
     // Piso mínimo de frases garantidas por categoria elegível no pool
     // enviado pra IA - ver balancearPorCategoria() abaixo.
@@ -473,10 +479,16 @@ class DailyQuestionController
     // janela inteira é preenchida só por ela ANTES de qualquer categoria
     // menor ter chance de entrar - não importa quão maior a janela seja.
     // Corrigido de vez com ROW_NUMBER() OVER (PARTITION BY categoria_id...):
-    // cada categoria é rankeada (por id_treino DESC, RAND()) DENTRO DE SI
-    // MESMA, então o corte por rn <= N garante até N candidatos de CADA
-    // categoria elegível, não da tabela inteira - nenhuma categoria consegue
-    // mais "roubar o espaço" de outra na hora de montar os candidatos.
+    // cada categoria é rankeada (por RAND()) DENTRO DE SI MESMA, então o
+    // corte por rn <= N garante até N candidatos de CADA categoria elegível,
+    // não da tabela inteira - nenhuma categoria consegue mais "roubar o
+    // espaço" de outra na hora de montar os candidatos. Era "id_treino DESC,
+    // RAND()" (priorizava as frases mais bem estudadas) - trocado pra RAND()
+    // puro junto da redução de MAX_FRASES_PROMPT (50->10): com a prioridade,
+    // as frases do estágio mais alto quase sempre enchiam sozinhas as N
+    // vagas, então praticamente as mesmas frases voltavam toda geração -
+    // RAND() puro deixa qualquer frase elegível (de qualquer estágio)
+    // rotacionar de verdade entre uma geração e outra.
     private function buscarFrasesPorEstagio($user_id, bool $exigirTreinoMinimo, ?array $categoriaIds = null)
     {
         $categoriaIds = !empty($categoriaIds) ? array_slice(array_map('intval', $categoriaIds), 0, self::MAX_CATEGORIAS_ESCOLHA_MANUAL) : null;
@@ -488,7 +500,7 @@ class DailyQuestionController
                     SELECT f.categoria_id, f.texto_traduzido,
                         ROW_NUMBER() OVER (
                             PARTITION BY f.categoria_id
-                            ORDER BY f.id_treino DESC, RAND()
+                            ORDER BY RAND()
                         ) AS rn
                     FROM frases f
                     INNER JOIN idioma_referencia ir
