@@ -14,10 +14,11 @@ class FraseDoDia
 
     // Limite de frases enviadas pro prompt da IA - mandar tudo que o usuário
     // já tem cadastrado gastaria tokens/tempo de processamento à toa,
-    // principalmente pra quem tem centenas de frases. Prioriza as mais bem
-    // estudadas (id_treino mais alto - "memorizado" antes de "em treino"
-    // antes de "memorizando"), nunca as ainda não estudadas (id_treino=1).
-    const MAX_FRASES_PROMPT = 50;
+    // principalmente pra quem tem centenas de frases. Reduzido de 50 pra 10
+    // (mesmo motivo de DailyQuestionController::MAX_FRASES_PROMPT): com 50,
+    // categorias com até 50 frases elegíveis (a maioria) sempre mandavam a
+    // lista inteira e sem mudar pra IA.
+    const MAX_FRASES_PROMPT = 10;
 
     // Tamanho máximo de trecho (palavras ou caracteres, conforme o idioma)
     // considerado ao montar/buscar os n-gramas do destaque de vocabulário -
@@ -1233,13 +1234,17 @@ class FraseDoDia
     // janela inteira é preenchida só por ela ANTES de qualquer categoria
     // menor ter chance de entrar - não importa quão maior a janela seja.
     // Corrigido de vez com ROW_NUMBER() OVER (PARTITION BY categoria_id...):
-    // cada categoria é rankeada (por id_treino DESC, RAND()) DENTRO DE SI
-    // MESMA, então o corte por rn <= N garante até N candidatos de CADA
-    // categoria elegível, não da tabela inteira - nenhuma categoria consegue
-    // mais "roubar o espaço" de outra na hora de montar os candidatos.
+    // cada categoria é rankeada (por RAND()) DENTRO DE SI MESMA, então o
+    // corte por rn <= N garante até N candidatos de CADA categoria elegível,
+    // não da tabela inteira - nenhuma categoria consegue mais "roubar o
+    // espaço" de outra na hora de montar os candidatos.
     // Testado com dados reais (6 categorias elegíveis, uma com 451 frases
     // em id_treino=4 e as outras 5 com 1-15 frases em id_treino=2/3): antes,
     // só 2 das 6 apareciam nos candidatos; depois, as 6.
+    // Era "id_treino DESC, RAND()" - trocado pra RAND() puro junto da
+    // redução de MAX_FRASES_PROMPT (mesmo motivo de DailyQuestionController):
+    // a prioridade fazia as mesmas frases do estágio mais alto sempre
+    // encherem as N vagas sozinhas, repetindo o mesmo pool toda geração.
     private static function buscarFrasesPorEstagio(PDO $pdo, int $user_id, bool $exigirTreinoMinimo, ?array $categoriaIds = null): array
     {
         $categoriaIds = !empty($categoriaIds) ? array_slice(array_map('intval', $categoriaIds), 0, self::MAX_CATEGORIAS_ESCOLHA_MANUAL) : null;
@@ -1256,7 +1261,7 @@ class FraseDoDia
                     SELECT f.categoria_id, f.texto_traduzido,
                         ROW_NUMBER() OVER (
                             PARTITION BY f.categoria_id
-                            ORDER BY f.id_treino DESC, RAND()
+                            ORDER BY RAND()
                         ) AS rn
                     FROM frases f
                     INNER JOIN idioma_referencia ir
