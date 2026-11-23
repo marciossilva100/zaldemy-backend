@@ -41,8 +41,12 @@ carregarEnv(__DIR__ . '/../.env');
 class TraducaoReversaController
 {
     // Mesmo limite/motivo de DailyQuestionController - manda tudo cadastrado
-    // gastaria tokens à toa pra quem tem centenas de frases.
-    const MAX_FRASES_PROMPT = 50;
+    // gastaria tokens à toa pra quem tem centenas de frases. Reduzido de 50
+    // pra 10 pelo mesmo motivo de lá (ver comentário equivalente em
+    // DailyQuestionController::MAX_FRASES_PROMPT): com 50, categorias com
+    // até 50 frases elegíveis (a maioria) sempre mandavam a lista inteira e
+    // sem mudar pra IA.
+    const MAX_FRASES_PROMPT = 10;
 
     // Piso mínimo de frases garantidas por categoria elegível no pool
     // enviado pra IA - ver balancearPorCategoria() abaixo.
@@ -387,10 +391,13 @@ class TraducaoReversaController
     // janela inteira é preenchida só por ela ANTES de qualquer categoria
     // menor ter chance de entrar - não importa quão maior a janela seja.
     // Corrigido de vez com ROW_NUMBER() OVER (PARTITION BY categoria_id...):
-    // cada categoria é rankeada (por id_treino DESC, RAND()) DENTRO DE SI
-    // MESMA, então o corte por rn <= N garante até N candidatos de CADA
-    // categoria elegível, não da tabela inteira - nenhuma categoria consegue
-    // mais "roubar o espaço" de outra na hora de montar os candidatos.
+    // cada categoria é rankeada (por RAND()) DENTRO DE SI MESMA, então o
+    // corte por rn <= N garante até N candidatos de CADA categoria elegível,
+    // não da tabela inteira - nenhuma categoria consegue mais "roubar o
+    // espaço" de outra na hora de montar os candidatos. Era "id_treino DESC,
+    // RAND()" - trocado pra RAND() puro junto da redução de MAX_FRASES_PROMPT
+    // (mesmo motivo de DailyQuestionController: a prioridade fazia as mesmas
+    // frases do estágio mais alto sempre encherem as N vagas sozinhas).
     // $categoriaIds: null = comportamento padrão (sorteia entre as categorias
     // elegíveis, ver balancearPorCategoria). Quando informado (1 ou 2
     // categorias, pedido do aluno pra escolher o assunto do texto), restringe
@@ -407,7 +414,7 @@ class TraducaoReversaController
                     SELECT f.categoria_id, f.texto_nativo,
                         ROW_NUMBER() OVER (
                             PARTITION BY f.categoria_id
-                            ORDER BY f.id_treino DESC, RAND()
+                            ORDER BY RAND()
                         ) AS rn
                     FROM frases f
                     INNER JOIN idioma_referencia ir
