@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/DailyQuestionOpenAI.php';
+require_once '../model/Categorias.php';
 require_once '../model/RotacaoFrasesIA.php';
 require_once '../model/PlanoLimitado.php';
 require_once '../model/Nivel.php';
@@ -59,10 +60,15 @@ class DailyQuestionController
     const MINIMO_GARANTIDO_POR_CATEGORIA = 2;
 
     // Máximo de categorias que o aluno pode escolher à mão como assunto da
-    // pergunta - mesmo padrão/mesmo limite de FraseDoDia::MAX_CATEGORIAS_ESCOLHA_MANUAL
-    // (reduzido de 2 pra 1 - misturar categorias gerava perguntas sem
-    // coesão/concordância, sem assunto único de verdade).
-    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 1;
+    // pergunta. Antes ficava em 1 (misturar categorias na mesma pergunta
+    // gerava perguntas sem coesão/concordância, sem assunto único de
+    // verdade) - agora permite escolher várias, mas cada pergunta gerada
+    // usa só 1 delas por vez (sorteada em getUserPhrases a cada geração,
+    // nunca mistura dentro da mesma pergunta) - a variedade vem de qual
+    // categoria é sorteada a cada vez, não de misturar frases de categorias
+    // diferentes numa pergunta só. Não vale pra FraseDoDia (só 1 geração
+    // por dia, sem sentido sortear categoria a cada "geração").
+    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 5;
 
     private $pdo;
     private $chat;
@@ -78,6 +84,15 @@ class DailyQuestionController
     // (confirmado com 5 gerações reais seguidas: sem esse reforço, a
     // categoria de conectivos nunca aparecia, mesmo estando no pool).
     private $conectivosObrigatorios = [];
+
+    // Preenchido por getUserPhrases() com a categoria que de fato alimentou
+    // o pool desta geração - só quando dá pra apontar UMA única categoria
+    // (escolha manual de 1, ou sorteada entre várias escolhidas). No modo
+    // automático (sem escolha, mistura várias categorias elegíveis) fica
+    // null - não tem uma categoria só pra mostrar nesse caso. Usado em
+    // getDailyQuestion() pra devolver o nome dela pro front mostrar no topo
+    // da tela.
+    private ?int $categoriaUsadaId = null;
 
     public function __construct(PDO $pdo, string $apiKey)
     {
@@ -200,12 +215,23 @@ class DailyQuestionController
                     $resultado['total'] = DailyQuestionOpenAI::LIMITE_DIARIO_LIMITADO;
                 }
 
-                // Categoria(s) de fato usada(s) nessa pergunta - já resolvidas
-                // acima (da requisição OU da escolha de hoje via
-                // obterCategoriaEscolhidaHoje). O front usa isso pra manter
+                // Categoria(s) ESCOLHIDA(S) (o conjunto inteiro, já resolvido
+                // acima da requisição OU da escolha de hoje via
+                // obterCategoriaEscolhidaHoje) - não necessariamente a única
+                // usada nessa pergunta específica quando são várias (ver
+                // categoria_usada_nome abaixo). O front usa isso pra manter
                 // categoriasSelecionadas em dia mesmo quando não reenvia
                 // category_ids (2ª+ pergunta do dia), pro botão "Vocabulário".
                 $resultado['categoria_ids'] = $categoriaIds;
+
+                // Categoria que de fato alimentou o pool desta pergunta
+                // (preenchida em getUserPhrases) - null no modo automático
+                // (sem escolha, mistura várias categorias elegíveis), onde
+                // não existe uma categoria só pra apontar. Front mostra isso
+                // no topo da tela quando vier preenchido.
+                if ($this->categoriaUsadaId !== null) {
+                    $resultado['categoria_usada_nome'] = Categorias::obterNome($this->pdo, $this->categoriaUsadaId, $user_id);
+                }
             }
 
             $this->json($resultado);
@@ -396,13 +422,26 @@ class DailyQuestionController
     // estudando agora. Mesmo filtro de idioma_referencia já usado em
     // Categorias::contarCategoriasAtivas.
     // $categoriaIds: null = comportamento padrão (sorteia entre as categorias
-    // elegíveis, ver balancearPorCategoria). Quando informado (1 ou 2
-    // categorias, pedido do aluno pra escolher o assunto da pergunta),
-    // restringe a busca a elas e divide o pool igualmente entre elas -
-    // mesmo padrão de FraseDoDia.
+    // elegíveis, ver balancearPorCategoria). Quando informado (o aluno
+    // escolheu categoria(s) à mão), restringe a busca a elas - mas se forem
+    // VÁRIAS, sorteia só 1 delas aqui (1 vez só, antes das duas chamadas
+    // abaixo, pra ficarem consistentes entre si) pra montar o pool dessa
+    // geração específica, nunca misturando frases de categorias diferentes
+    // numa pergunta só. $categoriaIds continua com o conjunto INTEIRO pro
+    // resto do fluxo (resposta ao front, categoria_ids_escolhidos salvo no
+    // banco, comparação de "mudou de categoria") - só o pool de frases desta
+    // chamada usa a categoria sorteada.
     private function getUserPhrases($user_id, ?array $categoriaIds = null)
     {
-        $phrases = $this->buscarFrasesPorEstagio($user_id, true, $categoriaIds);
+        $categoriaParaPool = ($categoriaIds !== null && count($categoriaIds) > 1)
+            ? [$categoriaIds[array_rand($categoriaIds)]]
+            : $categoriaIds;
+
+        $this->categoriaUsadaId = ($categoriaParaPool !== null && count($categoriaParaPool) === 1)
+            ? $categoriaParaPool[0]
+            : null;
+
+        $phrases = $this->buscarFrasesPorEstagio($user_id, true, $categoriaParaPool);
 
         // O gate que libera o recurso (DailyQuestionOpenAI::contarFrasesEstudadas)
         // conta pelo histórico (já alcançou id_treino>=2 alguma vez), mas essa
@@ -412,7 +451,7 @@ class DailyQuestionController
         // esse filtro (mantendo a priorização por estágio) em vez de bloquear
         // a geração por falta de frases que na verdade existem.
         if (count($phrases) < 3) {
-            $phrases = $this->buscarFrasesPorEstagio($user_id, false, $categoriaIds);
+            $phrases = $this->buscarFrasesPorEstagio($user_id, false, $categoriaParaPool);
         }
 
         return $phrases;
