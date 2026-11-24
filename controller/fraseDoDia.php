@@ -34,6 +34,7 @@ if (!isset($_ENV['OPEN_AI'])) {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/FraseDoDia.php';
+require_once '../model/Categorias.php';
 require_once '../model/RotacaoFrasesIA.php';
 require_once '../model/PlanoLimitado.php';
 require_once '../model/Nivel.php';
@@ -116,6 +117,15 @@ try {
         $nivel = FraseDoDia::getNivelNome($pdo, $user_id);
 
         $resultado = FraseDoDia::obterFraseDoDia($pdo, $chat, $user_id, $idioma, $idiomaNativo, $frases, $nivel, $categoriaIds);
+
+        // Categoria usada nessa frase - só quando dá pra apontar UMA única
+        // (escolha manual, sempre no máximo 1 aqui). No modo automático (sem
+        // escolha, mistura várias categorias elegíveis) fica de fora - não
+        // tem uma categoria só pra apontar. Front mostra isso no topo da
+        // tela quando vier preenchido.
+        if ($resultado['success'] && !empty($categoriaIds) && count($categoriaIds) === 1) {
+            $resultado['categoria_usada_nome'] = Categorias::obterNome($pdo, $categoriaIds[0], $user_id);
+        }
 
         echo json_encode($resultado);
         exit;

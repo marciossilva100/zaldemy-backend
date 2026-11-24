@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../server.php';
 require_once 'authMiddleware.php';
 require_once '../model/TraducaoReversaOpenAI.php';
+require_once '../model/Categorias.php';
 require_once '../model/RotacaoFrasesIA.php';
 require_once '../model/PlanoLimitado.php';
 require_once '../model/Nivel.php';
@@ -53,15 +54,24 @@ class TraducaoReversaController
     const MINIMO_GARANTIDO_POR_CATEGORIA = 2;
 
     // Máximo de categorias que o aluno pode escolher à mão como assunto do
-    // texto - mesmo padrão de FraseDoDia::MAX_CATEGORIAS_ESCOLHA_MANUAL
-    // (reduzido de 2 pra 1 - misturar categorias gerava textos sem
-    // coesão/concordância, sem assunto único de verdade).
-    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 1;
+    // texto. Antes ficava em 1 (misturar categorias no mesmo texto gerava
+    // textos sem coesão/concordância, sem assunto único de verdade) - agora
+    // permite escolher várias, mas cada texto gerado usa só 1 delas por vez
+    // (sorteada em getUserPhrases a cada geração, nunca mistura dentro do
+    // mesmo texto) - a variedade vem de qual categoria é sorteada a cada
+    // vez, não de misturar frases de categorias diferentes num texto só.
+    // Não vale pra FraseDoDia (só 1 geração por dia, sem sentido sortear
+    // categoria a cada "geração").
+    const MAX_CATEGORIAS_ESCOLHA_MANUAL = 5;
 
     private $pdo;
     private $chat;
     private $chatGeracao;
     private $transcribe;
+
+    // Mesmo padrão de DailyQuestionController::$categoriaUsadaId - ver
+    // comentário lá.
+    private ?int $categoriaUsadaId = null;
 
     public function __construct(PDO $pdo, string $apiKey)
     {
@@ -251,6 +261,15 @@ class TraducaoReversaController
                     $resultado['numero'] = TraducaoReversaOpenAI::contarHoje($this->pdo, $user_id) + 1;
                     $resultado['total'] = TraducaoReversaOpenAI::LIMITE_DIARIO_LIMITADO;
                 }
+
+                // Categoria que de fato alimentou o pool deste texto (ver
+                // comentário em DailyQuestionController::$categoriaUsadaId) -
+                // null no modo automático (sem escolha, mistura várias
+                // categorias elegíveis). Front mostra isso no topo da tela
+                // quando vier preenchido.
+                if ($this->categoriaUsadaId !== null) {
+                    $resultado['categoria_usada_nome'] = Categorias::obterNome($this->pdo, $this->categoriaUsadaId, $user_id);
+                }
             }
 
             $this->json($resultado);
@@ -399,15 +418,25 @@ class TraducaoReversaController
     // (mesmo motivo de DailyQuestionController: a prioridade fazia as mesmas
     // frases do estágio mais alto sempre encherem as N vagas sozinhas).
     // $categoriaIds: null = comportamento padrão (sorteia entre as categorias
-    // elegíveis, ver balancearPorCategoria). Quando informado (1 ou 2
-    // categorias, pedido do aluno pra escolher o assunto do texto), restringe
-    // a busca a elas e divide o pool igualmente entre elas - mesmo padrão de
-    // FraseDoDia/Perguntas.
+    // elegíveis, ver balancearPorCategoria). Quando informado (o aluno
+    // escolheu categoria(s) à mão), restringe a busca a elas - mas se forem
+    // VÁRIAS, sorteia só 1 delas aqui pra montar o pool desta geração
+    // específica, nunca misturando frases de categorias diferentes num
+    // texto só. $categoriaIds continua com o conjunto INTEIRO pro resto do
+    // fluxo (resposta ao front, categoria_ids_escolhidos salvo no banco,
+    // comparação de "mudou de categoria") - só o pool de frases desta
+    // chamada usa a categoria sorteada.
     private function getUserPhrases($user_id, ?array $categoriaIds = null)
     {
         $categoriaIds = !empty($categoriaIds) ? array_slice(array_map('intval', $categoriaIds), 0, self::MAX_CATEGORIAS_ESCOLHA_MANUAL) : null;
-        $filtroCategoria = $categoriaIds !== null
-            ? " AND f.categoria_id IN (" . implode(',', $categoriaIds) . ")"
+        $categoriaParaPool = ($categoriaIds !== null && count($categoriaIds) > 1)
+            ? [$categoriaIds[array_rand($categoriaIds)]]
+            : $categoriaIds;
+        $this->categoriaUsadaId = ($categoriaParaPool !== null && count($categoriaParaPool) === 1)
+            ? $categoriaParaPool[0]
+            : null;
+        $filtroCategoria = $categoriaParaPool !== null
+            ? " AND f.categoria_id IN (" . implode(',', $categoriaParaPool) . ")"
             : "";
 
         $sql = "SELECT categoria_id, texto_nativo FROM (
