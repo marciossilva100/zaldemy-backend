@@ -13,6 +13,20 @@ class Frases
     public $correctIds;
     public $response = array();
 
+    // $this->categoriaId pode vir como "12" (1 categoria, uso de sempre) ou
+    // "12,34,56" (várias categorias escolhidas de uma vez na Home - ver
+    // Home.jsx/ModaTreino.jsx) - mesmo formato/mesmo motivo já usado em
+    // DailyQuestionController::buscarFrasesPorEstagio e
+    // FraseDoDia::buscarFrasesPorEstagio. Sempre força int antes de
+    // interpolar no SQL (nunca os valores crus da requisição), então é
+    // seguro montar o IN(...) direto na string em vez de um bind nomeado -
+    // evitaria só gerar N placeholders pra um filtro que já virou int.
+    private function categoriaIdsParaFiltro(): string
+    {
+        $ids = array_map('intval', explode(',', (string) $this->categoriaId));
+        return implode(',', $ids);
+    }
+
     // Conta frases criadas hoje pelo usuário, usada pro limite diário de
     // criação (planos free/limitado) - premium não tem esse teto. Exclui
     // categorias tipo=3 (categorias de interesse geradas por IA no
@@ -138,7 +152,7 @@ class Frases
                 ON ir.idioma_nativo = f.idioma_nativo
                 AND ir.idioma_aprender = f.idioma_aprendendo
                 AND ir.id_user = f.usuario_id
-            WHERE f.categoria_id = :categoria_id
+            WHERE f.categoria_id IN (" . $this->categoriaIdsParaFiltro() . ")
             AND f.usuario_id = :id_user
             AND f.status_id > 0
             AND f.id_treino = 1
@@ -146,7 +160,6 @@ class Frases
         ";
 
         $params = [
-            ':categoria_id' => $this->categoriaId,
             ':id_user' => $user_id,
             ':quantidade_frases_aprender' => $result['quantidade_frases_aprender']
         ];
@@ -199,7 +212,7 @@ class Frases
                 ON ir.idioma_nativo = f.idioma_nativo
                 AND ir.idioma_aprender = f.idioma_aprendendo
                 AND ir.id_user = f.usuario_id
-            WHERE f.categoria_id = :categoria_id
+            WHERE f.categoria_id IN (" . $this->categoriaIdsParaFiltro() . ")
             AND f.usuario_id = :id_user
             AND f.status_id > 0
             AND f.id_treino = 4
@@ -208,7 +221,6 @@ class Frases
         ";
 
         $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':categoria_id', $this->categoriaId, PDO::PARAM_INT);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
 
         $stmt->execute();
