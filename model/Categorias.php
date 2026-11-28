@@ -426,6 +426,34 @@ class Categorias
         return $result['categoria'] ?? null;
     }
 
+    // Versão em lote de obterNome() - usada quando várias categorias foram
+    // escolhidas de uma vez (ver Home.jsx/ModaTreino.jsx, seleção múltipla
+    // de categorias pra treinar). $categoriaIds já forçados pra int antes
+    // de entrar aqui (ver chamadores) - retorna um mapa id => nome, só das
+    // que realmente existem/pertencem ao usuário (ids inválidos somem do
+    // resultado em vez de dar erro).
+    public static function obterNomes(PDO $pdo, array $categoriaIds, int $user_id): array
+    {
+        $categoriaIds = array_map('intval', $categoriaIds);
+        if (empty($categoriaIds)) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($categoriaIds), '?'));
+        $sql = "SELECT id, categoria FROM categorias
+                WHERE id IN ($placeholders) AND id_user = ? AND status_id > 0";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([...$categoriaIds, $user_id]);
+
+        $nomes = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $nomes[(int) $row['id']] = $row['categoria'];
+        }
+
+        return $nomes;
+    }
+
     // Categorias do usuário elegíveis como destino ao "mover" uma frase -
     // só do MESMO par de idiomas da categoria atual (mover pra outro idioma
     // quebraria a consistência, ver Frases::moverFrase) e nunca a própria

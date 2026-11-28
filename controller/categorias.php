@@ -89,6 +89,26 @@ try {
         exit;
     }
 
+    // Versão em lote de obter_nome - usada quando o aluno treina várias
+    // categorias de uma vez (ver Home.jsx/ModaTreino.jsx). category_id aqui
+    // aceita "12" (1 categoria) ou "12,34,56" (várias), mesmo formato usado
+    // nos outros endpoints desse recurso.
+    if ($action === 'obter_nomes') {
+        $categoria_id = $input['category_id'] ?? null;
+
+        if (!$categoria_id) {
+            http_response_code(400);
+            echo json_encode(["error" => "category_id obrigatório"]);
+            exit;
+        }
+
+        $categoriaIds = array_map('intval', explode(',', (string) $categoria_id));
+        $nomes = Categorias::obterNomes($pdo, $categoriaIds, $user_id);
+
+        echo json_encode(["success" => true, "categorias" => $nomes]);
+        exit;
+    }
+
     if ($action === 'listar_para_mover') {
         $categoria_id = $input['category_id'] ?? null;
 

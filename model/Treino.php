@@ -19,6 +19,14 @@ class Treino {
     public $porcentagem;
     public $acerto;
 
+    // $this->category_id pode vir como "12" (1 categoria) ou "12,34,56"
+    // (várias categorias combinadas na Home - ver Home.jsx/ModaTreino.jsx).
+    // Sempre força int - nunca usa o valor cru da requisição.
+    private function categoriaIdsArray(): array
+    {
+        return array_map('intval', explode(',', (string) $this->category_id));
+    }
+
     public function treino($idTreino,$user_id) {
 
         date_default_timezone_set('America/Sao_Paulo');
@@ -42,13 +50,22 @@ class Treino {
             $pdo->beginTransaction();
 
                 $placeholdersUpdate = implode(',', array_fill(0, count($this->updatedList), '?'));
+                    // IN(...) em vez de "= ?" - sem isso, com o pool
+                    // combinando várias categorias, frases de qualquer
+                    // categoria além da 1ª simplesmente não seriam
+                    // atualizadas aqui (id_treino não avança, sem erro
+                    // nenhum) - a categoria da frase em si nunca muda, só
+                    // esse filtro de segurança precisa aceitar todas as
+                    // categorias do pool, não só uma.
+                    $categoriaIds = $this->categoriaIdsArray();
+                    $placeholdersCategoria = implode(',', array_fill(0, count($categoriaIds), '?'));
 
                     $sqlUpdate = "
-                        UPDATE frases 
-                        SET id_treino = ? 
+                        UPDATE frases
+                        SET id_treino = ?
                         WHERE id IN ($placeholdersUpdate)
                         AND status_id > 0
-                        AND categoria_id = ?
+                        AND categoria_id IN ($placeholdersCategoria)
                         AND usuario_id = ?
                     ";
 
@@ -57,10 +74,8 @@ class Treino {
                     $paramsUpdate = array_merge(
                         [$idTreino],               // primeiro ? do SET
                         $this->updatedList,           // ids do IN (...)
-                        [
-                            $this->category_id, 
-                            $user_id
-                        ]
+                        $categoriaIds,
+                        [$user_id]
                     );
 
                     $stmtUpdate->execute($paramsUpdate);
@@ -402,6 +417,11 @@ class Treino {
         date_default_timezone_set('America/Sao_Paulo');
         global $pdo;
 
+        // IN(...) em vez de "= ?" - soma as contagens de todas as
+        // categorias do pool (COUNT(DISTINCT f.id)/GROUP BY t.id já
+        // agregam certo, sem precisar de nenhuma lógica extra).
+        $categoriaIds = $this->categoriaIdsArray();
+        $categoriaIdsPlaceholders = implode(',', array_fill(0, count($categoriaIds), '?'));
 
         // O JOIN com treino_data_atualizacao pega só a última linha de cada
         // frase (subquery correlacionada) - sem isso, uma frase que já
@@ -421,7 +441,7 @@ class Treino {
 
         LEFT JOIN frases f
             ON f.id_treino = t.id
-            AND f.categoria_id = ?
+            AND f.categoria_id IN ($categoriaIdsPlaceholders)
             AND f.usuario_id = ?
             AND f.status_id > ?
 
@@ -446,13 +466,15 @@ class Treino {
         ORDER BY t.id";
 
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $this->category_id,        // categoria_id
-            $user_id,      // usuario_id
-            0,                         // status_id > 0
-            1,                         // inicio
-            5                          // fim
-        ]);
+        $stmt->execute(array_merge(
+            $categoriaIds,             // categoria_id IN (...)
+            [
+                $user_id,              // usuario_id
+                0,                     // status_id > 0
+                1,                     // inicio
+                5                      // fim
+            ]
+        ));
 
         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -497,7 +519,7 @@ class Treino {
             f.gerada_ia_diaria
         FROM frases f
         INNER JOIN categorias c ON c.id = f.categoria_id
-        WHERE f.categoria_id = :categoria_id
+        WHERE f.categoria_id IN (" . implode(',', $this->categoriaIdsArray()) . ")
         AND f.usuario_id = :id_user
         AND f.status_id > 0
         AND f.id_treino = 3
@@ -506,7 +528,6 @@ class Treino {
         ";
 
         $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':categoria_id', $this->category_id, PDO::PARAM_INT);
         $stmt->bindValue(':id_user', $user_id, PDO::PARAM_INT);
 
         $stmt->execute();
@@ -555,13 +576,13 @@ class Treino {
                         LIMIT 1
                     )
                 WHERE f.usuario_id = ?
-                AND f.categoria_id = ?
+                AND f.categoria_id IN (" . implode(',', $this->categoriaIdsArray()) . ")
                 AND f.id_treino = ?
                 AND ultima.id_treino = ?
             ";
 
             $stmtCandidatas = $pdo->prepare($sqlCandidatas);
-            $stmtCandidatas->execute([$user_id, $this->category_id, $id_treino, $id_treino]);
+            $stmtCandidatas->execute([$user_id, $id_treino, $id_treino]);
             $candidatas = $stmtCandidatas->fetchAll(PDO::FETCH_ASSOC);
 
             $agora = new DateTime();
