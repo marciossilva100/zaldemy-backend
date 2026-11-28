@@ -74,6 +74,7 @@ require_once 'email.php';
 require_once '../model/Auth.php';
 require_once '../model/AcessoUsuario.php';
 require_once '../model/Apelido.php';
+require_once '../model/GeoLocalizacao.php';
 
 try {
 
@@ -153,6 +154,22 @@ try {
         $stmt->execute();
 
         $user_id = $pdo->lastInsertId();
+
+        $ipCadastro = AcessoUsuario::ipDoCliente();
+        $localizacao = GeoLocalizacao::localizarIp($ipCadastro);
+
+        $stmtLocalizacao = $pdo->prepare("
+            UPDATE usuarios
+            SET ip_cadastro = :ip, pais_cadastro = :pais, regiao_cadastro = :regiao, cidade_cadastro = :cidade
+            WHERE id = :id
+        ");
+        $stmtLocalizacao->execute([
+            ':ip' => $ipCadastro,
+            ':pais' => $localizacao['pais'] ?? null,
+            ':regiao' => $localizacao['regiao'] ?? null,
+            ':cidade' => $localizacao['cidade'] ?? null,
+            ':id' => $user_id,
+        ]);
 
         enviarEmailVerificacao($email, $token);
         // Notificação de novo cadastro é disparada mais tarde, em
