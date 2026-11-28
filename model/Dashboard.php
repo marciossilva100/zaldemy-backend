@@ -229,6 +229,7 @@ class Dashboard
         $sql = "
             SELECT u.id, u.nome, u.apelido, u.email, u.create_date, u.email_verified,
                    COALESCE(p.plano, 'sem plano') AS plano_nome,
+                   u.pais_cadastro, u.regiao_cadastro, u.cidade_cadastro,
                    (SELECT COUNT(*) FROM categorias c WHERE c.id_user = u.id AND c.status_id > 0) AS total_categorias,
                    (SELECT COUNT(*) FROM frases f WHERE f.usuario_id = u.id AND f.status_id > 0) AS total_frases
             FROM usuarios u
@@ -281,6 +282,7 @@ class Dashboard
         $stmt = $pdo->prepare("
             SELECT u.id, u.nome, u.apelido, u.email, u.create_date, u.email_verified,
                    COALESCE(p.plano, 'sem plano') AS plano_nome,
+                   u.pais_cadastro, u.regiao_cadastro, u.cidade_cadastro,
                    inat.idioma AS idioma_nativo, iapr.idioma AS idioma_aprendendo
             FROM usuarios u
             LEFT JOIN planos p ON p.id = u.plano

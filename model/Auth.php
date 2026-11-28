@@ -2,6 +2,8 @@
 date_default_timezone_set('America/Sao_Paulo');
 require_once 'Categorias.php';
 require_once 'Apelido.php';
+require_once 'AcessoUsuario.php';
+require_once 'GeoLocalizacao.php';
 
 class Auth {
 
@@ -92,6 +94,22 @@ class Auth {
             $stmt->execute();
 
             $userId = $this->pdo->lastInsertId();
+
+            $ipCadastro = AcessoUsuario::ipDoCliente();
+            $localizacao = GeoLocalizacao::localizarIp($ipCadastro);
+
+            $stmtLocalizacao = $this->pdo->prepare("
+                UPDATE usuarios
+                SET ip_cadastro = :ip, pais_cadastro = :pais, regiao_cadastro = :regiao, cidade_cadastro = :cidade
+                WHERE id = :id
+            ");
+            $stmtLocalizacao->execute([
+                ':ip' => $ipCadastro,
+                ':pais' => $localizacao['pais'] ?? null,
+                ':regiao' => $localizacao['regiao'] ?? null,
+                ':cidade' => $localizacao['cidade'] ?? null,
+                ':id' => $userId,
+            ]);
 
             // 🔥 CRIAR REGISTRO DE IDIOMA (ESSENCIAL)
             $stmt = $this->pdo->prepare("
